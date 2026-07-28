@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B1220;font-family:'Inter',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="display:flex;justify-content:center;padding:48px 24px;background:#0B1220;min-height:100vh">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ 402 }}" height="{{ 874 }}" hint-size="402px,874px">
+
+<div style="min-height:100%;background:#F8FAFC;position:relative;padding:76px 20px 30px;display:flex;flex-direction:column;gap:26px">
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div onClick="{{ onBack }}" style="width:40px;height:40px;border-radius:13px;background:#fff;box-shadow:0 6px 16px rgba(2,26,84,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer" style-active="transform:scale(0.94)">
+      <svg width="9" height="16" viewBox="0 0 12 20" fill="none"><path d="M10 2L2 10l8 8" stroke="#021A54" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:24px;font-weight:800;color:#021A54">Create Loyalty Card</div>
+      <div style="font-size:13px;color:#64748B;line-height:1.5;max-width:320px">Create a digital loyalty experience that keeps customers coming back.</div>
+    </div>
+  </div>
+
+  <div style="position:relative;border-radius:22px;padding:22px;background:{{ heroGradient }};box-shadow:0 20px 44px rgba(2,26,84,0.28);overflow:hidden;display:flex;flex-direction:column;gap:18px">
+    <div style="position:absolute;top:-40px;right:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,0.08)"></div>
+    <div style="position:relative;z-index:1;display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;backdrop-filter:blur(6px)">s</div>
+        <div style="display:flex;flex-direction:column">
+          <span style="font-size:15px;font-weight:800;color:#fff">Free Coffee unlocks at 5/5</span>
+          <span style="font-size:11px;color:rgba(255,255,255,0.7);font-weight:500">Stampogen Loyalty</span>
+        </div>
+      </div>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="position:relative;z-index:1">
+        <path d="M12 21C12 21 4 15.5 4 9.5C4 6.5 6.2 4.5 8.8 4.5C10.2 4.5 11.3 5.2 12 6.2C12.7 5.2 13.8 4.5 15.2 4.5C17.8 4.5 20 6.5 20 9.5C20 15.5 12 21 12 21Z" fill="#fff" fill-opacity="0.9"></path>
+      </svg>
+    </div>
+    <div style="position:relative;z-index:1;display:flex;justify-content:space-between;gap:8px">
+      <sc-for list="{{ stamps }}" as="s" hint-placeholder-count="5">
+        <div style="width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ s.bg }};border:{{ s.border }};box-shadow:{{ s.glow }}">
+          <sc-if value="{{ s.filled }}" hint-placeholder-val="{{ false }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="{{ s.check }}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="position:relative;z-index:1;display:flex;flex-direction:column;gap:6px">
+      <div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.22);overflow:hidden"><div style="width:{{ progressPct }}%;height:100%;background:#fff;border-radius:3px"></div></div>
+      <span style="font-size:11.5px;color:rgba(255,255,255,0.85);font-weight:700">{{ completedLabel }}</span>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:16px;font-weight:800;color:#021A54">Card Appearance</div>
+    <div style="display:flex;gap:10px">
+      <sc-for list="{{ cardStyles }}" as="cs" hint-placeholder-count="3">
+        <div onClick="{{ cs.onClick }}" style="flex:1;display:flex;flex-direction:column;gap:8px;cursor:pointer" style-active="transform:scale(0.96)">
+          <div style="height:64px;border-radius:14px;background:{{ cs.swatch }};border:{{ cs.border }};box-shadow:{{ cs.shadow }}"></div>
+          <span style="font-size:11px;font-weight:700;color:{{ cs.labelColor }};text-align:center">{{ cs.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 10px 26px rgba(2,26,84,0.07);display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:16px;font-weight:800;color:#021A54">Reward</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span style="font-size:11px;font-weight:700;color:#94A3B8">REWARD TITLE</span>
+      <div style="background:#F8FAFC;border-radius:12px;padding:12px 14px;font-size:13.5px;color:#021A54;font-weight:600">Free Coffee</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span style="font-size:11px;font-weight:700;color:#94A3B8">DESCRIPTION</span>
+      <div style="background:#F8FAFC;border-radius:12px;padding:12px 14px;font-size:12.5px;color:#64748B;line-height:1.5">Complete 5 stamps and enjoy a free coffee on us.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span style="font-size:11px;font-weight:700;color:#94A3B8">NUMBER OF STAMPS</span>
+      <div style="background:#F8FAFC;border-radius:12px;padding:8px 14px;display:flex;align-items:center;justify-content:space-between">
+        <div onClick="{{ decStamps }}" style="width:32px;height:32px;border-radius:10px;background:#fff;box-shadow:0 4px 10px rgba(2,26,84,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer" style-active="transform:scale(0.9)">
+          <svg width="12" height="2.4" viewBox="0 0 12 2.4"><rect width="12" height="2.4" rx="1.2" fill="#021A54"></rect></svg>
+        </div>
+        <span style="font-size:14px;font-weight:700;color:#021A54">{{ totalStamps }} Stamps</span>
+        <div onClick="{{ incStamps }}" style="width:32px;height:32px;border-radius:10px;background:#fff;box-shadow:0 4px 10px rgba(2,26,84,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer" style-active="transform:scale(0.9)">
+          <svg width="12" height="12" viewBox="0 0 12 12"><rect x="4.8" width="2.4" height="12" rx="1.2" fill="#021A54"></rect><rect y="4.8" width="12" height="2.4" rx="1.2" fill="#021A54"></rect></svg>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      
+      
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:16px;font-weight:800;color:#021A54">Stamp Style</div>
+    <div style="display:flex;justify-content:space-between">
+      <sc-for list="{{ stampStyles }}" as="ss" hint-placeholder-count="4">
+        <div onClick="{{ ss.onClick }}" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer" style-active="transform:scale(0.94)">
+          <div style="width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ ss.bg }};border:{{ ss.border }};box-shadow:{{ ss.glow }}">{{ ss.glyph }}</div>
+          <span style="font-size:10px;font-weight:700;color:{{ ss.labelColor }}">{{ ss.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:16px;font-weight:800;color:#021A54">Card Color</div>
+    <div style="display:flex;justify-content:space-between">
+      <sc-for list="{{ colors }}" as="c" hint-placeholder-count="6">
+        <div onClick="{{ c.onClick }}" style="width:36px;height:36px;border-radius:50%;background:{{ c.hex }};cursor:pointer;box-shadow:{{ c.glow }};border:{{ c.ring }}" style-active="transform:scale(0.9)"></div>
+      </sc-for>
+    </div>
+  </div>
+
+  
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:16px;font-weight:800;color:#021A54">Customer Preview</div>
+    <div style="align-self:center;width:230px">
+      
+      
+    <div style="width: 239px; border-radius: 20px; padding: 14px; background: {{ heroGradient }}; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 16px 34px rgba(2,26,84,0.22); height: 106px">
+          <span style="font-size:11.5px;font-weight:800;color:#fff">Free Coffee unlocks at 5/5</span>
+          <div style="display:flex;justify-content:space-between;gap:4px">
+            <sc-for list="{{ stamps }}" as="s2" hint-placeholder-count="5">
+              <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ s2.bg }};border:{{ s2.border }}">
+                <sc-if value="{{ s2.filled }}" hint-placeholder-val="{{ false }}">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="{{ s2.check }}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="height:5px;border-radius:3px;background:rgba(255,255,255,0.22)"><div style="width:{{ progressPct }}%;height:100%;background:#fff;border-radius:3px"></div></div>
+        </div></div>
+  </div><div style="position:sticky;bottom:16px;padding-top:6px">
+    <div onClick="{{ onCreateCard }}" style="background:linear-gradient(135deg,#021A54,#3B82F6);border-radius:18px;padding:16px;text-align:center;color:#fff;font-weight:800;font-size:15px;box-shadow:0 16px 34px rgba(2,26,84,0.32);cursor:pointer" style-active="transform:scale(0.97)">Create Loyalty Card</div>
+  </div>
+
+</div>
+</x-import>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { cardStyle: 'gradient', rewardIcon: 'coffee', stampStyle: 'filled', color: 'blue', totalStamps: 5 };
+
+  palette = {
+    blue: '#3B82F6', green: '#22C55E', orange: '#F59E0B',
+    purple: '#8B5CF6', red: '#EF4444', dark: '#021A54',
+  };
+
+  incStamps() { this.setState(s => ({ totalStamps: Math.min(10, s.totalStamps + 1) })); }
+  decStamps() { this.setState(s => ({ totalStamps: Math.max(3, s.totalStamps - 1) })); }
+
+  renderVals() {
+    const accent = this.palette[this.state.color];
+    const heroGradient = `linear-gradient(135deg, #021A54 0%, ${accent} 100%)`;
+    const total = this.state.totalStamps;
+    const filledCount = total > 3 ? 3 : Math.max(total - 1, 0);
+    const progressPct = Math.round((filledCount / total) * 100);
+    const completedLabel = `${filledCount} / ${total} Completed`;
+
+    const finalStamps = Array.from({ length: total }, (_, i) => i).map(i => {
+      const filled = i < filledCount;
+      if (!filled) {
+        return { filled, bg: 'rgba(255,255,255,0.12)', border: '1.5px dashed rgba(255,255,255,0.5)', glow: 'none' };
+      }
+      if (this.state.stampStyle === 'outline') {
+        return { filled, bg: 'rgba(255,255,255,0.15)', border: '2px solid #fff', glow: 'none', check: '#fff' };
+      }
+      if (this.state.stampStyle === 'gradient') {
+        return { filled, bg: `linear-gradient(135deg, #fff, ${accent})`, border: '2px solid #fff', glow: '0 0 0 2px rgba(255,255,255,0.25)', check: accent };
+      }
+      if (this.state.stampStyle === 'classic') {
+        return { filled, bg: '#fff', border: `2px dashed ${accent}`, glow: 'none', check: accent };
+      }
+      return { filled, bg: '#fff', border: '2px solid #fff', glow: 'none', check: accent };
+    });
+
+    const cardStyleDefs = [
+      { id: 'minimal', label: 'Minimal', swatch: '#FFFFFF', border: '1.5px solid #E2E8F0' },
+      { id: 'gradient', label: 'Premium Gradient', swatch: 'linear-gradient(135deg,#021A54,#3B82F6)', border: 'none' },
+      { id: 'glass', label: 'Glass Card', swatch: 'linear-gradient(135deg, rgba(59,130,246,0.35), rgba(2,26,84,0.5))', border: '1px solid rgba(255,255,255,0.4)' },
+    ];
+    const cardStyles = cardStyleDefs.map(c => {
+      const sel = c.id === this.state.cardStyle;
+      return {
+        ...c,
+        border: sel ? `2px solid ${accent}` : c.border,
+        shadow: sel ? `0 0 0 3px rgba(59,130,246,0.15), 0 10px 20px rgba(2,26,84,0.12)` : '0 6px 14px rgba(2,26,84,0.06)',
+        labelColor: sel ? '#021A54' : '#94A3B8',
+        onClick: () => this.setState({ cardStyle: c.id }),
+      };
+    });
+
+    const rewardIconDefs = [
+      { id: 'coffee', emoji: '☕', label: 'Coffee' },
+      { id: 'pizza', emoji: '🍕', label: 'Pizza' },
+      { id: 'burger', emoji: '🍔', label: 'Burger' },
+      { id: 'dessert', emoji: '🍩', label: 'Dessert' },
+      { id: 'gift', emoji: '🎁', label: 'Gift' },
+      { id: 'star', emoji: '⭐', label: 'Star' },
+    ];
+    const rewardIcons = rewardIconDefs.map(r => {
+      const sel = r.id === this.state.rewardIcon;
+      return {
+        ...r,
+        bg: sel ? 'rgba(59,130,246,0.12)' : '#F8FAFC',
+        border: sel ? `1.5px solid ${accent}` : '1.5px solid transparent',
+        color: sel ? '#021A54' : '#94A3B8',
+        onClick: () => this.setState({ rewardIcon: r.id }),
+      };
+    });
+    const selectedRewardEmoji = rewardIconDefs.find(r => r.id === this.state.rewardIcon).emoji;
+
+    const stampStyleDefs = [
+      { id: 'classic', label: 'Classic', glyph: '★' },
+      { id: 'filled', label: 'Modern Filled', glyph: '' },
+      { id: 'outline', label: 'Outline', glyph: '' },
+      { id: 'gradient', label: 'Gradient', glyph: '' },
+    ];
+    const stampStyles = stampStyleDefs.map(s => {
+      const sel = s.id === this.state.stampStyle;
+      let bg = '#F8FAFC', border = '1.5px solid #E2E8F0';
+      if (s.id === 'classic') { bg = '#fff'; border = `2px dashed ${accent}`; }
+      if (s.id === 'filled') { bg = accent; border = 'none'; }
+      if (s.id === 'outline') { bg = 'transparent'; border = `2px solid ${accent}`; }
+      if (s.id === 'gradient') { bg = `linear-gradient(135deg,#fff,${accent})`; border = 'none'; }
+      return {
+        ...s,
+        bg, border,
+        glow: sel ? `0 0 0 3px rgba(59,130,246,0.18)` : 'none',
+        labelColor: sel ? '#021A54' : '#94A3B8',
+        onClick: () => this.setState({ stampStyle: s.id }),
+      };
+    });
+
+    const colorDefs = [
+      { id: 'blue', hex: '#3B82F6' }, { id: 'green', hex: '#22C55E' },
+      { id: 'orange', hex: '#F59E0B' }, { id: 'purple', hex: '#8B5CF6' },
+      { id: 'red', hex: '#EF4444' }, { id: 'dark', hex: '#021A54' },
+    ];
+    const colors = colorDefs.map(c => {
+      const sel = c.id === this.state.color;
+      return {
+        ...c,
+        glow: sel ? `0 0 0 4px rgba(59,130,246,0.18), 0 0 14px ${c.hex}` : '0 3px 8px rgba(2,26,84,0.12)',
+        ring: sel ? '2.5px solid #fff' : '2.5px solid transparent',
+        onClick: () => this.setState({ color: c.id }),
+      };
+    });
+
+    return {
+      heroGradient, stamps: finalStamps, cardStyles, rewardIcons, selectedRewardEmoji,
+      stampStyles, colors, totalStamps: total, progressPct, completedLabel,
+      incStamps: () => this.incStamps(), decStamps: () => this.decStamps(),
+      onBack: () => { window.location.href = 'Offers.dc.html'; },
+      onCreateCard: () => { window.location.href = 'Offers.dc.html'; },
+    };
+  }
+}
+
+</script>
+</body>
+</html>

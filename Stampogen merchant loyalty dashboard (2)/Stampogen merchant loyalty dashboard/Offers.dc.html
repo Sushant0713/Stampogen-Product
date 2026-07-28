@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B1220;font-family:'Inter',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="display:flex;justify-content:center;padding:48px 24px;background:#0B1220;min-height:100vh">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ 402 }}" height="{{ 874 }}" hint-size="402px,874px">
+
+<div style="min-height:100%;background:#F8FAFC;position:relative;padding:76px 20px 24px;display:flex;flex-direction:column;gap:22px">
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:24px;font-weight:800;color:#021A54">Offers</div>
+        <span style="font-size:13px;color:#64748B;font-weight:500">Manage every loyalty card in one place.</span>
+      </div>
+      <div style="width:40px;height:40px;border-radius:13px;background:#fff;box-shadow:0 6px 16px rgba(2,26,84,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#021A54" stroke-width="2"></circle><path d="M21 21L16.5 16.5" stroke="#021A54" stroke-width="2" stroke-linecap="round"></path></svg>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <sc-for list="{{ filters }}" as="f" hint-placeholder-count="3">
+        <div onClick="{{ f.onClick }}" style="padding:9px 16px;border-radius:12px;font-size:12.5px;font-weight:700;cursor:pointer;background:{{ f.bg }};color:{{ f.color }}" style-active="transform:scale(0.95)">{{ f.label }}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <sc-for list="{{ offers }}" as="o" hint-placeholder-count="5">
+      <div style="background:#fff;border-radius:18px;padding:14px;box-shadow:0 10px 24px rgba(2,26,84,0.06);display:flex;align-items:center;gap:12px">
+        
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
+          <span style="font-size:14px;font-weight:700;color:#021A54;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ o.title }}</span>
+          <span style="font-size:11.5px;color:#94A3B8;font-weight:600">{{ o.stampsLabel }}</span>
+          <div style="display:flex;align-items:center;gap:5px">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M12 4L20 14H4L12 4Z" fill="#22C55E"></path></svg>
+            <span style="font-size:11px;font-weight:700;color:#22C55E">{{ o.redemptions }} redemptions</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <div onClick="{{ o.onToggle }}" style="padding:7px 12px;border-radius:10px;font-size:10.5px;font-weight:700;background:{{ o.statusBg }};color:{{ o.statusColor }};cursor:pointer;white-space:nowrap" style-active="transform:scale(0.94)">{{ o.statusLabel }}</div>
+          <div style="width:28px;height:28px;border-radius:9px;background:#F8FAFC;display:flex;align-items:center;justify-content:center;cursor:pointer" style-active="transform:scale(0.9)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 20L4.7 16.3L16.3 4.7C16.9 4.1 17.9 4.1 18.5 4.7L19.3 5.5C19.9 6.1 19.9 7.1 19.3 7.7L7.7 19.3L4 20Z" stroke="#021A54" stroke-width="1.7" stroke-linejoin="round"></path></svg>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="position:sticky;bottom:96px;display:flex;justify-content:flex-end;pointer-events:none;z-index:25">
+    <div onClick="{{ onCreateCard }}" style="pointer-events:auto;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#021A54,#3B82F6);display:flex;align-items:center;justify-content:center;box-shadow:0 14px 28px rgba(2,26,84,0.32);cursor:pointer" style-active="transform:scale(0.9)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="#fff" stroke-width="2.6" stroke-linecap="round"></path></svg>
+    </div>
+  </div>
+
+  <div style="position:sticky;bottom:22px;align-self:center;display:flex;gap:4px;background:rgba(255,255,255,0.85);backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%);border-radius:26px;padding:8px;box-shadow:0 16px 36px rgba(2,26,84,0.18),0 0 0 1px rgba(2,26,84,0.05)">
+    <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="5">
+      <div onClick="{{ item.onClick }}" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 13px;border-radius:18px;cursor:pointer;background:{{ item.bg }}" style-active="transform:scale(0.92)">
+        <span style="font-size:18px">{{ item.emoji }}</span>
+        <span style="font-size:9px;font-weight:700;color:{{ item.color }}">{{ item.label }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-import>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    activeFilter: 'all',
+    activeTab: 'offers',
+    offers: [
+      { id: 1, title: 'Buy 5 Get 1 Free', emoji: '☕', color: '#3B82F6', stamps: 5, redemptions: 128, status: 'active' },
+      { id: 2, title: 'Pizza Lovers Club', emoji: '🍕', color: '#F59E0B', stamps: 6, redemptions: 84, status: 'active' },
+      { id: 3, title: 'Dessert Rewards', emoji: '🍩', color: '#8B5CF6', stamps: 4, redemptions: 52, status: 'paused' },
+      { id: 4, title: 'Burger Bonanza', emoji: '🍔', color: '#EF4444', stamps: 5, redemptions: 96, status: 'active' },
+      { id: 5, title: 'VIP Gift Card', emoji: '🎁', color: '#021A54', stamps: 8, redemptions: 23, status: 'paused' },
+    ],
+  };
+
+  toggleStatus(id) {
+    this.setState(s => ({
+      offers: s.offers.map(o => o.id === id ? { ...o, status: o.status === 'active' ? 'paused' : 'active' } : o),
+    }));
+  }
+
+  renderVals() {
+    const filterDefs = [
+      { id: 'all', label: 'All' },
+      { id: 'active', label: 'Active' },
+      { id: 'paused', label: 'Paused' },
+    ];
+    const filters = filterDefs.map(f => {
+      const sel = f.id === this.state.activeFilter;
+      return {
+        ...f,
+        bg: sel ? '#021A54' : '#fff',
+        color: sel ? '#fff' : '#64748B',
+        onClick: () => this.setState({ activeFilter: f.id }),
+      };
+    });
+
+    const visible = this.state.offers.filter(o => this.state.activeFilter === 'all' || o.status === this.state.activeFilter);
+    const offers = visible.map(o => ({
+      ...o,
+      gradient: `linear-gradient(135deg, ${o.color}, #021A54)`,
+      stampsLabel: `${o.stamps} stamps to reward`,
+      statusLabel: o.status === 'active' ? 'Active' : 'Paused',
+      statusBg: o.status === 'active' ? 'rgba(34,197,94,0.12)' : 'rgba(148,163,184,0.15)',
+      statusColor: o.status === 'active' ? '#22C55E' : '#64748B',
+      onToggle: () => this.toggleStatus(o.id),
+    }));
+
+    const navDefs = [
+      { id: 'home', emoji: '🏠', label: 'Home' },
+      { id: 'offers', emoji: '🎁', label: 'Offers' },
+      { id: 'rewards', emoji: '🏆', label: 'Rewards' },
+      { id: 'customers', emoji: '👥', label: 'Customers' },
+      { id: 'profile', emoji: '⚙️', label: 'Profile' },
+    ];
+    const pages = {
+      home: 'Stampogen Dashboard.dc.html',
+      offers: 'Offers.dc.html',
+      rewards: 'Rewards.dc.html',
+      customers: 'Customers.dc.html',
+      profile: 'Profile.dc.html',
+    };
+    const navItems = navDefs.map(item => {
+      const active = item.id === this.state.activeTab;
+      return {
+        ...item,
+        bg: active ? 'rgba(59,130,246,0.14)' : 'transparent',
+        color: active ? '#3B82F6' : '#94A3B8',
+        onClick: () => { window.location.href = pages[item.id]; },
+      };
+    });
+
+    return { filters, offers, navItems, onCreateCard: () => { window.location.href = 'Create Loyalty Card.dc.html'; } };
+  }
+}
+
+</script>
+</body>
+</html>

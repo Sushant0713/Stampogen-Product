@@ -1,0 +1,645 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
+import {
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  Plus,
+  Search,
+  Trash2,
+  UserCheck,
+  UserMinus,
+  Users,
+} from 'lucide-react';
+import { tenantService } from '@/services/tenant.service';
+import { planService } from '@/services/plan.service';
+import { getErrorMessage } from '@/utils';
+import { subscribeClientsChanged } from '@/utils/clientsSync';
+
+const PAGE_SIZE = 10;
+const ACCENT = '#021A54';
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'pending', label: 'Pending' },
+];
+
+function formatDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatMoney(amount = 0) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+  }).format(amount);
+}
+
+function accountLabel(status) {
+  if (status === 'suspended') return 'Suspended';
+  if (status === 'inactive') return 'Inactive';
+  if (status === 'pending') return 'Pending';
+  return 'Active';
+}
+
+function accountBadgeClass(status) {
+  if (status === 'suspended') return 'bg-red-50 text-red-700';
+  if (status === 'inactive') return 'bg-gray-100 text-gray-600';
+  if (status === 'pending') return 'bg-amber-50 text-amber-700';
+  return 'bg-emerald-50 text-emerald-700';
+}
+
+function StatCard({ label, value, icon: Icon }) {
+  return (
+    <div className="rounded-xl border border-[#ECEFF3] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-[13px] font-medium text-[#667085]">{label}</p>
+          <p className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-[#101828]">
+            {value}
+          </p>
+        </div>
+        <span
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg"
+          style={{ backgroundColor: `${ACCENT}18`, color: ACCENT }}
+        >
+          <Icon size={18} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function ClientManagement() {
+  const [clients, setClients] = useState([]);
+  const [stats, setStats] = useState({
+    totalClients: 0,
+    active: 0,
+    suspended: 0,
+    activeSubscriptions: 0,
+  });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: PAGE_SIZE,
+    total: 0,
+    pages: 1,
+  });
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState(null);
+  const [assignablePlans, setAssignablePlans] = useState([]);
+  const pageRef = useRef(1);
+
+  useEffect(() => {
+    pageRef.current = pagination.page;
+  }, [pagination.page]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await planService.getAll({ limit: 200, lite: true });
+        if (cancelled) return;
+        const plans = (data?.data?.plans || []).filter(
+          (plan) =>
+            plan.enabled !== false &&
+            plan.status !== 'Inactive' &&
+            !plan.priceCustom &&
+            plan.visibleSuperAdmin !== false
+        );
+        setAssignablePlans(plans);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error, 'Unable to load plans'));
+          setAssignablePlans([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadStats = useCallback(async ({ silent = false } = {}) => {
+    try {
+      const { data } = await tenantService.getStats();
+      setStats(data.data.stats);
+    } catch (error) {
+      if (!silent) toast.error(getErrorMessage(error, 'Unable to load client stats'));
+    }
+  }, []);
+
+  const loadClients = useCallback(
+    async (page = 1, { silent = false } = {}) => {
+      try {
+        if (!silent) setLoading(true);
+        const { data } = await tenantService.getAll({
+          page,
+          limit: PAGE_SIZE,
+          search: debouncedSearch || undefined,
+          status: status || undefined,
+        });
+
+        setClients(data.data.tenants || []);
+        setPagination(data.data.pagination || { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+      } catch (error) {
+        if (!silent) toast.error(getErrorMessage(error, 'Unable to load clients'));
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [debouncedSearch, status]
+  );
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  useEffect(() => {
+    loadClients(1);
+  }, [loadClients]);
+
+  // Soft refresh on payment broadcast / focus — no aggressive interval
+  useEffect(() => {
+    let focusTimer;
+
+    const refresh = () => {
+      loadClients(pageRef.current, { silent: true });
+      loadStats({ silent: true });
+    };
+
+    const unsubscribe = subscribeClientsChanged(refresh);
+
+    const onFocus = () => {
+      window.clearTimeout(focusTimer);
+      focusTimer = window.setTimeout(refresh, 600);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') onFocus();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      unsubscribe();
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [loadClients, loadStats]);
+
+  const rangeLabel = useMemo(() => {
+    if (!pagination.total) return '0 clients';
+    const start = (pagination.page - 1) * pagination.limit + 1;
+    const end = Math.min(pagination.page * pagination.limit, pagination.total);
+    return `${start}–${end} of ${pagination.total}`;
+  }, [pagination]);
+
+  const handleSuspend = async (client) => {
+    const nextStatus = client.status === 'suspended' ? 'active' : 'suspended';
+    const previousClients = clients;
+    const previousStats = stats;
+    const previousPagination = pagination;
+    const stillMatchesFilter = !status || status === nextStatus;
+    const hasPlan =
+      Boolean(client.billing?.planName) && client.billing.planName !== 'No plan';
+
+    const patchedClient = {
+      ...client,
+      status: nextStatus,
+      billing: client.billing
+        ? {
+            ...client.billing,
+            subscription: hasPlan
+              ? nextStatus === 'suspended'
+                ? 'Paused'
+                : 'Active'
+              : client.billing.subscription,
+          }
+        : client.billing,
+    };
+
+    setActionId(client._id);
+
+    // Update the row (or drop it from a filtered view) immediately — no full reload
+    if (stillMatchesFilter) {
+      setClients((prev) => prev.map((row) => (row._id === client._id ? patchedClient : row)));
+    } else {
+      setClients((prev) => prev.filter((row) => row._id !== client._id));
+      setPagination((prev) => ({
+        ...prev,
+        total: Math.max(0, (prev.total || 0) - 1),
+      }));
+    }
+
+    setStats((prev) => {
+      const next = { ...prev };
+      if (nextStatus === 'suspended') {
+        if (client.status === 'active') next.active = Math.max(0, (next.active || 0) - 1);
+        next.suspended = (next.suspended || 0) + 1;
+        if (client.billing?.subscription === 'Active') {
+          next.activeSubscriptions = Math.max(0, (next.activeSubscriptions || 0) - 1);
+        }
+      } else {
+        next.suspended = Math.max(0, (next.suspended || 0) - 1);
+        if (nextStatus === 'active') next.active = (next.active || 0) + 1;
+        if (hasPlan) next.activeSubscriptions = (next.activeSubscriptions || 0) + 1;
+      }
+      return next;
+    });
+
+    try {
+      await tenantService.update(client._id, { status: nextStatus });
+      toast.success(nextStatus === 'suspended' ? 'Client suspended' : 'Client activated');
+      loadStats({ silent: true });
+    } catch (error) {
+      setClients(previousClients);
+      setStats(previousStats);
+      setPagination(previousPagination);
+      toast.error(getErrorMessage(error, 'Unable to update client'));
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleDelete = async (client) => {
+    const confirmed = window.confirm(
+      `Delete client "${client.name}"?\n\nThis permanently removes the shop and the admin account (${client.owner?.email || 'owner'}). This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setActionId(client._id);
+      await tenantService.remove(client._id);
+      toast.success('Client deleted');
+      const nextPage =
+        clients.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
+      await Promise.all([loadClients(nextPage), loadStats()]);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to delete client'));
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="font-display text-[28px] font-semibold tracking-tight text-[#101828]">
+            Client Management
+          </h1>
+          <p className="mt-1 text-sm text-[#667085]">
+            Manage client accounts, subscriptions, and company profiles
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => toast('Add Client coming soon')}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white transition hover:opacity-90"
+          style={{ backgroundColor: ACCENT }}
+        >
+          <Plus size={18} />
+          Add Client
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Total Clients" value={stats.totalClients} icon={Users} />
+        <StatCard label="Active" value={stats.active} icon={UserCheck} />
+        <StatCard label="Suspended" value={stats.suspended} icon={UserMinus} />
+        <StatCard
+          label="Active Subscriptions"
+          value={stats.activeSubscriptions}
+          icon={CreditCard}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-[#ECEFF3] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex flex-col gap-3 border-b border-[#F2F4F7] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <h2 className="text-base font-semibold text-[#101828]">All Clients</h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative min-w-[240px] flex-1">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#98A2B3]"
+              />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name, email, company"
+                className="h-10 w-full rounded-lg border border-[#D0D5DD] bg-white pl-9 pr-3 text-sm text-[#101828] outline-none placeholder:text-[#98A2B3] focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54]"
+              />
+            </div>
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+              className="h-10 rounded-lg border border-[#D0D5DD] bg-white px-3 text-sm text-[#344054] outline-none focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54]"
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-[#F9FAFB] text-[12px] font-semibold uppercase tracking-[0.04em] text-[#667085]">
+              <tr>
+                <th className="px-5 py-3">Client</th>
+                <th className="px-5 py-3">Company</th>
+                <th className="px-5 py-3">Plan</th>
+                <th className="px-5 py-3">Subscription</th>
+                <th className="px-5 py-3">Account</th>
+                <th className="px-5 py-3">No. of Cycles</th>
+                <th className="px-5 py-3">Discount coupon</th>
+                <th className="px-5 py-3">Revenue</th>
+                <th className="px-5 py-3">Joined</th>
+                <th className="px-5 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={10} className="px-5 py-12 text-center text-[#667085]">
+                    Loading clients...
+                  </td>
+                </tr>
+              ) : clients.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-5 py-12 text-center text-[#667085]">
+                    No clients found
+                  </td>
+                </tr>
+              ) : (
+                clients.map((client) => {
+                  const owner = client.owner || {};
+                  const ownerName =
+                    owner.fullName ||
+                    [owner.firstName, owner.lastName].filter(Boolean).join(' ') ||
+                    '—';
+                  const busy = actionId === client._id;
+                  const billing = client.billing || {
+                    planName: 'No plan',
+                    pricePerCycle: 0,
+                    subscription: 'None',
+                    cycles: 0,
+                    revenue: 0,
+                  };
+
+                  return (
+                    <tr key={client._id} className="border-t border-[#F2F4F7]">
+                      <td className="px-5 py-4 align-top">
+                        <p className="font-semibold text-[#101828]">{ownerName}</p>
+                        <p className="mt-0.5 text-[13px] text-[#667085]">{owner.email || '—'}</p>
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <p className="font-semibold text-[#101828]">{client.name}</p>
+                        <p className="mt-0.5 text-[13px] text-[#667085]">{owner.email || '—'}</p>
+                      </td>
+                      <td className="px-5 py-4 align-top text-[#344054]">
+                        <p className="font-medium text-[#101828]">
+                          {billing.planName && billing.planName !== 'No plan'
+                            ? billing.planName
+                            : 'No plan'}
+                        </p>
+                        {billing.planName &&
+                        billing.planName !== 'No plan' &&
+                        Number(billing.pricePerCycle) >= 0 ? (
+                          <p className="mt-0.5 text-[12px] text-[#667085]">
+                            {formatMoney(billing.pricePerCycle)} / cycle
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[12px] font-medium ${
+                            billing.subscription === 'Active'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : billing.subscription === 'Paused'
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-[#F2F4F7] text-[#667085]'
+                          }`}
+                        >
+                          {billing.subscription}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[12px] font-semibold ${accountBadgeClass(client.status)}`}
+                        >
+                          {accountLabel(client.status)}
+                        </span>
+                        <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.04em] text-[#98A2B3]">
+                          Email sign-up{' '}
+                          <span className="text-[#2E90FA]">
+                            {owner.isEmailVerified ? 'Verified' : 'Unverified'}
+                          </span>
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 align-top font-semibold text-[#101828]">
+                        {billing.cycles}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        {billing.discountCode ||
+                        (Array.isArray(billing.discountCodes) &&
+                          billing.discountCodes.length > 0) ? (
+                          <div>
+                            <code className="rounded bg-[#F2F4F7] px-1.5 py-0.5 text-[12px] font-semibold text-[#021A54]">
+                              {billing.discountCode || billing.discountCodes[0]}
+                            </code>
+                            {Number(billing.discountAmount) > 0 ? (
+                              <p className="mt-1 text-[12px] text-[#667085]">
+                                −{formatMoney(billing.discountAmount)}
+                              </p>
+                            ) : Number(billing.discountTotal) > 0 ? (
+                              <p className="mt-1 text-[12px] text-[#667085]">
+                                −{formatMoney(billing.discountTotal)} total
+                              </p>
+                            ) : null}
+                            {Array.isArray(billing.discountCodes) &&
+                            billing.discountCodes.length > 1 ? (
+                              <p className="mt-0.5 text-[11px] text-[#98A2B3]">
+                                +{billing.discountCodes.length - 1} more
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-[13px] text-[#98A2B3]">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <p className="font-semibold text-[#101828]">
+                          {formatMoney(billing.revenue)}
+                        </p>
+                        {Number(billing.listTotal) > Number(billing.revenue) ? (
+                          <p className="mt-0.5 text-[12px] text-[#667085]">
+                            After discount · list {formatMoney(billing.listTotal)}
+                          </p>
+                        ) : billing.paymentCount > 0 ? (
+                          <p className="mt-0.5 text-[12px] text-[#667085]">
+                            Paid amount
+                          </p>
+                        ) : billing.cycles > 0 && billing.pricePerCycle > 0 ? (
+                          <p className="mt-0.5 text-[12px] text-[#667085]">
+                            Ledger · {formatMoney(billing.pricePerCycle)}/cycle
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-5 py-4 align-top text-[#344054]">
+                        {formatDate(client.createdAt)}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toast(`Viewing ${client.name}`)}
+                            disabled={busy}
+                            className="h-8 rounded-md border px-3 text-[12px] font-semibold transition hover:bg-primary-50 disabled:opacity-50"
+                            style={{ borderColor: ACCENT, color: ACCENT }}
+                          >
+                            View
+                          </button>
+                          <select
+                            disabled={busy || assignablePlans.length === 0}
+                            defaultValue=""
+                            onChange={async (event) => {
+                              const planId = event.target.value;
+                              event.target.value = '';
+                              if (!planId) return;
+                              const selected = assignablePlans.find(
+                                (plan) => String(plan.id || plan._id) === String(planId)
+                              );
+                              if (!selected) return;
+                              try {
+                                setActionId(client._id);
+                                const { data } = await tenantService.changePlan(client._id, {
+                                  planId: selected.id || selected._id,
+                                  planName: selected.name,
+                                  planCode: selected.code,
+                                });
+                                const invoice = data?.data?.tenant?.invoice;
+                                if (invoice?.invoiceNumber) {
+                                  toast.success(
+                                    invoice.emailed
+                                      ? `Plan changed to ${selected.name}. Invoice ${invoice.invoiceNumber} emailed.`
+                                      : `Plan changed to ${selected.name}. Invoice ${invoice.invoiceNumber} generated.`
+                                  );
+                                } else {
+                                  toast.success(`Plan changed to ${selected.name}`);
+                                }
+                                await Promise.all([
+                                  loadClients(pagination.page),
+                                  loadStats(),
+                                ]);
+                              } catch (error) {
+                                toast.error(getErrorMessage(error, 'Unable to change plan'));
+                              } finally {
+                                setActionId(null);
+                              }
+                            }}
+                            className="h-8 rounded-md border border-primary bg-white px-2 text-[12px] font-semibold text-primary outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label={`Change plan for ${client.name}`}
+                          >
+                            <option value="" disabled>
+                              Change plan
+                            </option>
+                            {assignablePlans
+                              .filter(
+                                (plan) =>
+                                  String(plan.name || '').toLowerCase() !==
+                                  String(billing.planName || '').toLowerCase()
+                              )
+                              .map((plan) => {
+                                const id = plan.id || plan._id;
+                                const priceLabel = plan.priceCustom
+                                  ? 'Custom'
+                                  : formatMoney(plan.priceAmount || 0);
+                                return (
+                                  <option key={id} value={id}>
+                                    {plan.name} · {priceLabel}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleSuspend(client)}
+                            disabled={busy}
+                            className="h-8 rounded-md border px-3 text-[12px] font-semibold transition hover:bg-primary-50 disabled:opacity-50"
+                            style={{ borderColor: ACCENT, color: ACCENT }}
+                          >
+                            {client.status === 'suspended' ? 'Activate' : 'Suspend'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(client)}
+                            disabled={busy}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#D92D20] text-white transition hover:bg-[#B42318] disabled:opacity-50"
+                            aria-label={`Delete ${client.name}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-[#F2F4F7] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-[#667085]">{rangeLabel}</p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={loading || pagination.page <= 1}
+              onClick={() => loadClients(pagination.page - 1)}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#D0D5DD] px-3 text-sm font-medium text-[#344054] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft size={16} />
+              Previous
+            </button>
+            <span className="min-w-[88px] text-center text-sm font-medium text-[#344054]">
+              Page {pagination.page} of {pagination.pages}
+            </span>
+            <button
+              type="button"
+              disabled={loading || pagination.page >= pagination.pages}
+              onClick={() => loadClients(pagination.page + 1)}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#D0D5DD] px-3 text-sm font-medium text-[#344054] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

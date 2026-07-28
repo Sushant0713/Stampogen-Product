@@ -1,0 +1,6 @@
+.env
+.env.docker
+.env.local
+*.log
+.DS_Store
+deploy/.ecosystem.runtime.cjs

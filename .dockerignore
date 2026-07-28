@@ -1,0 +1,10 @@
+# Ignore local compose secrets / env
+.env.docker
+.env
+.env.*
+!.env.example
+
+# Docs stay on developer machine — not needed in images
+DEPLOY.md
+*.md
+!frontend/public/**/*.md

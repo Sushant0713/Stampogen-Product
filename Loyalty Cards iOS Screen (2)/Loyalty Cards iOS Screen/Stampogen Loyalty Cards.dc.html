@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e6eaf1;font-family:'Inter',-apple-system,system-ui,sans-serif}
+::-webkit-scrollbar{display:none}
+a{color:#3B82F6}
+a:hover{color:#021A54}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:48px;box-sizing:border-box">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{402}}" height="{{874}}" hint-size="402,874">
+
+<div style="position:relative;height:100%;background:#F8FAFC">
+<div style="position:absolute;inset:0;overflow-y:auto;padding:62px 20px 110px;box-sizing:border-box">
+
+<sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+<div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;gap:12px">
+    <div>
+      <div style="font-size:26px;font-weight:800;color:#021A54;letter-spacing:-0.5px;line-height:1.15">My Loyalty Cards</div>
+      <div style="font-size:13px;color:#64748B;margin-top:7px;max-width:210px;line-height:1.45">Collect stamps, unlock rewards, and discover new offers from your favorite shops.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0;padding-top:2px">
+      <div style="width:38px;height:38px;border-radius:19px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(2,26,84,0.08);cursor:pointer" style-hover="box-shadow:0 4px 12px rgba(2,26,84,0.14)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#021A54" stroke-width="2"></circle><path d="M21 21l-4.3-4.3" stroke="#021A54" stroke-width="2" stroke-linecap="round"></path></svg>
+      </div>
+      <div style="width:38px;height:38px;border-radius:19px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(2,26,84,0.08);position:relative;cursor:pointer" style-hover="box-shadow:0 4px 12px rgba(2,26,84,0.14)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3c-3.3 0-6 2.7-6 6v3.5L4 17h16l-2-4.5V9c0-3.3-2.7-6-6-6z" stroke="#021A54" stroke-width="2" stroke-linejoin="round"></path><path d="M9.5 20a2.5 2.5 0 005 0" stroke="#021A54" stroke-width="2" stroke-linecap="round"></path></svg>
+        <div style="position:absolute;top:8px;right:8px;width:7px;height:7px;border-radius:50%;background:#3B82F6;box-shadow:0 0 0 2px #fff"></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="border-radius:24px;padding:24px;background:linear-gradient(135deg,#021A54 0%,#0B2C6E 45%,#1E4FA3 100%);position:relative;overflow:hidden;box-shadow:0 20px 36px -14px rgba(2,26,84,0.5);margin-bottom:28px;cursor:pointer" onClick="{{featured.onOpen}}" style-hover="box-shadow:0 24px 44px -10px rgba(2,26,84,0.65)">
+    <div style="position:absolute;top:-70px;right:-70px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,0.16),transparent 70%);pointer-events:none"></div>
+    <div style="position:absolute;bottom:-90px;left:-50px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.3),transparent 70%);pointer-events:none"></div>
+    <div style="position:relative;z-index:1">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">
+        <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#0B2C6E,#3B82F6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;box-shadow:0 4px 10px rgba(0,0,0,0.25);flex-shrink:0">{{featured.initials}}</div>
+        <div style="flex:1;min-width:0">
+          <div style="color:#fff;font-weight:700;font-size:16.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{featured.name}}</div>
+          <div style="color:rgba(255,255,255,0.55);font-size:12.5px;margin-top:2px">{{featured.campaign}}</div>
+        </div>
+      </div>
+      <div style="color:#fff;font-size:19px;font-weight:700;margin-bottom:20px;letter-spacing:-0.2px">{{featured.reward}}</div>
+      <div style="display:flex;gap:13px;margin-bottom:18px">
+        <sc-for list="{{featuredStamps}}" as="s" hint-placeholder-count="5">
+          <sc-if value="{{s.filled}}"><div style="width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 32% 28%,#8fb4ff,#3B82F6 55%,#1a4fc4 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(0,0,0,0.3),inset 0 1px 2px rgba(255,255,255,0.5)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg></div></sc-if>
+          <sc-if value="{{s.empty}}"><div style="width:44px;height:44px;border-radius:50%;border:1.5px dashed rgba(255,255,255,0.35)"></div></sc-if>
+        </sc-for>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="color:rgba(255,255,255,0.7);font-size:12.5px;font-weight:500">{{featured.progressText}}</div>
+        <div style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.2);border-radius:100px;padding:7px 13px;color:#fff;font-size:12.5px;font-weight:600;backdrop-filter:blur(6px);white-space:nowrap;flex-shrink:0">{{featured.badgeLabel}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:16px;font-weight:700;color:#021A54;margin-bottom:14px;letter-spacing:-0.2px">Active Loyalty Cards</div>
+  <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:30px">
+    <sc-for list="{{activeCards}}" as="c" hint-placeholder-count="5">
+      <div style="background:#fff;border-radius:20px;padding:16px;box-shadow:0 8px 20px rgba(2,26,84,0.06),0 1px 3px rgba(2,26,84,0.04);cursor:pointer" onClick="{{c.onOpen}}" style-hover="box-shadow:0 12px 26px rgba(2,26,84,0.1)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <div style="width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#021A54,#3B82F6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0">{{c.initials}}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:700;color:#0F172A">{{c.name}}</div>
+            <div style="font-size:12px;color:#94A3B8;margin-top:1px">{{c.campaign}}</div>
+          </div>
+          <div style="background:#F1F5F9;border-radius:12px;padding:6px 10px;font-size:12px;font-weight:600;color:#021A54;white-space:nowrap">{{c.reward}}</div>
+          
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <sc-for list="{{c.dots}}" as="d" hint-placeholder-count="5">
+            <sc-if value="{{d.filled}}"><div style="width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 32% 28%,#8fb4ff,#3B82F6 60%,#1a4fc4 100%)"></div></sc-if>
+            <sc-if value="{{d.empty}}"><div style="width:16px;height:16px;border-radius:50%;background:#F1F5F9;border:1px solid #E2E8F0"></div></sc-if>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#94A3B8;font-weight:500">{{c.progressText}}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  
+</div>
+</sc-if>
+
+<sc-if value="{{isRewards}}" hint-placeholder-val="{{false}}">
+<div>
+  <div style="font-size:26px;font-weight:800;color:#021A54;letter-spacing:-0.5px;margin-bottom:6px">Available Rewards</div>
+  <div style="font-size:13px;color:#64748B;margin-bottom:22px;line-height:1.45">All the rewards you're currently working towards.</div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <sc-for list="{{rewards}}" as="r" hint-placeholder-count="4">
+      <div style="border-radius:20px;padding:16px 18px;background:{{r.gradient}};box-shadow:0 8px 20px rgba(2,26,84,0.1);color:#fff;cursor:pointer" onClick="{{r.onOpen}}" style-hover="transform:scale(1.02);box-shadow:0 12px 26px rgba(2,26,84,0.25);transition:transform 0.15s,box-shadow 0.15s">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
+          <div>
+            <div style="font-size:14px;font-weight:700">{{r.title}}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px">{{r.shopName}}</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.22);border-radius:100px;padding:6px 12px;font-size:11.5px;font-weight:600;white-space:nowrap;flex-shrink:0">{{r.requirement}}</div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <sc-if value="{{r.addressVisible}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:11.5px;color:rgba(255,255,255,0.85)">{{r.address}}</div>
+          </sc-if>
+          <div style="background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.3);border-radius:100px;padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-left:auto" onClick="{{r.onToggleAddress}}" style-hover="background:rgba(255,255,255,0.26)">View Address</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
+<div>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="width:36px;height:36px;border-radius:18px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(2,26,84,0.08);cursor:pointer;flex-shrink:0" onClick="{{goHome}}" style-hover="box-shadow:0 4px 12px rgba(2,26,84,0.14)">
+      <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M8 1L1 7.5L8 14" stroke="#021A54" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+    <div style="font-size:19px;font-weight:800;color:#021A54">{{selected.name}}</div>
+  </div>
+
+  <div style="border-radius:24px;padding:26px;background:linear-gradient(135deg,#021A54 0%,#0B2C6E 45%,#1E4FA3 100%);position:relative;overflow:hidden;box-shadow:0 20px 36px -14px rgba(2,26,84,0.5);margin-bottom:26px">
+    <div style="position:absolute;top:-70px;right:-70px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,0.16),transparent 70%);pointer-events:none"></div>
+    <div style="position:relative;z-index:1">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <div style="width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#0B2C6E,#3B82F6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.25);flex-shrink:0">{{selected.initials}}</div>
+        <div style="flex:1;min-width:0">
+          <div style="color:#fff;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{selected.name}}</div>
+          <div style="color:rgba(255,255,255,0.55);font-size:12.5px;margin-top:2px">{{selected.campaign}}</div>
+        </div>
+      </div>
+      <div style="color:#fff;font-size:19px;font-weight:700;margin-bottom:20px">{{selected.reward}}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+        <sc-for list="{{selectedDots}}" as="s" hint-placeholder-count="5">
+          <sc-if value="{{s.filled}}"><div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 32% 28%,#8fb4ff,#3B82F6 55%,#1a4fc4 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(0,0,0,0.3),inset 0 1px 2px rgba(255,255,255,0.5)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg></div></sc-if>
+          <sc-if value="{{s.empty}}"><div style="width:40px;height:40px;border-radius:50%;border:1.5px dashed rgba(255,255,255,0.35)"></div></sc-if>
+        </sc-for>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="color:rgba(255,255,255,0.7);font-size:12.5px;font-weight:500">{{selected.progressText}}</div>
+        <div style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.2);border-radius:100px;padding:7px 13px;color:#fff;font-size:12.5px;font-weight:600;white-space:nowrap;flex-shrink:0">{{selected.badgeLabel}}</div>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{isRewardRedeemable}}" hint-placeholder-val="{{false}}">
+    <div style="background:#10B981;border-radius:16px;padding:15px;text-align:center;color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:9px" onClick="{{redeemReward}}" style-hover="background:#059669">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.9 6.3 6.8.8-5 4.8 1.3 6.7L12 17.3 5.9 20.6l1.3-6.7-5-4.8 6.8-.8L12 2z" fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round"></path></svg>
+      Redeem Unlocked Reward!
+    </div>
+  </sc-if>
+  <sc-if value="{{!isRewardRedeemable}}" hint-placeholder-val="{{true}}">
+    <div style="background:#021A54;border-radius:16px;padding:15px;text-align:center;color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:9px" onClick="{{openOffers}}" style-hover="background:#0B2C6E">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2M20 8V6a2 2 0 00-2-2h-2M20 16v2a2 2 0 01-2 2h-2" stroke="#fff" stroke-width="2" stroke-linecap="round"></path><rect x="8" y="9" width="8" height="6" rx="1.5" stroke="#fff" stroke-width="2"></rect></svg>
+      Scan to Earn Stamp
+    </div>
+  </sc-if>
+
+  <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 8px 20px rgba(2,26,84,0.06);margin-bottom:20px">
+    <div style="font-size:14px;font-weight:700;color:#021A54;margin-bottom:8px">How it works</div>
+    <div style="font-size:12.5px;color:#64748B;line-height:1.6">Show this card at checkout to collect a stamp. Once you reach the target, your reward unlocks automatically — redeem it on your next visit.</div>
+  </div>
+
+  <div style="background:#fff;border-radius:20px;padding:6px 16px;box-shadow:0 8px 20px rgba(2,26,84,0.06)">
+    <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 0">
+      <div style="width:26px;height:26px;border-radius:50%;background:#EFF6FF;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6" stroke="#3B82F6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
+      <div>
+        <div style="font-size:13px;color:#0F172A;font-weight:600">Last stamp collected</div>
+        <div style="font-size:11.5px;color:#94A3B8;margin-top:2px">2 minutes ago</div>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isOffers}}" hint-placeholder-val="{{false}}">
+<div>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+    <div style="width:36px;height:36px;border-radius:18px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(2,26,84,0.08);cursor:pointer;flex-shrink:0" onClick="{{backFromOffers}}" style-hover="box-shadow:0 4px 12px rgba(2,26,84,0.14)">
+      <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M8 1L1 7.5L8 14" stroke="#021A54" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+    <div style="font-size:19px;font-weight:800;color:#021A54">{{selected.name}} Offers</div>
+  </div>
+  <div style="font-size:13px;color:#64748B;margin:0 0 20px 48px;line-height:1.45">Choose an offer, then scan your receipt to redeem it.</div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <sc-for list="{{shopOffers}}" as="o" hint-placeholder-count="2">
+      <div style="border-radius:20px;padding:18px;background:linear-gradient(135deg,#021A54,#3B82F6);box-shadow:0 8px 20px rgba(2,26,84,0.12);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer" onClick="{{o.onSelect}}" style-hover="box-shadow:0 12px 26px rgba(2,26,84,0.2)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700;margin-bottom:6px">{{o.title}}</div>
+          <div style="display:inline-block;background:rgba(255,255,255,0.22);border-radius:100px;padding:5px 10px;font-size:11px;font-weight:600">{{o.requirement}}</div>
+        </div>
+        <svg width="8" height="14" viewBox="0 0 8 14" fill="none" style="flex-shrink:0"><path d="M1 1l6 6-6 6" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="font-size:14px;font-weight:700;color:#021A54;margin:28px 0 14px">Connect with {{selected.name}}</div>
+  <div style="display:flex;gap:12px">
+    <div style="width:46px;height:46px;border-radius:23px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(2,26,84,0.06);cursor:pointer" style-hover="box-shadow:0 10px 24px rgba(2,26,84,0.12)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 8.5h2V5h-2c-2.2 0-4 1.8-4 4v2H9v3.5h2V21h3.5v-6.5H17l.5-3.5h-3V9c0-.3.2-.5.5-.5z" fill="#021A54"></path></svg>
+    </div>
+    <div style="width:46px;height:46px;border-radius:23px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(2,26,84,0.06);cursor:pointer" style-hover="box-shadow:0 10px 24px rgba(2,26,84,0.12)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="#021A54" stroke-width="1.8"></rect><circle cx="12" cy="12" r="4" stroke="#021A54" stroke-width="1.8"></circle><circle cx="17.2" cy="6.8" r="1.1" fill="#021A54"></circle></svg>
+    </div>
+    <div style="width:46px;height:46px;border-radius:23px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(2,26,84,0.06);cursor:pointer" style-hover="box-shadow:0 10px 24px rgba(2,26,84,0.12)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 12.2c0-.7-.06-1.4-.2-2H12v3.8h5c-.2 1.2-.9 2.2-1.9 2.9v2.4h3c1.8-1.7 2.9-4.1 2.9-7.1z" fill="#021A54"></path><path d="M12 21c2.4 0 4.5-.8 6-2.2l-3-2.4c-.8.6-1.9.9-3 .9-2.3 0-4.3-1.6-5-3.7H4v2.4C5.5 18.9 8.5 21 12 21z" fill="#021A54"></path><path d="M7 13.6a5.4 5.4 0 010-3.4V7.8H4a9 9 0 000 8.2l3-2.4z" fill="#021A54"></path><path d="M12 6.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6C16.4 3.8 14.4 3 12 3 8.5 3 5.5 5.1 4 8.2l3 2.4c.7-2.1 2.7-3.7 5-3.7z" fill="#021A54"></path></svg>
+    </div>
+    <div style="width:46px;height:46px;border-radius:23px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(2,26,84,0.06);cursor:pointer" style-hover="box-shadow:0 10px 24px rgba(2,26,84,0.12)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#021A54" stroke-width="1.8"></circle><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9s1.3-6.5 3.8-9z" stroke="#021A54" stroke-width="1.8"></path></svg>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isScan}}" hint-placeholder-val="{{false}}">
+<div style="margin:-62px -20px -110px;padding:62px 20px 110px;min-height:calc(100% + 172px);background:#0B0B0F;display:flex;flex-direction:column;box-sizing:border-box">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <div style="width:36px;height:36px;border-radius:18px;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" onClick="{{backFromScan}}" style-hover="background:rgba(255,255,255,0.2)">
+      <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M8 1L1 7.5L8 14" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+    <div style="color:#fff;font-size:15px;font-weight:700">{{selectedOffer.title}}</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px">
+    <div style="position:relative;width:230px;height:230px">
+      <div style="position:absolute;top:0;left:0;width:34px;height:34px;border-top:3px solid #3B82F6;border-left:3px solid #3B82F6;border-radius:10px 0 0 0"></div>
+      <div style="position:absolute;top:0;right:0;width:34px;height:34px;border-top:3px solid #3B82F6;border-right:3px solid #3B82F6;border-radius:0 10px 0 0"></div>
+      <div style="position:absolute;bottom:0;left:0;width:34px;height:34px;border-bottom:3px solid #3B82F6;border-left:3px solid #3B82F6;border-radius:0 0 0 10px"></div>
+      <div style="position:absolute;bottom:0;right:0;width:34px;height:34px;border-bottom:3px solid #3B82F6;border-right:3px solid #3B82F6;border-radius:0 0 10px 0"></div>
+      <div style="position:absolute;inset:20px;border-radius:14px;background:repeating-linear-gradient(135deg,#17171d,#17171d 10px,#1c1c22 10px,#1c1c22 20px);display:flex;align-items:center;justify-content:center">
+        <span style="font-family:ui-monospace,monospace;font-size:10px;color:rgba(255,255,255,0.4)">camera view</span>
+      </div>
+    </div>
+    <div style="color:rgba(255,255,255,0.6);font-size:12.5px;text-align:center;max-width:220px;line-height:1.5">Point your camera at the receipt or product, then tap the shutter</div>
+  </div>
+  <div style="display:flex;justify-content:center;padding:18px 0 8px">
+    <div style="width:70px;height:70px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,0.3);cursor:pointer" onClick="{{capture}}" style-hover="border-color:rgba(255,255,255,0.5)"></div>
+  </div>
+  <sc-if value="{{flash}}" hint-placeholder-val="{{false}}">
+    <div style="position:absolute;inset:0;background:#fff"></div>
+  </sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{isCaptured}}" hint-placeholder-val="{{false}}">
+<div>
+  <div style="font-size:19px;font-weight:800;color:#021A54;margin-bottom:20px">Verify &amp; Confirm</div>
+  <div style="border-radius:20px;overflow:hidden;margin-bottom:20px;box-shadow:0 8px 20px rgba(2,26,84,0.08)">
+    <div style="height:220px;background:repeating-linear-gradient(135deg,#E2E8F0,#E2E8F0 10px,#EEF2F7 10px,#EEF2F7 20px);display:flex;align-items:center;justify-content:center">
+      <span style="font-family:ui-monospace,monospace;font-size:10px;color:#94A3B8">captured photo</span>
+    </div>
+  </div>
+  <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 8px 20px rgba(2,26,84,0.06);margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <div>
+      <div style="font-size:14px;font-weight:700;color:#0F172A">{{selected.name}}</div>
+      <div style="font-size:12px;color:#94A3B8;margin-top:2px">{{selectedOffer.title}}</div>
+    </div>
+    <div style="background:#EFF6FF;border-radius:100px;padding:6px 12px;font-size:11.5px;font-weight:600;color:#3B82F6">+1 Stamp</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="background:#021A54;border-radius:16px;padding:15px;text-align:center;color:#fff;font-size:14px;font-weight:700;cursor:pointer" onClick="{{confirmDone}}" style-hover="background:#0B2C6E">Done</div>
+    <div style="background:transparent;border:1px solid #E2E8F0;border-radius:16px;padding:14px;text-align:center;color:#64748B;font-size:13.5px;font-weight:600;cursor:pointer" onClick="{{retake}}" style-hover="background:#F1F5F9">Retake Photo</div>
+  </div>
+</div>
+</sc-if>
+
+</div>
+
+<sc-if value="{{showNav}}" hint-placeholder-val="{{true}}">
+<div style="position:absolute;left:20px;right:20px;bottom:18px;display:flex;justify-content:center">
+  <div style="display:flex;gap:6px;background:rgba(255,255,255,0.75);backdrop-filter:blur(16px) saturate(180%);border:1px solid rgba(255,255,255,0.6);border-radius:100px;padding:6px;box-shadow:0 12px 30px rgba(2,26,84,0.18)">
+    <div style="display:flex;align-items:center;gap:7px;padding:10px 18px;border-radius:100px;cursor:pointer;background:{{shopsTabBg}};transition:background 0.15s" onClick="{{setTabShops}}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 10l1.5-6h15L21 10" stroke="{{shopsTabColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M4 10v9a1 1 0 001 1h14a1 1 0 001-1v-9" stroke="{{shopsTabColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9 20v-5a1 1 0 011-1h4a1 1 0 011 1v5" stroke="{{shopsTabColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span style="font-size:13px;font-weight:700;color:{{shopsTabColor}}">Shops</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin:-26px 4px 0;cursor:pointer" onClick="{{setTabScanner}}">
+      <div style="width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#021A54,#3B82F6);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 22px rgba(59,130,246,0.5),0 0 0 5px #fff;transition:transform 0.15s" style-hover="transform:scale(1.05)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="#fff" stroke-width="2"></rect><rect x="14" y="3" width="7" height="7" rx="1" stroke="#fff" stroke-width="2"></rect><rect x="3" y="14" width="7" height="7" rx="1" stroke="#fff" stroke-width="2"></rect><rect x="14" y="14" width="3" height="3" fill="#fff"></rect><rect x="18" y="14" width="3" height="3" fill="#fff"></rect><rect x="14" y="18" width="3" height="3" fill="#fff"></rect><rect x="18" y="18" width="3" height="3" fill="#fff"></rect></svg>
+      </div>
+      <span style="font-size:11px;font-weight:700;color:#021A54">Scanner</span>
+    </div><div style="display:flex;align-items:center;gap:7px;padding:10px 18px;border-radius:100px;cursor:pointer;background:{{rewardsTabBg}};transition:background 0.15s" onClick="{{setTabRewards}}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.9 6.3 6.8.8-5 4.8 1.3 6.7L12 17.3 5.9 20.6l1.3-6.7-5-4.8 6.8-.8L12 2z" stroke="{{rewardsTabColor}}" stroke-width="2" stroke-linejoin="round"></path></svg>
+      <span style="font-size:13px;font-weight:700;color:{{rewardsTabColor}}">Rewards</span>
+    </div>
+    
+  </div>
+</div>
+</sc-if>
+
+</div>
+</x-import>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { view: 'home', navTab: 'shops', selected: null, joined: {}, addressShown: {}, stampOverrides: {}, selectedOffer: null, flash: false, extraActivity: [] };
+
+  shopsData = [
+    { id: 1, name: 'Coffee House', initials: 'CH', campaign: 'Espresso Club', reward: 'Free Coffee', badgeLabel: ' Free Coffee', total: 5, filled: 3 },
+    { id: 2, name: 'Pizza Corner', initials: 'PC', campaign: 'Slice Society', reward: 'Free Garlic Bread', badgeLabel: '🍕 Garlic Bread', total: 5, filled: 2 },
+    { id: 3, name: 'Salon Luxe', initials: 'SL', campaign: 'Glow Rewards', reward: 'Free Hair Spa', badgeLabel: '💇 Hair Spa', total: 10, filled: 5 },
+    { id: 4, name: 'Fashion Hub', initials: 'FH', campaign: 'Style Points', reward: '20% Off', badgeLabel: '🛍️ 20% Off', total: 6, filled: 4 },
+    { id: 5, name: 'Bloom Bakery', initials: 'BB', campaign: 'Sweet Streak', reward: 'Free Pastry', badgeLabel: '🥐 Free Pastry', total: 8, filled: 6 },
+    { id: 6, name: 'Zen Spa', initials: 'ZS', campaign: 'Serenity Circle', reward: 'Free Massage', badgeLabel: '🧖 Free Massage', total: 10, filled: 1 },
+  ];
+
+  nearbyData = [
+    { id: 1, name: 'Coffee House', category: 'Cafe', distance: '0.4 km' },
+    { id: 2, name: 'Pizza Corner', category: 'Restaurant', distance: '1.1 km' },
+    { id: 3, name: 'Fashion Hub', category: 'Retail Store', distance: '850 m' },
+    { id: 4, name: 'Bloom Bakery', category: 'Bakery', distance: '1.4 km' },
+  ];
+
+  rewardsData = [
+    { id: 1, title: 'Free Coffee', requirement: '5 Stamps', icon: '☕', gradient: 'linear-gradient(135deg,#021A54,#3B82F6)', shopName: 'Coffee House', address: '12 Market St, Downtown' },
+    { id: 2, title: 'Free Pizza Slice', requirement: '8 Stamps', icon: '🍕', gradient: 'linear-gradient(135deg,#7C2D12,#F59E0B)', shopName: 'Pizza Corner', address: '45 Elm Ave, Midtown' },
+    { id: 3, title: 'Surprise Gift', requirement: '10 Visits', icon: '🎁', gradient: 'linear-gradient(135deg,#581C87,#C084FC)', shopName: 'Fashion Hub', address: '8 Grand Plaza, Uptown' },
+    { id: 4, title: 'Free Pastry', requirement: '8 Stamps', icon: '🥐', gradient: 'linear-gradient(135deg,#134E4A,#2DD4BF)', shopName: 'Bloom Bakery', address: '3 Baker Ln, Riverside' },
+  ];
+
+  activityData = [
+    { id: 1, text: 'Stamp collected at Coffee House', time: '2 minutes ago' },
+    { id: 2, text: 'Reward redeemed at Pizza Corner', time: 'Yesterday' },
+    { id: 3, text: 'New loyalty card joined — Fashion Hub', time: '2 days ago' },
+  ];
+
+  buildDots(total, filled) {
+    const arr = [];
+    for (let i = 0; i < total; i++) arr.push({ key: i, filled: i < filled, empty: i >= filled });
+    return arr;
+  }
+
+  openDetail(shop) { this.setState({ view: 'detail', selected: shop, navTab: 'shops' }); }
+  goHome() { this.setState({ view: 'home', navTab: 'shops' }); }
+  setTab(tab) {
+    if (tab === 'scanner') { this.setState({ navTab: tab, view: 'offers', selected: this.state.selected || this.shopsData[0] }); return; }
+    this.setState({ navTab: tab, view: tab === 'shops' ? 'home' : 'rewards' });
+  }
+  toggleJoin(id) { this.setState(s => ({ joined: { ...s.joined, [id]: !s.joined[id] } })); }
+  toggleAddress(id) { this.setState(s => ({ addressShown: { ...s.addressShown, [id]: !s.addressShown[id] } })); }
+
+  openOffers() { this.setState({ view: 'offers' }); }
+  openOffersFor(shop) { this.setState({ view: 'offers', selected: shop }); }
+  backFromOffers() {
+    if (this.state.navTab === 'scanner') {
+      this.setState({ view: 'home', navTab: 'shops' });
+    } else {
+      this.setState({ view: 'detail' });
+    }
+  }
+  selectOffer(offer) { this.setState({ view: 'scan', selectedOffer: offer }); }
+  backFromScan() {
+    if (this.state.navTab === 'scanner') {
+      this.setState({ view: 'home', navTab: 'shops', selectedOffer: null });
+    } else {
+      this.setState({ view: 'offers', selectedOffer: null });
+    }
+  }
+  capture() {
+    this.setState({ flash: true });
+    setTimeout(() => this.setState({ flash: false, view: 'captured' }), 180);
+  }
+  retake() { this.setState({ view: 'scan' }); }
+  confirmDone() {
+    const shop = this.state.selected || this.shopsData[0];
+    this.setState(s => ({
+      stampOverrides: { ...s.stampOverrides, [shop.id]: (s.stampOverrides[shop.id] || 0) + 1 },
+      extraActivity: [{ id: 'new-' + Date.now(), text: `Stamp collected at ${shop.name}`, time: 'Just now' }, ...s.extraActivity],
+      view: 'detail',
+      selectedOffer: null,
+      navTab: 'shops',
+    }));
+  }
+  redeemReward() {
+    const shop = this.state.selected || this.shopsData[0];
+    this.setState(s => ({
+      stampOverrides: { ...s.stampOverrides, [shop.id]: -shop.filled },
+      extraActivity: [{ id: 'new-' + Date.now(), text: `Redeemed reward at ${shop.name}!`, time: 'Just now' }, ...s.extraActivity],
+    }));
+    alert(`Congratulations! You have redeemed your reward at ${shop.name}!`);
+  }
+
+  renderVals() {
+    const ov = id => this.state.stampOverrides[id] || 0;
+
+    const activeCards = this.shopsData.map(s => {
+      const filled = Math.min(s.total, s.filled + ov(s.id));
+      return {
+        ...s, filled, dots: this.buildDots(s.total, filled), progressText: `${filled} of ${s.total} stamps`,
+        onOpen: () => this.openDetail(s),
+        onScan: e => { e.stopPropagation(); this.openOffersFor(s); },
+      };
+    });
+
+    const f0 = this.shopsData[0];
+    const fFilled = Math.min(f0.total, f0.filled + ov(f0.id));
+    const featured = {
+      ...f0,
+      filled: fFilled,
+      progressText: `${fFilled} of ${f0.total} Visits Completed`,
+      onOpen: () => this.openDetail(f0)
+    };
+    const featuredStamps = this.buildDots(featured.total, featured.filled);
+
+    const selectedRaw = this.state.selected || this.shopsData[0];
+    const selFilled = Math.min(selectedRaw.total, selectedRaw.filled + ov(selectedRaw.id));
+    const selected = { ...selectedRaw, filled: selFilled, progressText: `${selFilled} of ${selectedRaw.total} Visits Completed` };
+    const selectedDots = this.buildDots(selected.total, selected.filled);
+
+    const isRewardRedeemable = selFilled >= selectedRaw.total;
+
+    const shopOffers = selectedRaw ? [
+      { id: 'base', title: selectedRaw.reward, requirement: `${selectedRaw.total} Stamps`, onSelect: () => this.selectOffer({ title: selectedRaw.reward }) },
+      { id: 'bonus', title: '10% Off Next Visit', requirement: 'Any Visit', onSelect: () => this.selectOffer({ title: '10% Off Next Visit' }) },
+    ] : [];
+
+    const nearby = this.nearbyData.map(n => {
+      const isJoined = !!this.state.joined[n.id];
+      return { ...n, buttonLabel: isJoined ? 'Joined ✓' : 'Join Loyalty', onToggle: () => this.toggleJoin(n.id) };
+    });
+
+    const rewards = this.rewardsData.map(r => {
+      const shop = this.shopsData.find(s => s.name === r.shopName) || this.shopsData[0];
+      return {
+        ...r,
+        addressVisible: !!this.state.addressShown[r.id],
+        onToggleAddress: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.toggleAddress(r.id); },
+        onOpen: () => this.openDetail(shop)
+      };
+    });
+
+    const isShopsTab = this.state.navTab === 'shops';
+    const isScannerTab = this.state.navTab === 'scanner';
+
+    return {
+      isHome: this.state.view === 'home',
+      isRewards: this.state.view === 'rewards',
+      isDetail: this.state.view === 'detail',
+      isOffers: this.state.view === 'offers',
+      isScan: this.state.view === 'scan',
+      isCaptured: this.state.view === 'captured',
+      showNav: this.state.view === 'home' || this.state.view === 'rewards' || this.state.view === 'detail' || (this.state.view === 'offers' && this.state.navTab === 'scanner'),
+      flash: this.state.flash,
+      featured, featuredStamps,
+      activeCards,
+      nearby,
+      rewards,
+      activity: [...this.state.extraActivity, ...this.activityData],
+      selected, selectedDots,
+      isRewardRedeemable,
+      shopOffers,
+      selectedOffer: this.state.selectedOffer || { title: '' },
+      goHome: () => this.goHome(),
+      setTabShops: () => this.setTab('shops'),
+      setTabRewards: () => this.setTab('rewards'),
+      shopsTabBg: isShopsTab ? '#021A54' : 'transparent',
+      shopsTabColor: isShopsTab ? '#fff' : '#64748B',
+      rewardsTabBg: !isShopsTab && !isScannerTab ? '#021A54' : 'transparent',
+      rewardsTabColor: !isShopsTab && !isScannerTab ? '#fff' : '#64748B',
+      scannerTabBg: isScannerTab ? '#021A54' : 'transparent',
+      scannerTabColor: isScannerTab ? '#fff' : '#64748B',
+      setTabScanner: () => this.setTab('scanner'),
+      openOffers: () => this.openOffers(),
+      backFromOffers: () => this.backFromOffers(),
+      backFromScan: () => this.backFromScan(),
+      capture: () => this.capture(),
+      retake: () => this.retake(),
+      confirmDone: () => this.confirmDone(),
+      redeemReward: () => this.redeemReward(),
+    };
+  }
+}
+</script>
+</body>
+</html>

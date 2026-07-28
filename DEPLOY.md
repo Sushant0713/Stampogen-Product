@@ -213,8 +213,8 @@ nano .env
 ```
 
 ```env
-NEXT_PUBLIC_APP_URL=https://YOUR_DOMAIN.com
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=
+NEXT_PUBLIC_APP_URL=https://app.blueorbitservice.space
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=1098413752599-8r61a49ffm0e8g2u0ltbabmdd4eiorb9.apps.googleusercontent.com
 STAMPOGEN_HTTP_PORT=3081
 STAMPOGEN_HTTP_BIND=127.0.0.1
 ```
@@ -254,7 +254,7 @@ sudo nano /etc/nginx/sites-available/stampogen
 server {
     listen 80;
     listen [::]:80;
-    server_name YOUR_DOMAIN.com;
+    server_name app.blueorbitservice.space;
 
     client_max_body_size 20M;
 

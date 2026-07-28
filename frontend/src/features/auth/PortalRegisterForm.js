@@ -580,10 +580,10 @@ function PortalRegisterFormInner({ role }) {
     return (
       <div className="w-full">
         <div className="mb-3 text-center">
-          <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#021A54]">
+          <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em] text-[#021A54] sm:text-[30px]">
             Confirm your details
           </h1>
-          <p className="mt-2 text-[17px] leading-snug text-[#667085]">
+          <p className="mt-2 text-[15px] leading-snug text-[#667085] sm:text-[17px]">
             We filled this from Google. Edit anything you want, then continue.
           </p>
         </div>
@@ -898,13 +898,15 @@ function PortalRegisterFormInner({ role }) {
 
   return (
     <div className="w-full">
-      <div className="mb-5 text-center">
-        <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#021A54]">
+      <div className="mb-4 text-center sm:mb-5">
+        <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em] text-[#021A54] sm:text-[30px]">
           {copy.title}
         </h1>
-        <p className="mt-2.5 text-[17px] leading-snug text-[#667085]">{copy.subtitle}</p>
+        <p className="mt-2 text-[15px] leading-snug text-[#667085] sm:mt-2.5 sm:text-[17px]">
+          {copy.subtitle}
+        </p>
         {planCode && role === ROLES.ADMIN ? (
-          <p className="mt-2 rounded-lg bg-[#F5F8FF] px-3 py-2 text-[15px] font-medium text-[#021A54]">
+          <p className="mt-2 rounded-lg bg-[#F5F8FF] px-3 py-2 text-[14px] font-medium text-[#021A54] sm:text-[15px]">
             Selected plan: <span className="font-semibold">{planCode}</span>
             <span className="font-normal text-[#667085]">
               {' '}
@@ -914,15 +916,19 @@ function PortalRegisterFormInner({ role }) {
         ) : null}
       </div>
 
-      <GoogleSignInButton role={role} onAccessToken={handleGoogleAccessToken} />
+      <GoogleSignInButton
+        role={role}
+        onAccessToken={handleGoogleAccessToken}
+        className="flex h-[48px] w-full items-center justify-center gap-3 rounded-[10px] border border-[#D0D5DD] bg-white text-[15px] font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[52px] sm:text-[17px]"
+      />
 
       <div className="relative my-4">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-[#EAECF0]" />
         </div>
         <div className="relative flex justify-center">
-          <span className="bg-white px-3 text-[13px] font-semibold tracking-[0.08em] text-[#98A2B3]">
-            OR CONTINUE WITH EMAIL
+          <span className="bg-white px-2 text-center text-[12px] font-medium text-[#98A2B3] sm:px-3 sm:text-[13px]">
+            or continue with email
           </span>
         </div>
       </div>
@@ -1236,14 +1242,14 @@ function PortalRegisterFormInner({ role }) {
         </AuthButton>
       </form>
 
-      <p className="mt-4 text-center text-[16px] text-[#667085]">
+      <p className="mt-5 border-t border-[#EAECF0] pt-5 text-center text-[15px] text-[#667085] sm:text-[16px]">
         Already have an account?{' '}
         <Link href={getLoginPath(role)} className="font-semibold text-[#2E90FA] hover:underline">
           Sign in
         </Link>
       </p>
 
-      <div className="mt-3 flex items-center justify-center gap-1.5 text-[14px] text-[#98A2B3]">
+      <div className="mt-3 flex items-center justify-center gap-1.5 text-[13px] text-[#98A2B3] sm:text-[14px]">
         <ShieldCheck size={16} />
         <span>Secure &amp; Trusted {ROLE_LABELS[role] || ''} Platform</span>
       </div>

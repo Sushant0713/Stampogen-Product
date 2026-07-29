@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { PartyPopper } from '@/features/customer/PartyPopper';
 import { loyaltyService } from '@/services/loyalty.service';
 import { getErrorMessage } from '@/utils';
 
@@ -20,6 +21,8 @@ export function CustomerScanFlow({ slug }) {
   const [cameraError, setCameraError] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
+  const [celebrateBig, setCelebrateBig] = useState(false);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks()?.forEach((track) => track.stop());
@@ -107,16 +110,25 @@ export function CustomerScanFlow({ slug }) {
         billDocumentName: `bill-${Date.now()}.jpg`,
       });
       toast.success(data.message || '+1 stamp collected!');
-      router.push(`/app/cards/${slug}`);
+      const big = Boolean(data.data?.pendingReview);
+      setCelebrateBig(big);
+      setCelebrate(true);
+      window.setTimeout(() => {
+        router.push(`/app/cards/${slug}`);
+      }, big ? 2200 : 1600);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to add stamp'));
-    } finally {
       setBusy(false);
     }
   };
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-5">
+      <PartyPopper
+        active={celebrate}
+        intensity={celebrateBig ? 'big' : 'normal'}
+        onDone={() => setCelebrate(false)}
+      />
       <div className="flex items-center gap-3">
         <Link
           href={`/app/cards/${slug}/offers`}

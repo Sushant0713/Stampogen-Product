@@ -5,6 +5,7 @@ import {
   getRequiredVerificationKind,
   getVerificationDocLabel,
 } from '@/constants/affiliateTypes';
+import { SHOP_CATEGORIES, SHOP_CATEGORY_VALUES } from '@/constants';
 
 export const loginSchema = z.object({
   email: z.string().email('Valid email is required'),
@@ -35,9 +36,31 @@ export const resetPasswordSchema = z
 
 const phoneSchema = z
   .string()
-  .min(8, 'Phone number is required')
-  .max(20, 'Phone number is too long')
-  .regex(/^[0-9+\-\s()]+$/, 'Enter a valid phone number');
+  .min(8, 'Mobile number is required')
+  .max(20, 'Mobile number is too long')
+  .regex(/^[0-9+\-\s()]+$/, 'Enter a valid mobile number');
+
+const birthDateSchema = z
+  .string()
+  .min(1, 'Birth date is required')
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid birth date')
+  .refine((value) => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) return false;
+    const today = new Date();
+    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    if (date > todayUtc) return false;
+    const minAge = new Date(todayUtc);
+    minAge.setUTCFullYear(minAge.getUTCFullYear() - 13);
+    return date <= minAge;
+  }, 'You must be at least 13 years old');
+
+const identityFields = {
+  firstName: z.string().min(1, 'First name is required').max(50),
+  middleName: z.string().min(1, 'Middle name is required').max(50),
+  lastName: z.string().min(1, 'Last name is required').max(50),
+  phone: phoneSchema,
+};
 
 const streetSchema = z
   .string()
@@ -173,8 +196,7 @@ function withAffiliateDocRefine(schema) {
 
 const baseRegisterSchema = z
   .object({
-    firstName: z.string().min(1, 'First name is required').max(50),
-    lastName: z.string().min(1, 'Last name is required').max(50),
+    ...identityFields,
     email: z.string().email('Valid email is required'),
     password: z
       .string()
@@ -190,6 +212,30 @@ const baseRegisterSchema = z
 
 export const registerSchema = baseRegisterSchema;
 
+const shopCategoryFields = {
+  category: z
+    .string()
+    .min(1, 'Shop category is required')
+    .refine((value) => SHOP_CATEGORY_VALUES.includes(value), {
+      message: 'Please select a valid category',
+    }),
+  customCategory: z.string().max(100).optional().default(''),
+};
+
+function withShopCategoryRefine(schema) {
+  return schema.superRefine((data, ctx) => {
+    if (data.category === SHOP_CATEGORIES.CUSTOM) {
+      if (!String(data.customCategory || '').trim() || String(data.customCategory || '').trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Please enter your custom category',
+          path: ['customCategory'],
+        });
+      }
+    }
+  });
+}
+
 const acceptTermsField = z.preprocess(
   (value) => value === true || value === 'on' || value === 'true' || value === 1 || value === '1',
   z.boolean()
@@ -197,38 +243,39 @@ const acceptTermsField = z.preprocess(
 
 export function getRegisterSchema(role) {
   if (role === 'admin') {
-    return z
-      .object({
-        firstName: z.string().min(1, 'First name is required').max(50),
-        lastName: z.string().min(1, 'Last name is required').max(50),
-        email: z.string().email('Valid email is required'),
-        password: z
-          .string()
-          .min(8, 'Password must be at least 8 characters')
-          .regex(
-            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-            'Must include uppercase, lowercase, and a number'
-          ),
-        confirmPassword: z.string().min(1, 'Confirm your password'),
-        tenantName: z
-          .string()
-          .min(2, 'Organization name is required')
-          .max(100, 'Organization name is too long'),
-        loyaltyStampMode: z.enum(['bill', 'request']).default('bill'),
-        acceptTerms: acceptTermsField,
-        ...billingFields,
-      })
-      .refine((data) => data.password === data.confirmPassword, {
-        message: 'Passwords do not match',
-        path: ['confirmPassword'],
-      });
+    return withShopCategoryRefine(
+      z
+        .object({
+          ...identityFields,
+          email: z.string().email('Valid email is required'),
+          password: z
+            .string()
+            .min(8, 'Password must be at least 8 characters')
+            .regex(
+              /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+              'Must include uppercase, lowercase, and a number'
+            ),
+          confirmPassword: z.string().min(1, 'Confirm your password'),
+          tenantName: z
+            .string()
+            .min(2, 'Organization name is required')
+            .max(100, 'Organization name is too long'),
+          loyaltyStampMode: z.enum(['bill', 'request']).default('bill'),
+          acceptTerms: acceptTermsField,
+          ...shopCategoryFields,
+          ...billingFields,
+        })
+        .refine((data) => data.password === data.confirmPassword, {
+          message: 'Passwords do not match',
+          path: ['confirmPassword'],
+        })
+    );
   }
 
   if (role === 'affiliate') {
     return withAffiliateDocRefine(
       z.object({
-        firstName: z.string().min(1, 'First name is required').max(50),
-        lastName: z.string().min(1, 'Last name is required').max(50),
+        ...identityFields,
         email: z.string().email('Valid email is required'),
         acceptTerms: acceptTermsField,
         ...affiliateFields,
@@ -241,22 +288,24 @@ export function getRegisterSchema(role) {
 
 export function getGoogleCompleteSchema(role) {
   const base = {
-    firstName: z.string().min(1, 'First name is required').max(50),
-    lastName: z.string().min(1, 'Last name is required').max(50),
+    ...identityFields,
     email: z.string().email('Valid email is required'),
     acceptTerms: acceptTermsField,
   };
 
   if (role === 'admin') {
-    return z.object({
-      ...base,
-      tenantName: z
-        .string()
-        .min(2, 'Organization name is required')
-        .max(100, 'Organization name is too long'),
-      loyaltyStampMode: z.enum(['bill', 'request']).default('bill'),
-      ...billingFields,
-    });
+    return withShopCategoryRefine(
+      z.object({
+        ...base,
+        tenantName: z
+          .string()
+          .min(2, 'Organization name is required')
+          .max(100, 'Organization name is too long'),
+        loyaltyStampMode: z.enum(['bill', 'request']).default('bill'),
+        ...shopCategoryFields,
+        ...billingFields,
+      })
+    );
   }
 
   if (role === 'affiliate') {
@@ -268,5 +317,18 @@ export function getGoogleCompleteSchema(role) {
     );
   }
 
+  if (role === 'user') {
+    return z.object({
+      firstName: identityFields.firstName,
+      middleName: identityFields.middleName,
+      lastName: identityFields.lastName,
+      birthDate: birthDateSchema,
+      phone: identityFields.phone,
+      email: z.string().email('Valid email is required'),
+    });
+  }
+
   return z.object(base);
 }
+
+export const customerGoogleCompleteSchema = getGoogleCompleteSchema('user');

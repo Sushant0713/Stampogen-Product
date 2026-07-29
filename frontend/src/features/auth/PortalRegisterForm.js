@@ -12,7 +12,7 @@ import { authService } from '@/services/auth.service';
 import { agreementSettingsService } from '@/services/agreementSettings.service';
 import { affiliateSettingsService } from '@/services/affiliateSettings.service';
 import { useAuth } from '@/contexts/AuthContext';
-import { ROLE_LABELS, ROLES } from '@/constants';
+import { ROLE_LABELS, ROLES, SHOP_CATEGORIES, SHOP_CATEGORY_OPTIONS } from '@/constants';
 import {
   AFFILIATE_TYPES,
   AFFILIATE_TYPE_OPTIONS,
@@ -71,7 +71,7 @@ function BillingFields({ register, errors, idPrefix = '', addressValues, onAddre
           htmlFor={`${idPrefix}phone`}
           className="mb-1.5 block text-[16px] font-semibold text-[#101828]"
         >
-          Phone number
+          Phone number <span className="text-red-500">*</span>
         </label>
         <AuthInput
           id={`${idPrefix}phone`}
@@ -184,12 +184,15 @@ function PortalRegisterFormInner({ role }) {
     resolver: zodResolver(schema),
     defaultValues: {
       firstName: '',
+      middleName: '',
       lastName: '',
       email: '',
       password: '',
       confirmPassword: '',
       tenantName: '',
       loyaltyStampMode: 'bill',
+      category: '',
+      customCategory: '',
       affiliateType: '',
       verificationDocument: '',
       verificationDocumentName: '',
@@ -208,10 +211,13 @@ function PortalRegisterFormInner({ role }) {
     resolver: zodResolver(getGoogleCompleteSchema(role)),
     defaultValues: {
       firstName: '',
+      middleName: '',
       lastName: '',
       email: '',
       tenantName: '',
       loyaltyStampMode: 'bill',
+      category: '',
+      customCategory: '',
       affiliateType: '',
       verificationDocument: '',
       verificationDocumentName: '',
@@ -388,9 +394,13 @@ function PortalRegisterFormInner({ role }) {
         setGoogleDraft({ accessToken, profile });
         googleForm.reset({
           firstName: profile.firstName || '',
+          middleName: '',
           lastName: profile.lastName || '',
           email: profile.email || '',
           tenantName: '',
+          loyaltyStampMode: 'bill',
+          category: '',
+          customCategory: '',
           affiliateType: '',
           verificationDocument: '',
           verificationDocumentName: '',
@@ -433,12 +443,19 @@ function PortalRegisterFormInner({ role }) {
         accessToken: googleDraft.accessToken,
         allowCreate: true,
         firstName: values.firstName.trim(),
+        middleName: values.middleName.trim(),
         lastName: values.lastName.trim(),
+        phone: String(values.phone || '').trim(),
         acceptTerms: Boolean(values.acceptTerms),
       };
       if (showTenant) {
         payload.tenantName = values.tenantName.trim();
         payload.loyaltyStampMode = values.loyaltyStampMode || 'bill';
+        payload.category = values.category;
+        payload.customCategory =
+          values.category === SHOP_CATEGORIES.CUSTOM
+            ? String(values.customCategory || '').trim()
+            : '';
         Object.assign(payload, buildBillingPayload(values));
       }
       if (showAffiliateType) {
@@ -507,7 +524,9 @@ function PortalRegisterFormInner({ role }) {
     try {
       const payload = {
         firstName: values.firstName,
+        middleName: values.middleName,
         lastName: values.lastName,
+        phone: String(values.phone || '').trim(),
         email: values.email,
         acceptTerms: Boolean(values.acceptTerms),
       };
@@ -518,6 +537,11 @@ function PortalRegisterFormInner({ role }) {
       if (showTenant) {
         payload.tenantName = values.tenantName;
         payload.loyaltyStampMode = values.loyaltyStampMode || 'bill';
+        payload.category = values.category;
+        payload.customCategory =
+          values.category === SHOP_CATEGORIES.CUSTOM
+            ? String(values.customCategory || '').trim()
+            : '';
         Object.assign(payload, buildBillingPayload(values));
       }
       if (showAffiliateType) {
@@ -593,7 +617,7 @@ function PortalRegisterFormInner({ role }) {
           className="space-y-2.5"
           noValidate
         >
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <div>
               <label
                 htmlFor="googleFirstName"
@@ -608,6 +632,22 @@ function PortalRegisterFormInner({ role }) {
               />
               {gErrors.firstName && (
                 <p className="mt-1 text-xs text-red-500">{gErrors.firstName.message}</p>
+              )}
+            </div>
+            <div>
+              <label
+                htmlFor="googleMiddleName"
+                className="mb-1.5 block text-[16px] font-semibold text-[#101828]"
+              >
+                Middle name
+              </label>
+              <AuthInput
+                id="googleMiddleName"
+                className={`${inputClass} ${gErrors.middleName ? 'border-red-500' : ''}`}
+                {...googleForm.register('middleName')}
+              />
+              {gErrors.middleName && (
+                <p className="mt-1 text-xs text-red-500">{gErrors.middleName.message}</p>
               )}
             </div>
             <div>
@@ -627,6 +667,28 @@ function PortalRegisterFormInner({ role }) {
               )}
             </div>
           </div>
+
+          {!showTenant ? (
+            <div>
+              <label
+                htmlFor="googlePhone"
+                className="mb-1.5 block text-[16px] font-semibold text-[#101828]"
+              >
+                Mobile number
+              </label>
+              <AuthInput
+                id="googlePhone"
+                type="tel"
+                autoComplete="tel"
+                placeholder="+91 98765 43210"
+                className={`${inputClass} ${gErrors.phone ? 'border-red-500' : ''}`}
+                {...googleForm.register('phone')}
+              />
+              {gErrors.phone && (
+                <p className="mt-1 text-xs text-red-500">{gErrors.phone.message}</p>
+              )}
+            </div>
+          ) : null}
 
           <div className={`grid grid-cols-1 gap-2 ${showAffiliateType ? 'sm:grid-cols-2' : ''}`}>
             <div>
@@ -833,6 +895,50 @@ function PortalRegisterFormInner({ role }) {
                   <p className="mt-1 text-xs text-red-500">{gErrors.tenantName.message}</p>
                 )}
               </div>
+              <div>
+                <label
+                  htmlFor="googleCategory"
+                  className="mb-1.5 block text-[16px] font-semibold text-[#101828]"
+                >
+                  Category <span className="text-red-500">*</span>
+                </label>
+                <AuthSelect
+                  id="googleCategory"
+                  className={`${inputClass} ${gErrors.category ? 'border-red-500' : ''} ${
+                    !googleForm.watch('category') ? 'text-[#98A2B3]' : ''
+                  }`}
+                  {...googleForm.register('category')}
+                >
+                  <option value="">Select category</option>
+                  {SHOP_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </AuthSelect>
+                {gErrors.category && (
+                  <p className="mt-1 text-xs text-red-500">{gErrors.category.message}</p>
+                )}
+              </div>
+              {googleForm.watch('category') === SHOP_CATEGORIES.CUSTOM ? (
+                <div>
+                  <label
+                    htmlFor="googleCustomCategory"
+                    className="mb-1.5 block text-[16px] font-semibold text-[#101828]"
+                  >
+                    Custom category <span className="text-red-500">*</span>
+                  </label>
+                  <AuthInput
+                    id="googleCustomCategory"
+                    placeholder="e.g. Pet store"
+                    className={`${inputClass} ${gErrors.customCategory ? 'border-red-500' : ''}`}
+                    {...googleForm.register('customCategory')}
+                  />
+                  {gErrors.customCategory && (
+                    <p className="mt-1 text-xs text-red-500">{gErrors.customCategory.message}</p>
+                  )}
+                </div>
+              ) : null}
               <BillingFields
                 register={googleForm.register}
                 errors={gErrors}
@@ -934,7 +1040,7 @@ function PortalRegisterFormInner({ role }) {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label htmlFor="firstName" className="mb-1.5 block text-[16px] font-semibold text-[#101828]">
               First name
@@ -947,6 +1053,20 @@ function PortalRegisterFormInner({ role }) {
             />
             {errors.firstName && (
               <p className="mt-1 text-xs text-red-500">{errors.firstName.message}</p>
+            )}
+          </div>
+          <div>
+            <label htmlFor="middleName" className="mb-1.5 block text-[16px] font-semibold text-[#101828]">
+              Middle name
+            </label>
+            <AuthInput
+              id="middleName"
+              placeholder="Michael"
+              className={`${inputClass} ${errors.middleName ? 'border-red-500' : ''}`}
+              {...register('middleName')}
+            />
+            {errors.middleName && (
+              <p className="mt-1 text-xs text-red-500">{errors.middleName.message}</p>
             )}
           </div>
           <div>
@@ -964,6 +1084,23 @@ function PortalRegisterFormInner({ role }) {
             )}
           </div>
         </div>
+
+        {!showTenant ? (
+          <div>
+            <label htmlFor="phone" className="mb-1.5 block text-[16px] font-semibold text-[#101828]">
+              Mobile number
+            </label>
+            <AuthInput
+              id="phone"
+              type="tel"
+              autoComplete="tel"
+              placeholder="+91 98765 43210"
+              className={`${inputClass} ${errors.phone ? 'border-red-500' : ''}`}
+              {...register('phone')}
+            />
+            {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone.message}</p>}
+          </div>
+        ) : null}
 
         <div className={`grid grid-cols-1 gap-3 ${showAffiliateType ? 'sm:grid-cols-2' : ''}`}>
           <div>
@@ -1168,6 +1305,50 @@ function PortalRegisterFormInner({ role }) {
                 <p className="mt-1 text-xs text-red-500">{errors.tenantName.message}</p>
               )}
             </div>
+            <div>
+              <label
+                htmlFor="category"
+                className="mb-1.5 block text-[16px] font-semibold text-[#101828]"
+              >
+                Category <span className="text-red-500">*</span>
+              </label>
+              <AuthSelect
+                id="category"
+                className={`${inputClass} ${errors.category ? 'border-red-500' : ''} ${
+                  !watch('category') ? 'text-[#98A2B3]' : ''
+                }`}
+                {...register('category')}
+              >
+                <option value="">Select category</option>
+                {SHOP_CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </AuthSelect>
+              {errors.category && (
+                <p className="mt-1 text-xs text-red-500">{errors.category.message}</p>
+              )}
+            </div>
+            {watch('category') === SHOP_CATEGORIES.CUSTOM ? (
+              <div>
+                <label
+                  htmlFor="customCategory"
+                  className="mb-1.5 block text-[16px] font-semibold text-[#101828]"
+                >
+                  Custom category <span className="text-red-500">*</span>
+                </label>
+                <AuthInput
+                  id="customCategory"
+                  placeholder="e.g. Pet store"
+                  className={`${inputClass} ${errors.customCategory ? 'border-red-500' : ''}`}
+                  {...register('customCategory')}
+                />
+                {errors.customCategory && (
+                  <p className="mt-1 text-xs text-red-500">{errors.customCategory.message}</p>
+                )}
+              </div>
+            ) : null}
             <BillingFields
               register={register}
               errors={errors}

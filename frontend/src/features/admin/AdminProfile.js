@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, LogOut } from 'lucide-react';
+import { ChevronDown, ChevronRight, LogOut } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
@@ -15,7 +15,18 @@ import {
   LoyaltyStampModeSelector,
   loyaltyStampModeLabel,
 } from '@/features/admin/LoyaltyStampModeSelector';
+import {
+  SOCIAL_LINK_FIELDS,
+  SocialPlatformIcon,
+  emptySocialLinks,
+} from '@/features/shared/ShopSocialLinks';
 import { loyaltyService } from '@/services/loyalty.service';
+import {
+  DEFAULT_STAMP_SOUND_VOLUME,
+  getStampRequestSoundVolume,
+  playStampRequestSound,
+  setStampRequestSoundVolume,
+} from '@/utils/stampRequestSound';
 
 function initials(fullName) {
   const parts = String(fullName || 'A').trim().split(/\s+/).filter(Boolean);
@@ -63,19 +74,31 @@ function ProfileRow({ emoji, label, detail, href }) {
 
 export function AdminProfile() {
   const router = useRouter();
-  const { logout, fetchUser } = useAuth();
+  const { logout } = useAuth();
   const { fullName, email, user } = useUser();
   const shopName = user?.tenant?.name || 'Your shop';
   const sub = user?.subscription || user?.tenant?.subscription || null;
 
   const [stampMode, setStampMode] = useState(user?.tenant?.loyaltyStampMode || 'bill');
   const [savingMode, setSavingMode] = useState(false);
+  const [soundVolume, setSoundVolume] = useState(DEFAULT_STAMP_SOUND_VOLUME);
+  const [socialLinks, setSocialLinks] = useState(() => emptySocialLinks());
+  const [savingSocial, setSavingSocial] = useState(false);
+  const [socialOpen, setSocialOpen] = useState(false);
+
+  useEffect(() => {
+    setSoundVolume(getStampRequestSoundVolume());
+  }, []);
 
   const loadSettings = useCallback(async () => {
     try {
       const { data } = await loyaltyService.adminGetSettings();
-      if (data.data?.settings?.loyaltyStampMode) {
-        setStampMode(data.data.settings.loyaltyStampMode);
+      const settings = data.data?.settings;
+      if (settings?.loyaltyStampMode) {
+        setStampMode(settings.loyaltyStampMode);
+      }
+      if (settings?.socialLinks) {
+        setSocialLinks({ ...emptySocialLinks(), ...settings.socialLinks });
       }
     } catch {
       // keep tenant value from user context
@@ -86,23 +109,55 @@ export function AdminProfile() {
     loadSettings();
   }, [loadSettings]);
 
+  const handleSoundVolumeChange = (next) => {
+    const saved = setStampRequestSoundVolume(Number(next) / 100);
+    setSoundVolume(saved);
+  };
+
+  const handlePreviewSound = () => {
+    playStampRequestSound();
+  };
+
   const handleModeChange = async (nextMode) => {
-    if (nextMode === stampMode || savingMode) return;
+    if (!nextMode || nextMode === stampMode || savingMode) return;
+    const previous = stampMode;
+    setStampMode(nextMode);
+    setSavingMode(true);
     try {
-      setSavingMode(true);
       const { data } = await loyaltyService.adminUpdateSettings({ loyaltyStampMode: nextMode });
-      const saved = data.data?.settings?.loyaltyStampMode || nextMode;
+      const saved = data?.data?.settings?.loyaltyStampMode || nextMode;
       setStampMode(saved);
-      await fetchUser();
       toast.success(
         saved === 'request'
           ? 'Stamp requests enabled — customers will ask you to approve stamps.'
-          : 'Bill scanner enabled — customers will photograph bills.'
+          : 'Bill scanner enabled — customers will photograph bills.',
+        { id: 'stamp-mode-updated' }
       );
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Unable to update stamp mode'));
+      setStampMode(previous);
+      toast.error(getErrorMessage(error, 'Unable to update stamp mode'), {
+        id: 'stamp-mode-updated',
+      });
     } finally {
       setSavingMode(false);
+    }
+  };
+
+  const handleSocialChange = (key, value) => {
+    setSocialLinks((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveSocial = async () => {
+    try {
+      setSavingSocial(true);
+      const { data } = await loyaltyService.adminUpdateSettings({ socialLinks });
+      const saved = data?.data?.settings?.socialLinks;
+      if (saved) setSocialLinks({ ...emptySocialLinks(), ...saved });
+      toast.success('Social links saved — they appear on your customer loyalty cards');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to save social links'));
+    } finally {
+      setSavingSocial(false);
     }
   };
 
@@ -115,6 +170,10 @@ export function AdminProfile() {
       toast.error(getErrorMessage(error, 'Logout failed'));
     }
   };
+
+  const filledSocialCount = SOCIAL_LINK_FIELDS.filter((f) =>
+    String(socialLinks[f.key] || '').trim()
+  ).length;
 
   return (
     <div className="mx-auto w-full max-w-3xl lg:max-w-none">
@@ -153,6 +212,108 @@ export function AdminProfile() {
           onChange={handleModeChange}
           disabled={savingMode}
         />
+      </div>
+
+      <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">
+        SOCIAL LINKS
+      </p>
+      <div className={adminCardClass('mb-5 overflow-hidden')}>
+        <button
+          type="button"
+          onClick={() => setSocialOpen((v) => !v)}
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-[#F8FAFC]"
+          aria-expanded={socialOpen}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-[#021A54]">Share your channels</p>
+            <p className="mt-0.5 text-xs text-[#64748B]">
+              {filledSocialCount > 0
+                ? `${filledSocialCount} link${filledSocialCount === 1 ? '' : 's'} saved · tap to ${socialOpen ? 'close' : 'edit'}`
+                : `Facebook, Instagram, X, YouTube, WhatsApp, Google Review · ${socialOpen ? 'close' : 'open'}`}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-[#EFF6FF] px-2.5 py-1 text-[10px] font-bold text-[#1D4ED8]">
+            {filledSocialCount}/{SOCIAL_LINK_FIELDS.length}
+          </span>
+          <ChevronDown
+            size={18}
+            className={`shrink-0 text-[#94A3B8] transition ${socialOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        {socialOpen ? (
+          <div className="border-t border-[#F1F5F9] px-4 pb-4 pt-3">
+            <p className="mb-3 text-xs leading-relaxed text-[#64748B]">
+              Paste your links below. Customers see them on your loyalty card page.
+            </p>
+            <div className="space-y-3">
+              {SOCIAL_LINK_FIELDS.map((field) => (
+                <label key={field.key} className="block">
+                  <span className="mb-1.5 flex items-center gap-2 text-[12px] font-bold text-[#021A54]">
+                    <span
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-white"
+                      style={{ backgroundColor: field.color }}
+                    >
+                      <SocialPlatformIcon platform={field.key} />
+                    </span>
+                    {field.label}
+                  </span>
+                  <input
+                    type="url"
+                    value={socialLinks[field.key] || ''}
+                    onChange={(e) => handleSocialChange(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 text-[13px] text-[#021A54] outline-none transition placeholder:text-[#94A3B8] focus:border-[#3B82F6] focus:bg-white focus:ring-2 focus:ring-[#3B82F6]/20"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              disabled={savingSocial}
+              onClick={handleSaveSocial}
+              className="mt-4 w-full rounded-2xl bg-[#021A54] py-3 text-sm font-bold text-white hover:bg-[#0B2C6E] disabled:opacity-60"
+            >
+              {savingSocial ? 'Saving…' : 'Save social links'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">
+        NOTIFICATIONS
+      </p>
+      <div className={adminCardClass('mb-5 p-4')}>
+        <p className="mb-1 text-sm font-bold text-[#021A54]">Stamp request sound</p>
+        <p className="mb-3 text-xs text-[#64748B]">
+          Plays when a customer sends a new stamp request. Default volume is high.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="sr-only" htmlFor="stamp-sound-volume">
+            Notification volume
+          </label>
+          <input
+            id="stamp-sound-volume"
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(soundVolume * 100)}
+            onChange={(e) => handleSoundVolumeChange(e.target.value)}
+            className="h-2 w-full max-w-[220px] cursor-pointer accent-[#021A54]"
+          />
+          <span className="min-w-[3rem] text-sm font-bold text-[#021A54]">
+            {Math.round(soundVolume * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={handlePreviewSound}
+            className="rounded-xl border border-[#D0D5DD] bg-white px-3 py-2 text-xs font-bold text-[#021A54] hover:bg-[#F8FAFC]"
+          >
+            Preview
+          </button>
+        </div>
       </div>
 
       <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">

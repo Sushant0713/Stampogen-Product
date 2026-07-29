@@ -49,7 +49,9 @@ export function LoyaltyStampModeSelector({ value, onChange, name = 'loyaltyStamp
                 value={option.value}
                 checked={selected}
                 disabled={disabled}
-                onChange={() => onChange(option.value)}
+                onChange={() => {
+                  if (typeof onChange === 'function') onChange(option.value);
+                }}
                 className="sr-only"
               />
               <div className="flex items-start gap-2.5">

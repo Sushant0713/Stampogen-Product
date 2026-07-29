@@ -9,6 +9,7 @@ const Feature = require('./Feature');
 const Plan = require('./Plan');
 const InvoiceSettings = require('./InvoiceSettings');
 const Payment = require('./Payment');
+const PlatformInvoice = require('./PlatformInvoice');
 const Notification = require('./Notification');
 const AgreementSettings = require('./AgreementSettings');
 const AffiliateSettings = require('./AffiliateSettings');
@@ -27,6 +28,7 @@ module.exports = {
   Plan,
   InvoiceSettings,
   Payment,
+  PlatformInvoice,
   Notification,
   AgreementSettings,
   AffiliateSettings,

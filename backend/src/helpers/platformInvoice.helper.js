@@ -153,13 +153,24 @@ function buildPlanChangeInvoice({
   payment = null,
   customerOverride = null,
   introText = null,
+  metaOverride = null,
+  dueDateOverride = null,
 }) {
   const settings = settingsView;
   const defaults = settings.defaults || {};
-  const meta = nextInvoiceMeta(settings);
+  const meta = metaOverride || nextInvoiceMeta(settings);
   const dueDays = Number(defaults.dueDays) || 30;
-  const dueDate = new Date(meta.invoiceDate);
-  dueDate.setDate(dueDate.getDate() + dueDays);
+  let dueDate;
+  if (dueDateOverride) {
+    dueDate = new Date(dueDateOverride);
+  } else {
+    dueDate = new Date(meta.invoiceDate);
+    dueDate.setDate(dueDate.getDate() + dueDays);
+  }
+  if (Number.isNaN(dueDate.getTime())) {
+    dueDate = new Date(meta.invoiceDate);
+    dueDate.setDate(dueDate.getDate() + dueDays);
+  }
 
   const customer = resolveCustomer({ tenant, payment, customerOverride });
 
@@ -388,12 +399,89 @@ function buildInvoiceEmailHtml(invoice, options = {}) {
   return buildInvoiceEmailCopy(invoice, options).html;
 }
 
+/**
+ * Rebuild a viewable invoice payload from a stored PlatformInvoice row
+ * (does not bump the invoice counter).
+ */
+function rebuildInvoiceFromRecord({
+  settingsView,
+  record,
+  payment = null,
+  tenant = null,
+}) {
+  const invoiceNumber = String(record?.invoiceNumber || '')
+    .trim()
+    .toUpperCase();
+  const invoiceDate =
+    record?.invoiceDate ||
+    (record?.issuedAt ? new Date(record.issuedAt).toISOString().slice(0, 10) : '') ||
+    new Date().toISOString().slice(0, 10);
+  const parsed = parseInvoiceNumber(invoiceNumber);
+
+  const customerOverride = {
+    name: record?.clientName || record?.shopName || '',
+    email: record?.clientEmail || record?.recipient || '',
+    organization: record?.shopName || '',
+    contactName: record?.clientName || '',
+  };
+
+  return buildPlanChangeInvoice({
+    settingsView,
+    tenant,
+    planName: record?.planName || payment?.planName || 'Plan',
+    pricePerCycle: Number(record?.listAmount) || Number(payment?.listAmount) || 0,
+    payment: payment
+      ? {
+          ...payment,
+          listAmount: payment.listAmount ?? record?.listAmount,
+          discountAmount: payment.discountAmount ?? record?.discountAmount,
+          taxableAmount: payment.taxableAmount ?? record?.taxableAmount,
+          taxAmount: payment.taxAmount ?? record?.taxAmount,
+          payableAmount: payment.payableAmount ?? record?.total,
+          taxMode: payment.taxMode || record?.taxMode,
+          taxLabel: payment.taxLabel || record?.taxLabel,
+          billing: payment.billing || record?.billing,
+          discountCode: payment.discountCode || record?.discountCode,
+        }
+      : {
+          listAmount: Number(record?.listAmount) || 0,
+          discountAmount: Number(record?.discountAmount) || 0,
+          taxableAmount: Number(record?.taxableAmount) || 0,
+          taxAmount: Number(record?.taxAmount) || 0,
+          payableAmount: Number(record?.total) || 0,
+          taxMode: record?.taxMode || null,
+          taxLabel: record?.taxLabel || '',
+          billing: record?.billing || '',
+          discountCode: record?.discountCode || '',
+          gstAmount: 0,
+          cgstAmount: 0,
+          sgstAmount: 0,
+          igstAmount: Number(record?.taxAmount) || 0,
+          status: 'paid',
+        },
+    customerOverride,
+    metaOverride: {
+      prefix: parsed?.prefix || settingsView?.defaults?.invoicePrefix || 'SGEN',
+      invoiceDate,
+      year: parsed?.year || Number(String(invoiceDate).slice(0, 4)) || new Date().getFullYear(),
+      sequence: parsed?.sequence || 1,
+      invoiceNumber,
+    },
+    dueDateOverride: record?.dueDate || null,
+    introText:
+      record?.source === 'plan_change'
+        ? 'Your plan has been updated. Here is your invoice:'
+        : 'Thank you for your payment. Here is your invoice:',
+  });
+}
+
 module.exports = {
   parseInvoiceNumber,
   formatInvoiceId,
   nextInvoiceMeta,
   resolveCustomer,
   buildPlanChangeInvoice,
+  rebuildInvoiceFromRecord,
   buildInvoiceEmailHtml,
   buildInvoiceEmailCopy,
   formatMoney,

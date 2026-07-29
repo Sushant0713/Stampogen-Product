@@ -1,5 +1,6 @@
 const { body, param } = require('express-validator');
 const { AUTHENTICATED_ROLES, GOOGLE_AUTH_ROLES } = require('@constants/roles');
+const { SHOP_CATEGORIES, SHOP_CATEGORY_VALUES } = require('@constants');
 const {
   AFFILIATE_TYPE_VALUES,
   getRequiredVerificationKind,
@@ -27,6 +28,47 @@ function assertAffiliateVerification(req) {
   }
 }
 
+function assertIdentityProfile(body, { requireBirthDate = false } = {}) {
+  if (!String(body.firstName || '').trim()) {
+    throw new Error('First name is required');
+  }
+  if (!String(body.middleName || '').trim()) {
+    throw new Error('Middle name is required');
+  }
+  if (!String(body.lastName || '').trim()) {
+    throw new Error('Last name is required');
+  }
+
+  if (requireBirthDate) {
+    const birthRaw = String(body.birthDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthRaw)) {
+      throw new Error('Birth date is required');
+    }
+    const birthDate = new Date(`${birthRaw}T00:00:00.000Z`);
+    if (Number.isNaN(birthDate.getTime())) {
+      throw new Error('Valid birth date is required');
+    }
+    const today = new Date();
+    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    if (birthDate > todayUtc) {
+      throw new Error('Birth date cannot be in the future');
+    }
+    const minAgeDate = new Date(todayUtc);
+    minAgeDate.setUTCFullYear(minAgeDate.getUTCFullYear() - 13);
+    if (birthDate > minAgeDate) {
+      throw new Error('You must be at least 13 years old');
+    }
+  }
+
+  const phone = String(body.phone || '').trim();
+  if (phone.length < 8) {
+    throw new Error('Mobile number is required');
+  }
+  if (phone.length > 20) {
+    throw new Error('Mobile number must be at most 20 characters');
+  }
+}
+
 const registerValidator = [
   body('firstName')
     .trim()
@@ -34,6 +76,12 @@ const registerValidator = [
     .withMessage('First name is required')
     .isLength({ max: 50 })
     .withMessage('First name must be at most 50 characters'),
+  body('middleName')
+    .trim()
+    .notEmpty()
+    .withMessage('Middle name is required')
+    .isLength({ max: 50 })
+    .withMessage('Middle name must be at most 50 characters'),
   body('lastName')
     .trim()
     .notEmpty()
@@ -63,11 +111,18 @@ const registerValidator = [
     .optional()
     .isIn(['bill', 'request'])
     .withMessage('Invalid loyalty stamp mode'),
-  body('phone')
+  body('category')
     .optional()
     .trim()
-    .isLength({ max: 20 })
-    .withMessage('Phone must be at most 20 characters'),
+    .isIn(SHOP_CATEGORY_VALUES)
+    .withMessage('Invalid shop category'),
+  body('customCategory').optional().trim().isLength({ max: 100 }),
+  body('phone')
+    .trim()
+    .notEmpty()
+    .withMessage('Mobile number is required')
+    .isLength({ min: 8, max: 20 })
+    .withMessage('Mobile number must be between 8 and 20 characters'),
   body('street').optional().trim().isLength({ max: 300 }),
   body('city').optional().trim().isLength({ max: 100 }),
   body('state').optional().trim().isLength({ max: 100 }),
@@ -102,10 +157,15 @@ const registerValidator = [
   body('resumeDocumentName').optional().trim().isLength({ max: 200 }),
   body('acceptTerms').optional(),
   body().custom(async (_, { req }) => {
+    assertIdentityProfile(req.body);
     const role = req.params.role || req.body.role;
     if (role === 'admin' || req.body.role === 'admin') {
-      if (String(req.body.phone || '').trim().length < 8) {
-        throw new Error('Phone number is required');
+      const category = String(req.body.category || '').trim();
+      if (!SHOP_CATEGORY_VALUES.includes(category)) {
+        throw new Error('Shop category is required');
+      }
+      if (category === SHOP_CATEGORIES.CUSTOM && String(req.body.customCategory || '').trim().length < 2) {
+        throw new Error('Please enter your custom category');
       }
       const street = String(req.body.street || '').trim();
       const address = String(req.body.address || '').trim();
@@ -216,8 +276,12 @@ const googleTokenValidator = [
     .withMessage('allowCreate must be a boolean'),
   body('tenantName').optional().isString().trim().isLength({ max: 100 }),
   body('loyaltyStampMode').optional().isIn(['bill', 'request']),
+  body('category').optional().trim().isIn(SHOP_CATEGORY_VALUES),
+  body('customCategory').optional().trim().isLength({ max: 100 }),
   body('firstName').optional().isString().trim().isLength({ max: 50 }),
+  body('middleName').optional().isString().trim().isLength({ max: 50 }),
   body('lastName').optional().isString().trim().isLength({ max: 50 }),
+  body('birthDate').optional().isString().trim().matches(/^\d{4}-\d{2}-\d{2}$/),
   body('phone').optional().isString().trim().isLength({ max: 20 }),
   body('street').optional().isString().trim().isLength({ max: 300 }),
   body('city').optional().isString().trim().isLength({ max: 100 }),
@@ -244,6 +308,9 @@ const googleTokenValidator = [
     if (!req.body.credential && !req.body.idToken && !req.body.accessToken) {
       throw new Error('Google credential is required');
     }
+    if (req.body.allowCreate === true) {
+      assertIdentityProfile(req.body, { requireBirthDate: req.params.role === 'user' });
+    }
     if (
       req.body.allowCreate === true &&
       req.params.role === 'admin' &&
@@ -252,8 +319,12 @@ const googleTokenValidator = [
       throw new Error('Organization name is required before signing up with Google');
     }
     if (req.body.allowCreate === true && req.params.role === 'admin') {
-      if (String(req.body.phone || '').trim().length < 8) {
-        throw new Error('Phone number is required');
+      const category = String(req.body.category || '').trim();
+      if (!SHOP_CATEGORY_VALUES.includes(category)) {
+        throw new Error('Shop category is required');
+      }
+      if (category === SHOP_CATEGORIES.CUSTOM && String(req.body.customCategory || '').trim().length < 2) {
+        throw new Error('Please enter your custom category');
       }
       const street = String(req.body.street || '').trim();
       const address = String(req.body.address || '').trim();

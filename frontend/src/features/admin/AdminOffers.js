@@ -224,20 +224,36 @@ export function AdminOffers() {
                     {o.redemptions || 0} redemptions
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <button
-                    type="button"
-                    disabled={busyKey === o.key}
-                    onClick={() => toggleStatus(o)}
-                    className={cn(
-                      'rounded-[10px] px-3 py-1.5 text-[10.5px] font-bold',
-                      active
-                        ? 'bg-[rgba(34,197,94,0.12)] text-[#22C55E]'
-                        : 'bg-[rgba(148,163,184,0.15)] text-[#64748B]'
-                    )}
-                  >
-                    {active ? 'Active' : 'Paused'}
-                  </button>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'text-[10.5px] font-bold',
+                        active ? 'text-[#22C55E]' : 'text-[#94A3B8]'
+                      )}
+                    >
+                      {busyKey === o.key ? '…' : active ? 'Active' : 'Paused'}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={active}
+                      aria-label={active ? 'Pause offer' : 'Activate offer'}
+                      disabled={busyKey === o.key}
+                      onClick={() => toggleStatus(o)}
+                      className={cn(
+                        'relative inline-flex h-7 w-[48px] shrink-0 items-center rounded-full transition-colors disabled:opacity-60',
+                        active ? 'bg-[#22C55E]' : 'bg-[#CBD5E1]'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform',
+                          active ? 'translate-x-[20px]' : 'translate-x-0'
+                        )}
+                      />
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => openEdit(o)}
@@ -263,9 +279,9 @@ export function AdminOffers() {
       </button>
 
       {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <div className={cn(adminCardClass('max-h-[90vh] w-full max-w-md overflow-y-auto p-5'))}>
-            <div className="mb-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
+          <div className="flex max-h-[min(92dvh,920px)] w-full max-w-md flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_10px_26px_rgba(2,26,84,0.07)] sm:rounded-[24px]">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#F1F5F9] px-5 py-4">
               <h3 className="text-lg font-extrabold text-[#021A54]">
                 {editingKey ? 'Edit offer' : 'Add offer'}
               </h3>
@@ -278,7 +294,8 @@ export function AdminOffers() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={saveOffer} className="space-y-4">
+            <form onSubmit={saveOffer} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-bold text-[#64748B]">Offer title</span>
                 <input
@@ -370,8 +387,9 @@ export function AdminOffers() {
                   pauses automatically.
                 </p>
               </label>
+              </div>
 
-              <div className="flex gap-2 pt-1">
+              <div className="flex shrink-0 gap-2 border-t border-[#F1F5F9] bg-white px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={closeModal}

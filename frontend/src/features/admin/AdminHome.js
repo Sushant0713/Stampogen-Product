@@ -5,14 +5,35 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
 import { getErrorMessage, getLoginPath } from '@/utils';
 import { ROLES } from '@/constants';
 import { adminCardClass } from '@/features/admin/adminTheme';
-import { LoyaltyQrImage, buildJoinUrl } from '@/features/customer/LoyaltyQrImage';
+import { LoyaltyQrImage, buildJoinUrl, printLoyaltyQr } from '@/features/customer/LoyaltyQrImage';
 import { loyaltyService } from '@/services/loyalty.service';
 
+function QrScanTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const count = payload[0]?.value ?? 0;
+  return (
+    <div className="rounded-xl border border-[#E2E8F0] bg-white px-3 py-2 shadow-[0_10px_24px_rgba(2,26,84,0.12)]">
+      <p className="text-[11px] font-semibold text-[#94A3B8]">Day {label}</p>
+      <p className="text-sm font-extrabold text-[#021A54]">
+        {count} scan{count === 1 ? '' : 's'}
+      </p>
+    </div>
+  );
+}
 function greeting() {
   const h = new Date().getHours();
   if (h < 12) return 'Good Morning ☀️';
@@ -57,6 +78,7 @@ export function AdminHome() {
     pendingStampRequests: 0,
     redeemedRewards: 0,
     activeCampaigns: 0,
+    qrScans: { month: '', monthLabel: '', total: 0, days: [] },
   });
 
   const loadStats = useCallback(async () => {
@@ -105,6 +127,29 @@ export function AdminHome() {
     ],
     [stats]
   );
+
+  const qrScans = stats.qrScans || { monthLabel: '', total: 0, days: [] };
+  const qrChartData = useMemo(
+    () =>
+      (qrScans.days || []).map((d) => ({
+        day: d.label || String(d.day),
+        scans: Number(d.count) || 0,
+        date: d.date,
+      })),
+    [qrScans.days]
+  );
+
+  const handlePrintQr = async () => {
+    if (!joinUrl) {
+      toast.error('Loyalty QR is not ready yet');
+      return;
+    }
+    try {
+      await printLoyaltyQr({ value: joinUrl, shopName });
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Could not print QR'));
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -264,7 +309,7 @@ export function AdminHome() {
           <div className="mt-2.5 flex gap-2">
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={handlePrintQr}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-[#021A54] py-2 text-[11.5px] font-bold text-white active:scale-95"
             >
               <Printer size={12} />
@@ -299,6 +344,67 @@ export function AdminHome() {
             <span className="text-[10px] font-semibold text-[#94A3B8]">{card.label}</span>
           </Link>
         ))}
+      </div>
+
+      {/* QR scans — current month graph (auto-resets next month) */}
+      <div className={adminCardClass('p-4 lg:p-5')}>
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-extrabold text-[#021A54]">QR scans this month</p>
+            <p className="mt-0.5 text-[11px] font-medium text-[#94A3B8]">
+              {qrScans.monthLabel || 'Current month'} · resets automatically next month
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xl font-extrabold text-[#021A54]">{qrScans.total || 0}</p>
+            <p className="text-[10px] font-semibold text-[#94A3B8]">Total scans</p>
+          </div>
+        </div>
+
+        {qrChartData.length === 0 ? (
+          <p className="py-10 text-center text-[12px] text-[#94A3B8]">
+            No QR scans recorded yet this month.
+          </p>
+        ) : (
+          <div className="mt-2 h-[220px] w-full sm:h-[260px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={qrChartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="qrScanFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#EEF1F5" strokeDasharray="4 4" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  minTickGap={18}
+                  tick={{ fill: '#94A3B8', fontSize: 11 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  width={36}
+                  tick={{ fill: '#94A3B8', fontSize: 11 }}
+                />
+                <Tooltip content={<QrScanTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="scans"
+                  name="Scans"
+                  stroke="#021A54"
+                  strokeWidth={2.5}
+                  fill="url(#qrScanFill)"
+                  dot={false}
+                  activeDot={{ r: 5, fill: '#3B82F6', stroke: '#fff', strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       {/* Upgrade banner */}

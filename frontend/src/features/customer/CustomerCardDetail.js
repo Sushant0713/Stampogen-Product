@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { StampRowLarge } from '@/features/customer/StampDots';
+import { PremiumLoyaltyCard } from '@/features/customer/LoyaltyCard';
+import { PartyPopper } from '@/features/customer/PartyPopper';
+import { ShopSocialLinks } from '@/features/shared/ShopSocialLinks';
 import { customerCardClass, relativeTime } from '@/features/customer/customerTheme';
 import { loyaltyService } from '@/services/loyalty.service';
 import { getErrorMessage } from '@/utils';
@@ -14,6 +16,7 @@ export function CustomerCardDetail({ slug }) {
   const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -32,19 +35,13 @@ export function CustomerCardDetail({ slug }) {
     load();
   }, [load]);
 
-  const dots = card
-    ? Array.from({ length: card.stampsRequired }, (_, i) => ({
-        filled: i < card.stamps,
-        empty: i >= card.stamps,
-      }))
-    : [];
-
   const handleRedeem = async () => {
     try {
       setBusy(true);
       const { data } = await loyaltyService.redeem(slug);
       setCard(data.data.card);
       toast.success(data.message || 'Sent to the shop for verification');
+      setCelebrate(true);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to redeem'));
     } finally {
@@ -84,6 +81,7 @@ export function CustomerCardDetail({ slug }) {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 lg:max-w-none lg:grid lg:grid-cols-[280px_1fr] lg:items-start lg:gap-8">
+      <PartyPopper active={celebrate} intensity="big" onDone={() => setCelebrate(false)} />
       <div className="lg:sticky lg:top-24">
         <button
           type="button"
@@ -112,27 +110,12 @@ export function CustomerCardDetail({ slug }) {
       </div>
 
       <div className="flex flex-col gap-5">
-        <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#021A54] via-[#0B2C6E] to-[#1E4FA3] p-6 shadow-[0_20px_36px_-14px_rgba(2,26,84,0.5)] lg:p-8">
-          <div className="relative z-[1]">
-            <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[15px] bg-gradient-to-br from-[#0B2C6E] to-[#3B82F6] text-base font-bold text-white">
-                {card.initials}
-              </div>
-              <div>
-                <div className="text-[17px] font-bold text-white">{card.name}</div>
-                <div className="text-[12.5px] text-white/55">{card.campaign}</div>
-              </div>
-            </div>
-            <div className="mb-5 text-[19px] font-bold text-white">{card.reward}</div>
-            <StampRowLarge dots={dots} />
-            <div className="mt-[18px] flex items-center justify-between">
-              <span className="text-[12.5px] font-medium text-white/70">{card.progressText}</span>
-              <span className="rounded-[100px] border border-white/20 bg-white/14 px-3 py-1.5 text-[12.5px] font-semibold text-white">
-                {card.badgeLabel}
-              </span>
-            </div>
-          </div>
-        </div>
+        <PremiumLoyaltyCard card={card} />
+
+        <ShopSocialLinks
+          links={card.socialLinks}
+          className={customerCardClass('p-4')}
+        />
 
         {statusBanner ? (
           <div className={`rounded-2xl px-4 py-3.5 text-[13px] ${statusBanner.className}`}>

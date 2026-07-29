@@ -3,9 +3,15 @@ const { AFFILIATE_TYPE_VALUES } = require('@constants/affiliateTypes');
 
 const createAffiliateValidator = [
   body('firstName').trim().notEmpty().withMessage('First name is required').isLength({ max: 50 }),
+  body('middleName').trim().notEmpty().withMessage('Middle name is required').isLength({ max: 50 }),
   body('lastName').trim().notEmpty().withMessage('Last name is required').isLength({ max: 50 }),
   body('email').trim().notEmpty().withMessage('Email is required').isEmail().withMessage('Invalid email'),
-  body('phone').optional({ nullable: true }).trim().isLength({ max: 20 }),
+  body('phone')
+    .trim()
+    .notEmpty()
+    .withMessage('Mobile number is required')
+    .isLength({ min: 8, max: 20 })
+    .withMessage('Mobile number must be between 8 and 20 characters'),
   body('affiliateType')
     .trim()
     .notEmpty()

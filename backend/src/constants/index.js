@@ -32,10 +32,35 @@ const LOYALTY_STAMP_MODES = {
 
 const LOYALTY_STAMP_MODE_VALUES = Object.values(LOYALTY_STAMP_MODES);
 
+const SHOP_CATEGORIES = {
+  CAKE_SHOP: 'cake_shop',
+  CLOTHES_SHOP: 'clothes_shop',
+  CAFE: 'cafe',
+  SALON: 'salon',
+  GIFT_SHOP: 'gift_shop',
+  CAR_WASH: 'car_wash',
+  CUSTOM: 'custom',
+};
+
+const SHOP_CATEGORY_OPTIONS = [
+  { value: SHOP_CATEGORIES.CAKE_SHOP, label: 'Cake shop' },
+  { value: SHOP_CATEGORIES.CLOTHES_SHOP, label: 'Clothes shop' },
+  { value: SHOP_CATEGORIES.CAFE, label: 'Cafe' },
+  { value: SHOP_CATEGORIES.SALON, label: 'Salon' },
+  { value: SHOP_CATEGORIES.GIFT_SHOP, label: 'Gift shop' },
+  { value: SHOP_CATEGORIES.CAR_WASH, label: 'Car wash' },
+  { value: SHOP_CATEGORIES.CUSTOM, label: 'Custom' },
+];
+
+const SHOP_CATEGORY_VALUES = SHOP_CATEGORY_OPTIONS.map((option) => option.value);
+
 module.exports = {
   HTTP_STATUS,
   COOKIE_NAMES,
   TENANT_STATUS,
   LOYALTY_STAMP_MODES,
   LOYALTY_STAMP_MODE_VALUES,
+  SHOP_CATEGORIES,
+  SHOP_CATEGORY_OPTIONS,
+  SHOP_CATEGORY_VALUES,
 };

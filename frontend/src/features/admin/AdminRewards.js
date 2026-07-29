@@ -1,12 +1,28 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Search, ZoomIn, ZoomOut, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn, getErrorMessage } from '@/utils';
 import { loyaltyService } from '@/services/loyalty.service';
 
 const POLL_MS = 5000;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
+
+function formatBillDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
 
 function initialsOf(name) {
   return String(name || '')
@@ -32,6 +48,189 @@ function CountBadge({ count, selected }) {
   );
 }
 
+function BillImageLightbox({ bill, onClose }) {
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null);
+  const pinchRef = useRef(null);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const clampZoom = (value) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+
+  const resetView = () => {
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+  };
+
+  const zoomBy = (delta) => {
+    setZoom((prev) => {
+      const next = clampZoom(Number((prev + delta).toFixed(2)));
+      if (next <= 1) setOffset({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const onWheel = (event) => {
+    event.preventDefault();
+    zoomBy(event.deltaY > 0 ? -0.2 : 0.2);
+  };
+
+  const onPointerDown = (event) => {
+    if (zoom <= 1) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: offset.x,
+      originY: offset.y,
+    };
+  };
+
+  const onPointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || zoom <= 1) return;
+    setOffset({
+      x: drag.originX + (event.clientX - drag.startX),
+      y: drag.originY + (event.clientY - drag.startY),
+    });
+  };
+
+  const onPointerUp = (event) => {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+    }
+  };
+
+  const onTouchStart = (event) => {
+    if (event.touches.length === 2) {
+      const [a, b] = event.touches;
+      const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      pinchRef.current = { distance, zoom };
+      dragRef.current = null;
+    }
+  };
+
+  const onTouchMove = (event) => {
+    if (event.touches.length === 2 && pinchRef.current) {
+      event.preventDefault();
+      const [a, b] = event.touches;
+      const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const ratio = distance / Math.max(1, pinchRef.current.distance);
+      const next = clampZoom(pinchRef.current.zoom * ratio);
+      setZoom(next);
+      if (next <= 1) setOffset({ x: 0, y: 0 });
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (!pinchRef.current) return;
+    pinchRef.current = null;
+  };
+
+  const onDoubleClick = () => {
+    if (zoom > 1) {
+      resetView();
+      return;
+    }
+    setZoom(2.5);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex flex-col bg-black/90"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bill photo preview"
+      onClick={onClose}
+    >
+      <div
+        className="flex items-center justify-between gap-2 px-4 py-3 text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">
+            {bill.offerTitle || bill.documentName || 'Bill photo'}
+          </p>
+          {formatBillDateTime(bill.stampedAt) ? (
+            <p className="mt-0.5 text-[11px] font-medium text-white/70">
+              {formatBillDateTime(bill.stampedAt)}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => zoomBy(-0.5)}
+            disabled={zoom <= MIN_ZOOM}
+            className="rounded-full bg-white/15 p-2 disabled:opacity-40"
+            aria-label="Zoom out"
+          >
+            <ZoomOut size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => zoomBy(0.5)}
+            disabled={zoom >= MAX_ZOOM}
+            className="rounded-full bg-white/15 p-2 disabled:opacity-40"
+            aria-label="Zoom in"
+          >
+            <ZoomIn size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full bg-white/15 p-2"
+            aria-label="Close preview"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+
+      <div
+        className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={bill.document}
+          alt={bill.documentName || 'Bill'}
+          draggable={false}
+          onDoubleClick={onDoubleClick}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          className={cn(
+            'max-h-full max-w-full select-none object-contain transition-transform duration-150',
+            zoom > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'
+          )}
+          style={{
+            transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${zoom})`,
+            transformOrigin: 'center center',
+          }}
+        />
+      </div>
+
+      <p className="px-4 py-3 text-center text-[11px] text-white/70" onClick={(e) => e.stopPropagation()}>
+        Pinch or use +/− to zoom · Double-tap to zoom · Drag when zoomed
+      </p>
+    </div>
+  );
+}
+
 export function AdminRewards() {
   const [stampMode, setStampMode] = useState('bill');
   const [activeFilter, setActiveFilter] = useState('requests');
@@ -41,6 +240,7 @@ export function AdminRewards() {
   const [review, setReview] = useState(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [busyId, setBusyId] = useState('');
+  const [previewBill, setPreviewBill] = useState(null);
   const [counts, setCounts] = useState({
     requests: 0,
     pending: 0,
@@ -441,22 +641,35 @@ export function AdminRewards() {
                         No bill photos found.
                       </p>
                     ) : (
-                      review.bills.map((bill) => (
-                        <div
-                          key={bill.id}
-                          className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC]"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={bill.document}
-                            alt={bill.documentName || 'Bill'}
-                            className="aspect-square w-full object-cover"
-                          />
-                          <p className="truncate px-2 py-1.5 text-[10px] font-semibold text-[#64748B]">
-                            {bill.offerTitle || 'Stamp'}
-                          </p>
-                        </div>
-                      ))
+                      review.bills.map((bill) => {
+                        const stampedLabel = formatBillDateTime(bill.stampedAt);
+                        return (
+                          <button
+                            key={bill.id}
+                            type="button"
+                            onClick={() => setPreviewBill(bill)}
+                            className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] text-left transition hover:border-[#021A54]/40"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={bill.document}
+                              alt={bill.documentName || 'Bill'}
+                              className="aspect-square w-full object-cover"
+                            />
+                            <div className="space-y-0.5 px-2 py-1.5">
+                              <p className="truncate text-[10px] font-semibold text-[#64748B]">
+                                {bill.offerTitle || 'Stamp'}
+                              </p>
+                              {stampedLabel ? (
+                                <p className="truncate text-[10px] font-bold text-[#021A54]">
+                                  {stampedLabel}
+                                </p>
+                              ) : null}
+                              <p className="text-[9px] font-medium text-[#94A3B8]">Tap to zoom</p>
+                            </div>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 ) : (
@@ -500,6 +713,10 @@ export function AdminRewards() {
           </div>
         </div>
       )}
+
+      {previewBill ? (
+        <BillImageLightbox bill={previewBill} onClose={() => setPreviewBill(null)} />
+      ) : null}
     </div>
   );
 }

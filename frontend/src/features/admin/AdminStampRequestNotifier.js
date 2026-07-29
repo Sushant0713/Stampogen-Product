@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { loyaltyService } from '@/services/loyalty.service';
 import { showStampRequestToast } from '@/features/admin/StampRequestToast';
+import { playStampRequestSound } from '@/utils/stampRequestSound';
 
 const POLL_MS = 5000;
 
@@ -26,6 +27,9 @@ export function AdminStampRequestNotifier({ enabled = true }) {
       }
 
       const fresh = requests.filter((r) => !knownIds.current.has(r.id));
+      if (fresh.length > 0) {
+        playStampRequestSound();
+      }
       // Newest first; show up to 3 toasts at once
       fresh.slice(0, 3).forEach((req) => showStampRequestToast(req));
 

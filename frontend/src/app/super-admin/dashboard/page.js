@@ -1,8 +1,16 @@
 'use client';
 
-import { DashboardWelcome } from '@/features/auth/DashboardWelcome';
-import { ROLES } from '@/constants';
+import dynamic from 'next/dynamic';
+import { ContentLoader } from '@/components/loaders/Spinner';
+
+const SuperAdminDashboard = dynamic(
+  () =>
+    import('@/features/super-admin/SuperAdminDashboard').then(
+      (module) => module.SuperAdminDashboard
+    ),
+  { loading: () => <ContentLoader />, ssr: false }
+);
 
 export default function SuperAdminDashboardPage() {
-  return <DashboardWelcome role={ROLES.SUPER_ADMIN} />;
+  return <SuperAdminDashboard />;
 }

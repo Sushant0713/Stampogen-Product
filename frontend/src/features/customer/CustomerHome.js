@@ -70,13 +70,13 @@ export function CustomerHome() {
   }
 
   return (
-    <div className="flex flex-col gap-7">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="flex flex-col gap-5 sm:gap-7">
+      <div className="flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-[26px] font-extrabold tracking-tight text-[#021A54] lg:text-3xl">
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#021A54] sm:text-[26px] lg:text-3xl">
             My Loyalty Cards
           </h1>
-          <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-[#64748B]">
+          <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-[#64748B] sm:mt-2 sm:text-[13px]">
             Collect stamps, unlock rewards, and discover new offers from your favorite shops.
           </p>
         </div>
@@ -90,10 +90,25 @@ export function CustomerHome() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5 lg:items-start">
+      {/* Mobile stats strip */}
+      <div className="grid grid-cols-3 gap-2 lg:hidden">
+        {stats.map((s) => (
+          <div key={s.label} className={customerCardClass('px-2.5 py-2.5 text-center')}>
+            <p className="text-base font-extrabold text-[#021A54]">{s.value}</p>
+            <p className="mt-0.5 text-[10px] font-semibold leading-tight text-[#94A3B8]">
+              {s.label}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-5 lg:items-start lg:gap-6">
         <div className="lg:col-span-3">
           {featured ? (
-            <FeaturedCard card={featured} onOpen={() => openCard(featured.slug)} />
+            <FeaturedCard
+              card={featured}
+              onOpen={() => openCard(featured.slug)}
+            />
           ) : null}
         </div>
         <div className="hidden flex-col gap-3 lg:col-span-2 lg:flex">
@@ -106,16 +121,22 @@ export function CustomerHome() {
         </div>
       </div>
 
-      <div>
-        <h2 className="mb-3.5 text-base font-bold tracking-tight text-[#021A54]">
-          Active Loyalty Cards
-        </h2>
-        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-4">
-          {(rest.length ? rest : cards).map((card) => (
-            <LoyaltyCardListItem key={card.id} card={card} onOpen={() => openCard(card.slug)} />
-          ))}
+      {rest.length > 0 ? (
+        <div>
+          <h2 className="mb-3 text-sm font-bold tracking-tight text-[#021A54] sm:mb-3.5 sm:text-base">
+            Active Loyalty Cards
+          </h2>
+          <div className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-3 xl:grid-cols-3">
+            {rest.map((card) => (
+              <LoyaltyCardListItem
+                key={card.id}
+                card={card}
+                onOpen={() => openCard(card.slug)}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

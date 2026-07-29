@@ -27,6 +27,31 @@ const { getSubscriptionView, applyDuePendingPlan } = require('@helpers/billing.h
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
+function parseBirthDate(value) {
+  const raw = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function assertRequiredIdentity({ firstName, middleName, lastName, birthDate, phone }, { requireBirthDate = false } = {}) {
+  if (!String(firstName || '').trim()) {
+    throw new AppError('First name is required', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (!String(middleName || '').trim()) {
+    throw new AppError('Middle name is required', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (!String(lastName || '').trim()) {
+    throw new AppError('Last name is required', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (requireBirthDate && !parseBirthDate(birthDate)) {
+    throw new AppError('Birth date is required', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (String(phone || '').trim().length < 8) {
+    throw new AppError('Mobile number is required', HTTP_STATUS.BAD_REQUEST);
+  }
+}
+
 /** Promote due pendingPlan on the admin tenant, then return a fresh user doc. */
 async function syncAdminPendingPlan(user) {
   if (!user) return user;
@@ -93,18 +118,44 @@ async function createTenantForAdmin(
   tenantName,
   status = TENANT_STATUS.PENDING,
   billingProfile = null,
-  loyaltyStampMode = 'bill'
+  loyaltyStampMode = 'bill',
+  category = '',
+  customCategory = ''
 ) {
   if (!user?._id) {
     throw new AppError('Unable to create shop for this account', HTTP_STATUS.BAD_REQUEST);
   }
 
-  const { LOYALTY_STAMP_MODES, LOYALTY_STAMP_MODE_VALUES } = require('@constants');
+  const {
+    LOYALTY_STAMP_MODES,
+    LOYALTY_STAMP_MODE_VALUES,
+    SHOP_CATEGORIES,
+    SHOP_CATEGORY_VALUES,
+  } = require('@constants');
   const { normalizeBillingProfile, hasBillingProfile } = require('@helpers/billingProfile.helper');
   const billing = normalizeBillingProfile(billingProfile || {});
   const stampMode = LOYALTY_STAMP_MODE_VALUES.includes(loyaltyStampMode)
     ? loyaltyStampMode
     : LOYALTY_STAMP_MODES.BILL;
+
+  const resolvedCategory = String(category || '').trim();
+  let categoryFields = null;
+  if (resolvedCategory) {
+    if (!SHOP_CATEGORY_VALUES.includes(resolvedCategory)) {
+      throw new AppError('Invalid shop category', HTTP_STATUS.BAD_REQUEST);
+    }
+    const resolvedCustomCategory =
+      resolvedCategory === SHOP_CATEGORIES.CUSTOM
+        ? String(customCategory || '').trim().slice(0, 100)
+        : '';
+    if (resolvedCategory === SHOP_CATEGORIES.CUSTOM && resolvedCustomCategory.length < 2) {
+      throw new AppError('Please enter your custom category', HTTP_STATUS.BAD_REQUEST);
+    }
+    categoryFields = {
+      category: resolvedCategory,
+      customCategory: resolvedCustomCategory,
+    };
+  }
 
   const name =
     String(tenantName || '').trim() ||
@@ -116,6 +167,7 @@ async function createTenantForAdmin(
     const patch = {
       name: name || existing.name,
       billingProfile: billing,
+      ...(categoryFields || {}),
     };
     if (hasBillingProfile(billing)) {
       patch.loyaltyStampMode = stampMode;
@@ -125,7 +177,14 @@ async function createTenantForAdmin(
       patch.loyaltyStampMode = stampMode;
       return TenantRepository.updateById(existingId, patch);
     }
+    if (categoryFields || name) {
+      return TenantRepository.updateById(existingId, patch);
+    }
     return existing;
+  }
+
+  if (!categoryFields) {
+    throw new AppError('Shop category is required', HTTP_STATUS.BAD_REQUEST);
   }
 
   const payload = {
@@ -135,6 +194,7 @@ async function createTenantForAdmin(
     status,
     billingProfile: billing,
     loyaltyStampMode: stampMode,
+    ...categoryFields,
   };
   if (existingId) payload._id = existingId;
 
@@ -224,12 +284,16 @@ class AuthService {
 
   async register({
     firstName,
+    middleName,
     lastName,
+    birthDate,
     email,
     password,
     role: roleSlug,
     tenantName,
     loyaltyStampMode,
+    category,
+    customCategory,
     phone,
     address,
     street,
@@ -252,6 +316,11 @@ class AuthService {
       throw new AppError('Invalid role for registration', HTTP_STATUS.BAD_REQUEST);
     }
 
+    assertRequiredIdentity({ firstName, middleName, lastName, phone });
+    const resolvedBirthDate = parseBirthDate(birthDate);
+    const resolvedPhone = String(phone || '').trim();
+    const resolvedMiddleName = String(middleName || '').trim();
+
     const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
     const {
       isValidAffiliateType,
@@ -262,7 +331,7 @@ class AuthService {
     } = require('@constants/affiliateTypes');
     const billingProfile =
       roleSlug === ROLES.ADMIN
-        ? normalizeBillingProfile({ phone, address, street, city, state, pin, gstin, pan })
+        ? normalizeBillingProfile({ phone: resolvedPhone, address, street, city, state, pin, gstin, pan })
         : null;
 
     const resolvedAffiliateType =
@@ -340,9 +409,11 @@ class AuthService {
 
       await UserRepository.updateCredentials(existing._id, {
         firstName,
+        middleName: resolvedMiddleName,
         lastName,
+        birthDate: resolvedBirthDate,
         ...(roleSlug !== ROLES.AFFILIATE && password ? { password } : {}),
-        phone: billingProfile?.phone || existing.phone || '',
+        phone: billingProfile?.phone || resolvedPhone || existing.phone || '',
       });
 
       if (affiliateVerification) {
@@ -355,7 +426,9 @@ class AuthService {
           tenantName,
           TENANT_STATUS.PENDING,
           billingProfile,
-          loyaltyStampMode
+          loyaltyStampMode,
+          category,
+          customCategory
         );
       }
 
@@ -381,18 +454,28 @@ class AuthService {
 
     const user = await UserRepository.create({
       firstName,
+      middleName: resolvedMiddleName,
       lastName,
+      birthDate: resolvedBirthDate,
       email,
       ...(roleSlug !== ROLES.AFFILIATE && password ? { password } : {}),
       role: role._id,
       isEmailVerified: false,
       isActive: false,
-      phone: billingProfile?.phone || '',
+      phone: billingProfile?.phone || resolvedPhone || '',
       ...(affiliateVerification || {}),
     });
 
     if (roleSlug === ROLES.ADMIN && tenantName) {
-      await createTenantForAdmin(user, tenantName, TENANT_STATUS.PENDING, billingProfile, loyaltyStampMode);
+      await createTenantForAdmin(
+        user,
+        tenantName,
+        TENANT_STATUS.PENDING,
+        billingProfile,
+        loyaltyStampMode,
+        category,
+        customCategory
+      );
     }
 
     const otpMeta = await this.createAndSendOtp(email, 'email_verification');
@@ -687,8 +770,12 @@ class AuthService {
     allowCreate = false,
     tenantName = '',
     loyaltyStampMode = '',
+    category = '',
+    customCategory = '',
     firstName = '',
+    middleName = '',
     lastName = '',
+    birthDate = '',
     phone = '',
     address = '',
     street = '',
@@ -709,11 +796,26 @@ class AuthService {
   }) {
     const email = profile.emails?.[0]?.value?.toLowerCase();
     const googleId = profile.id;
-    const resolvedFirstName =
-      String(firstName || '').trim() || profile.name?.givenName || 'User';
-    const resolvedLastName =
-      String(lastName || '').trim() || profile.name?.familyName || 'Account';
+    const resolvedFirstName = String(firstName || '').trim() || profile.name?.givenName || '';
+    const resolvedMiddleName = String(middleName || '').trim();
+    const resolvedLastName = String(lastName || '').trim() || profile.name?.familyName || '';
+    const resolvedBirthDate = parseBirthDate(birthDate);
+    const resolvedPhone = String(phone || '').trim();
     const resolvedTenantName = String(tenantName || '').trim();
+
+    if (allowCreate) {
+      assertRequiredIdentity(
+        {
+          firstName: resolvedFirstName,
+          middleName: resolvedMiddleName,
+          lastName: resolvedLastName,
+          birthDate,
+          phone: resolvedPhone,
+        },
+        { requireBirthDate: roleSlug === ROLES.USER }
+      );
+    }
+
     const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
     const {
       isValidAffiliateType,
@@ -724,7 +826,16 @@ class AuthService {
     } = require('@constants/affiliateTypes');
     const billingProfile =
       roleSlug === ROLES.ADMIN
-        ? normalizeBillingProfile({ phone, address, street, city, state, pin, gstin, pan })
+        ? normalizeBillingProfile({
+            phone: resolvedPhone,
+            address,
+            street,
+            city,
+            state,
+            pin,
+            gstin,
+            pan,
+          })
         : null;
     const resolvedAffiliateType =
       roleSlug === ROLES.AFFILIATE && isValidAffiliateType(String(affiliateType || '').trim())
@@ -905,14 +1016,16 @@ class AuthService {
         try {
           user = await UserRepository.create({
             firstName: resolvedFirstName,
+            middleName: resolvedMiddleName,
             lastName: resolvedLastName,
+            birthDate: resolvedBirthDate,
             email,
             googleId,
             avatar: profile.photos?.[0]?.value,
             role: role._id,
             isEmailVerified: true,
             isActive: isAffiliateSignup ? false : true,
-            phone: billingProfile?.phone || '',
+            phone: billingProfile?.phone || resolvedPhone || '',
             ...(affiliateVerification || {}),
           });
 
@@ -953,7 +1066,10 @@ class AuthService {
         isEmailVerified: true,
         isActive: false,
         firstName: resolvedFirstName || user.firstName,
+        middleName: resolvedMiddleName || user.middleName,
         lastName: resolvedLastName || user.lastName,
+        ...(resolvedBirthDate ? { birthDate: resolvedBirthDate } : {}),
+        ...(resolvedPhone ? { phone: resolvedPhone } : {}),
         ...affiliateVerification,
       });
     }
@@ -988,7 +1104,9 @@ class AuthService {
           resolvedTenantName || `${user.firstName || 'Shop'}'s Organization`,
           TENANT_STATUS.ACTIVE,
           billingProfile,
-          loyaltyStampMode
+          loyaltyStampMode,
+          category,
+          customCategory
         );
       } catch (error) {
         if (error instanceof AppError) throw error;
@@ -1182,8 +1300,12 @@ class AuthService {
     allowCreate = false,
     tenantName = '',
     loyaltyStampMode = '',
+    category = '',
+    customCategory = '',
     firstName = '',
+    middleName = '',
     lastName = '',
+    birthDate = '',
     phone = '',
     address = '',
     street = '',
@@ -1213,8 +1335,12 @@ class AuthService {
       allowCreate: Boolean(allowCreate),
       tenantName,
       loyaltyStampMode,
+      category,
+      customCategory,
       firstName,
+      middleName,
       lastName,
+      birthDate,
       phone,
       address,
       street,

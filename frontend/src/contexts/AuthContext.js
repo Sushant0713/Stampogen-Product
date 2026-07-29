@@ -18,7 +18,8 @@ function sameUser(a, b) {
     a.isEmailVerified === b.isEmailVerified &&
     getRoleSlug(a) === getRoleSlug(b) &&
     String(a.tenant?._id || a.tenant || '') === String(b.tenant?._id || b.tenant || '') &&
-    String(a.tenant?.status || '') === String(b.tenant?.status || '')
+    String(a.tenant?.status || '') === String(b.tenant?.status || '') &&
+    String(a.tenant?.loyaltyStampMode || '') === String(b.tenant?.loyaltyStampMode || '')
   );
 }
 
@@ -236,6 +237,8 @@ export function AuthProvider({ children }) {
       register,
       logout,
       refreshUser: fetchUser,
+      /** @deprecated use refreshUser — kept so older callers do not crash */
+      fetchUser,
       clearSession,
       setUser,
     }),

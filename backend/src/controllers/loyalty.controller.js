@@ -135,6 +135,18 @@ class LoyaltyController {
     }
   }
 
+  async adminGetCustomer(req, res, next) {
+    try {
+      const customer = await LoyaltyService.getAdminCustomerDetail(req.user, req.params.id);
+      return sendSuccess(res, {
+        message: 'Customer details retrieved',
+        data: { customer },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   async adminUpdateCustomer(req, res, next) {
     try {
       const customer = await LoyaltyService.updateAdminCustomerStatus(
@@ -242,6 +254,18 @@ class LoyaltyController {
       return sendSuccess(res, {
         message: 'Stamp requests retrieved',
         data: { requests },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async adminListRecentBillStamps(req, res, next) {
+    try {
+      const stamps = await LoyaltyService.listAdminRecentBillStamps(req.user);
+      return sendSuccess(res, {
+        message: 'Recent bill stamps retrieved',
+        data: { stamps },
       });
     } catch (error) {
       return next(error);

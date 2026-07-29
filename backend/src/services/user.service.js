@@ -185,6 +185,7 @@ class UserService {
 
   async createAffiliate(data) {
     const firstName = String(data.firstName || '').trim();
+    const middleName = String(data.middleName || '').trim();
     const lastName = String(data.lastName || '').trim();
     const email = String(data.email || '').trim().toLowerCase();
     const phone = String(data.phone || '').trim();
@@ -194,8 +195,11 @@ class UserService {
       : 'verified';
     const isActive = data.isActive !== false;
 
-    if (!firstName || !lastName) {
-      throw new AppError('First and last name are required', HTTP_STATUS.BAD_REQUEST);
+    if (!firstName || !middleName || !lastName) {
+      throw new AppError('First, middle and last name are required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (phone.length < 8) {
+      throw new AppError('Mobile number is required', HTTP_STATUS.BAD_REQUEST);
     }
     if (!email) {
       throw new AppError('Email is required', HTTP_STATUS.BAD_REQUEST);
@@ -234,6 +238,7 @@ class UserService {
 
     const user = await UserRepository.create({
       firstName,
+      middleName,
       lastName,
       email,
       phone,
@@ -646,7 +651,9 @@ class UserService {
   async update(id, data) {
     const allowed = [
       'firstName',
+      'middleName',
       'lastName',
+      'birthDate',
       'phone',
       'avatar',
       'isActive',

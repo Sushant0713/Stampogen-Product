@@ -4,7 +4,7 @@ const { User } = require('@models');
 const AUTH_ROLE_POPULATE = { path: 'role', select: 'slug name' };
 const AUTH_TENANT_POPULATE = {
   path: 'tenant',
-  select: 'name slug status billingProfile currentPlan pendingPlan loyaltyStampMode',
+  select: 'name slug status billingProfile currentPlan pendingPlan loyaltyStampMode socialLinks',
 };
 
 function withAuthPopulate(query) {
@@ -48,12 +48,14 @@ class UserRepository {
     );
   }
 
-  async updateCredentials(id, { firstName, lastName, password, phone }) {
+  async updateCredentials(id, { firstName, middleName, lastName, birthDate, password, phone }) {
     const user = await User.findById(id).select('+password');
     if (!user) return null;
 
     if (firstName !== undefined) user.firstName = firstName;
+    if (middleName !== undefined) user.middleName = middleName;
     if (lastName !== undefined) user.lastName = lastName;
+    if (birthDate !== undefined) user.birthDate = birthDate;
     if (password !== undefined) user.password = password;
     if (phone !== undefined) user.phone = phone;
 
@@ -70,7 +72,13 @@ class UserRepository {
       const q = String(search).trim();
       if (q) {
         const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-        query.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }, { phone: regex }];
+        query.$or = [
+          { firstName: regex },
+          { middleName: regex },
+          { lastName: regex },
+          { email: regex },
+          { phone: regex },
+        ];
       }
     }
 

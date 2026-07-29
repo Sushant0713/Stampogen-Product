@@ -9,11 +9,21 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: 50,
     },
+    middleName: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+      default: '',
+    },
     lastName: {
       type: String,
       required: true,
       trim: true,
       maxlength: 50,
+    },
+    birthDate: {
+      type: Date,
+      default: null,
     },
     email: {
       type: String,
@@ -293,7 +303,7 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.virtual('fullName').get(function fullName() {
-  return `${this.firstName} ${this.lastName}`.trim();
+  return [this.firstName, this.middleName, this.lastName].filter(Boolean).join(' ').trim();
 });
 
 userSchema.pre('save', async function hashPassword(next) {

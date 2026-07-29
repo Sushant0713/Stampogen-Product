@@ -2,7 +2,7 @@ const LoyaltyMembership = require('@models/LoyaltyMembership');
 
 const TENANT_POPULATE = {
   path: 'tenant',
-  select: 'name slug status billingProfile loyaltyOffers loyaltyStampMode',
+  select: 'name slug status billingProfile loyaltyOffers loyaltyStampMode category customCategory socialLinks',
 };
 
 const USER_POPULATE = {
@@ -109,6 +109,64 @@ class LoyaltyMembershipRepository {
 
   async countByTenant(tenantId) {
     return LoyaltyMembership.countDocuments({ tenant: tenantId, status: 'active' });
+  }
+
+  /**
+   * Recent bill stamps for a shop (metadata only — no bill image payloads).
+   */
+  async findRecentBillStamps(tenantId, { sinceHours = 24, limit = 40 } = {}) {
+    const mongoose = require('mongoose');
+    const since = new Date(Date.now() - Math.max(1, sinceHours) * 60 * 60 * 1000);
+    const tenantOid = new mongoose.Types.ObjectId(String(tenantId));
+    const max = Math.min(100, Math.max(1, limit));
+
+    return LoyaltyMembership.aggregate([
+      {
+        $match: {
+          tenant: tenantOid,
+          billCount: { $gt: 0 },
+          lastStampAt: { $gte: since },
+        },
+      },
+      {
+        $project: {
+          user: 1,
+          bills: {
+            $filter: {
+              input: { $ifNull: ['$bills', []] },
+              as: 'b',
+              cond: { $gte: ['$$b.stampedAt', since] },
+            },
+          },
+        },
+      },
+      { $unwind: '$bills' },
+      { $sort: { 'bills.stampedAt': -1 } },
+      { $limit: max },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'userDoc',
+        },
+      },
+      { $unwind: { path: '$userDoc', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          id: { $toString: '$bills._id' },
+          membershipId: { $toString: '$_id' },
+          offerTitle: { $ifNull: ['$bills.offerTitle', ''] },
+          offerKey: { $ifNull: ['$bills.offerKey', ''] },
+          stampedAt: '$bills.stampedAt',
+          firstName: '$userDoc.firstName',
+          middleName: '$userDoc.middleName',
+          lastName: '$userDoc.lastName',
+          email: '$userDoc.email',
+        },
+      },
+    ]);
   }
 }
 

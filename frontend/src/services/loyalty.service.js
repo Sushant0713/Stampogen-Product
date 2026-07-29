@@ -14,6 +14,7 @@ export const loyaltyService = {
   adminListRewards: (filter = 'pending') =>
     api.get('/loyalty/admin/rewards', { params: { filter } }),
   adminListStampRequests: () => api.get('/loyalty/admin/stamp-requests'),
+  adminListRecentBillStamps: () => api.get('/loyalty/admin/recent-bill-stamps'),
   adminApproveStampRequest: (id) =>
     api.post(`/loyalty/admin/stamp-requests/${encodeURIComponent(id)}/approve`),
   adminRejectStampRequest: (id) =>
@@ -21,6 +22,7 @@ export const loyaltyService = {
   adminGetSettings: () => api.get('/loyalty/admin/settings'),
   adminUpdateSettings: (payload) => api.patch('/loyalty/admin/settings', payload),
   adminListCustomers: () => api.get('/loyalty/admin/customers'),
+  adminGetCustomer: (id) => api.get(`/loyalty/admin/customers/${encodeURIComponent(id)}`),
   adminUpdateCustomer: (id, payload) =>
     api.patch(`/loyalty/admin/customers/${encodeURIComponent(id)}`, payload),
   adminDeleteCustomer: (id) => api.delete(`/loyalty/admin/customers/${encodeURIComponent(id)}`),

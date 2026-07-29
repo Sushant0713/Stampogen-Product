@@ -13,7 +13,9 @@ export function UserProvider({ children }) {
       user,
       loading,
       role,
-      fullName: user ? `${user.firstName} ${user.lastName}`.trim() : '',
+      fullName: user
+        ? [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ').trim()
+        : '',
       email: user?.email || '',
       avatar: user?.avatar || null,
     }),

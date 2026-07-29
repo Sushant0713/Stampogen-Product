@@ -58,6 +58,21 @@ class TenantRepository {
     return Tenant.findByIdAndUpdate(id, data, { new: true, runValidators: true }).populate('owner');
   }
 
+  async findQrScanStats(id) {
+    return Tenant.findById(id).select('loyaltyQrScanMonth loyaltyQrScansByDay').lean();
+  }
+
+  async resetQrScanMonth(id, monthKey, days = {}) {
+    return Tenant.updateOne(
+      { _id: id },
+      { $set: { loyaltyQrScanMonth: monthKey, loyaltyQrScansByDay: days } }
+    );
+  }
+
+  async incrementQrScanDay(id, dateKey) {
+    return Tenant.updateOne({ _id: id }, { $inc: { [`loyaltyQrScansByDay.${dateKey}`]: 1 } });
+  }
+
   async findAll(filter = {}, options = {}) {
     const { page = 1, limit = 20, sort = '-createdAt', search = '' } = options;
     const skip = (page - 1) * limit;

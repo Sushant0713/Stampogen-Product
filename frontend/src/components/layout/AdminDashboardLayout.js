@@ -7,6 +7,7 @@ import { Navbar } from '@/components/navbar/Navbar';
 import { PageLoader } from '@/components/loaders/Spinner';
 import { AdminBottomNav } from '@/features/admin/layout/AdminBottomNav';
 import { AdminStampRequestNotifier } from '@/features/admin/AdminStampRequestNotifier';
+import { AdminBillStampNotifier } from '@/features/admin/AdminBillStampNotifier';
 import { ADMIN_BG } from '@/features/admin/adminTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
@@ -77,6 +78,7 @@ export function AdminDashboardLayout({ children }) {
         </main>
         {authReady ? <AdminBottomNav /> : null}
         {authReady ? <AdminStampRequestNotifier enabled /> : null}
+        {authReady ? <AdminBillStampNotifier enabled /> : null}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { TENANT_STATUS, LOYALTY_STAMP_MODES, LOYALTY_STAMP_MODE_VALUES } = require('@constants');
+const { TENANT_STATUS, LOYALTY_STAMP_MODES, LOYALTY_STAMP_MODE_VALUES, SHOP_CATEGORY_VALUES } = require('@constants');
 
 const loyaltyOfferSchema = new mongoose.Schema(
   {
@@ -175,6 +175,44 @@ const tenantSchema = new mongoose.Schema(
       type: String,
       enum: LOYALTY_STAMP_MODE_VALUES,
       default: LOYALTY_STAMP_MODES.BILL,
+    },
+    /** Business category selected during admin registration. */
+    category: {
+      type: String,
+      enum: SHOP_CATEGORY_VALUES,
+      required: false,
+      index: true,
+    },
+    /** Free-text category when category is `custom`. */
+    customCategory: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: '',
+    },
+    /**
+     * Loyalty QR scan counters for the current calendar month (Asia/Kolkata).
+     * Automatically reset when the month rolls over.
+     */
+    loyaltyQrScanMonth: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 7,
+    },
+    /** Map of YYYY-MM-DD → scan count for loyaltyQrScanMonth only. */
+    loyaltyQrScansByDay: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    /** Public social / review links shown on customer loyalty cards. */
+    socialLinks: {
+      facebook: { type: String, trim: true, maxlength: 500, default: '' },
+      instagram: { type: String, trim: true, maxlength: 500, default: '' },
+      x: { type: String, trim: true, maxlength: 500, default: '' },
+      youtube: { type: String, trim: true, maxlength: 500, default: '' },
+      whatsapp: { type: String, trim: true, maxlength: 500, default: '' },
+      googleReview: { type: String, trim: true, maxlength: 500, default: '' },
     },
   },
   {

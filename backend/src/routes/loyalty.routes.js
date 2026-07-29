@@ -30,6 +30,15 @@ router.get(
   LoyaltyController.adminListCustomers
 );
 
+router.get(
+  '/admin/customers/:id',
+  authenticate,
+  isAdmin,
+  param('id').trim().notEmpty().withMessage('Customer id is required'),
+  validate,
+  LoyaltyController.adminGetCustomer
+);
+
 router.patch(
   '/admin/customers/:id',
   authenticate,
@@ -67,7 +76,8 @@ router.patch(
   '/admin/settings',
   authenticate,
   isAdmin,
-  body('loyaltyStampMode').isIn(['bill', 'request']).withMessage('Invalid loyalty stamp mode'),
+  body('loyaltyStampMode').optional().isIn(['bill', 'request']).withMessage('Invalid loyalty stamp mode'),
+  body('socialLinks').optional().isObject().withMessage('Social links must be an object'),
   validate,
   LoyaltyController.adminUpdateSettings
 );
@@ -77,6 +87,13 @@ router.get(
   authenticate,
   isAdmin,
   LoyaltyController.adminListStampRequests
+);
+
+router.get(
+  '/admin/recent-bill-stamps',
+  authenticate,
+  isAdmin,
+  LoyaltyController.adminListRecentBillStamps
 );
 
 router.post(

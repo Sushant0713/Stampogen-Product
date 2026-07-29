@@ -8,7 +8,7 @@ export function CustomerLoginPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] lg:grid lg:grid-cols-2">
       <div className="relative hidden flex-col justify-center bg-gradient-to-br from-[#021A54] via-[#0B2C6E] to-[#1E4FA3] p-16 text-white lg:flex">
-        <h1 className="text-4xl font-extrabold tracking-tight">My Loyalty Cards</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight text-white">My Loyalty Cards</h1>
         <p className="mt-4 max-w-md text-[15px] leading-relaxed text-white/80">
           One Google account for every Stampogen shop. Collect stamps, unlock rewards, and keep all
           your loyalty cards in one place.

@@ -34,6 +34,7 @@ import { getErrorMessage } from '@/utils';
 
 const EMPTY_ADD_FORM = {
   firstName: '',
+  middleName: '',
   lastName: '',
   email: '',
   phone: '',
@@ -450,8 +451,12 @@ export function AffiliateList() {
   };
 
   const handleAddSave = async () => {
-    if (!addForm.firstName.trim() || !addForm.lastName.trim()) {
-      toast.error('First and last name are required');
+    if (!addForm.firstName.trim() || !addForm.middleName.trim() || !addForm.lastName.trim()) {
+      toast.error('First, middle and last name are required');
+      return;
+    }
+    if (!addForm.phone.trim() || addForm.phone.trim().length < 8) {
+      toast.error('Mobile number is required');
       return;
     }
     if (!addForm.email.trim()) {
@@ -493,6 +498,7 @@ export function AffiliateList() {
       setAddSaving(true);
       const payload = {
         firstName: addForm.firstName.trim(),
+        middleName: addForm.middleName.trim(),
         lastName: addForm.lastName.trim(),
         email: addForm.email.trim(),
         phone: addForm.phone.trim(),
@@ -857,6 +863,16 @@ export function AffiliateList() {
             </div>
             <div>
               <label className="mb-1 block text-[13px] font-semibold text-[#101828]">
+                Middle name *
+              </label>
+              <input
+                className={inputClass}
+                value={addForm.middleName}
+                onChange={(e) => setAddForm((p) => ({ ...p, middleName: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[13px] font-semibold text-[#101828]">
                 Last name *
               </label>
               <input
@@ -875,7 +891,7 @@ export function AffiliateList() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-[13px] font-semibold text-[#101828]">Phone</label>
+              <label className="mb-1 block text-[13px] font-semibold text-[#101828]">Mobile *</label>
               <input
                 className={inputClass}
                 value={addForm.phone}

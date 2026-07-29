@@ -42,6 +42,7 @@ export function CustomerAppLayout({ children, hideNav = false }) {
   };
 
   const showNav = authReady && !hideNav;
+  const displayName = [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(' ');
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: CUSTOMER_BG }}>
@@ -54,9 +55,7 @@ export function CustomerAppLayout({ children, hideNav = false }) {
               <p className="text-sm font-semibold text-[#64748B]">Your loyalty wallet</p>
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <p className="text-sm font-bold text-[#021A54]">
-                    {user.firstName} {user.lastName}
-                  </p>
+                  <p className="text-sm font-bold text-[#021A54]">{displayName}</p>
                   <p className="text-xs text-[#94A3B8]">{user.email}</p>
                 </div>
                 {user.avatar ? (

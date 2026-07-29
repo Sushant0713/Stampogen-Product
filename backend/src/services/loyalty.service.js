@@ -27,7 +27,7 @@ function shopInitials(name = '') {
 
 function customerName(user) {
   if (!user) return 'Customer';
-  const name = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  const name = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ').trim();
   return name || user.email || 'Customer';
 }
 
@@ -35,6 +35,72 @@ function formatAddress(tenant) {
   const bp = tenant?.billingProfile || {};
   const line = [bp.street || bp.address, bp.city, bp.state, bp.pin].filter(Boolean).join(', ');
   return line || '';
+}
+
+const SOCIAL_LINK_KEYS = ['facebook', 'instagram', 'x', 'youtube', 'whatsapp', 'googleReview'];
+
+function normalizeSocialLinks(input = {}) {
+  const out = {};
+  SOCIAL_LINK_KEYS.forEach((key) => {
+    const raw = String(input?.[key] ?? '').trim().slice(0, 500);
+    out[key] = raw;
+  });
+  return out;
+}
+
+function readSocialLinks(tenant) {
+  const links = tenant?.socialLinks || {};
+  return normalizeSocialLinks(links);
+}
+
+function publicSocialLinks(tenant) {
+  const links = readSocialLinks(tenant);
+  const out = {};
+  SOCIAL_LINK_KEYS.forEach((key) => {
+    if (links[key]) out[key] = links[key];
+  });
+  return out;
+}
+
+/** Calendar parts in Asia/Kolkata for QR scan month buckets. */
+function getIndiaDateParts(now = new Date()) {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(now).map((p) => [p.type, p.value]));
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const day = Number(parts.day);
+  const monthKey = `${parts.year}-${parts.month}`;
+  const dateKey = `${parts.year}-${parts.month}-${parts.day}`;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const monthLabel = new Date(year, month - 1, 1).toLocaleString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  });
+  return { year, month, day, monthKey, dateKey, daysInMonth, monthLabel };
+}
+
+function buildQrScanDays(daysInMonth, monthKey, byDay = {}, upToDay = daysInMonth) {
+  const map = byDay && typeof byDay === 'object' ? byDay : {};
+  const days = [];
+  let total = 0;
+  const last = Math.min(daysInMonth, Math.max(1, upToDay));
+  for (let d = 1; d <= last; d += 1) {
+    const dateKey = `${monthKey}-${String(d).padStart(2, '0')}`;
+    const count = Math.max(0, Number(map[dateKey]) || 0);
+    total += count;
+    days.push({
+      date: dateKey,
+      day: d,
+      label: String(d),
+      count,
+    });
+  }
+  return { days, total };
 }
 
 function slugifyOfferKey(title = '') {
@@ -394,8 +460,13 @@ function formatCard(membership, catalog) {
     lastStampAt: membership.lastStampAt,
     isRedeemable: offers.some((o) => o.isRedeemable && o.rewardStatus !== 'redeemed'),
     rewardStatus: primary.rewardStatus,
+    validUntil: primary.validUntil || null,
+    category: tenant.category || null,
+    customCategory: tenant.customCategory || '',
+    memberId: `${shopInitials(tenant.name)}-${String(membership._id).slice(-5).toUpperCase()}`,
     offers,
     address: formatAddress(tenant),
+    socialLinks: publicSocialLinks(tenant),
   };
 }
 
@@ -541,6 +612,9 @@ class LoyaltyService {
       throw new AppError('This shop is not accepting new members', HTTP_STATUS.FORBIDDEN);
     }
 
+    // Count loyalty QR opens (join page) — non-blocking
+    void this.recordLoyaltyQrScan(tenant._id).catch(() => {});
+
     const { catalog } = await this.getCatalogForTenant(tenant);
     const active = catalog.filter((o) => o.status === 'active' && isOfferCurrentlyValid(o));
 
@@ -561,6 +635,47 @@ class LoyaltyService {
         validUntil: o.validUntil,
         maxCustomers: o.maxCustomers,
       })),
+    };
+  }
+
+  async recordLoyaltyQrScan(tenantId) {
+    if (!tenantId) return;
+    const { monthKey, dateKey } = getIndiaDateParts();
+    const row = await TenantRepository.findQrScanStats(tenantId);
+    if (!row) return;
+
+    if (row.loyaltyQrScanMonth !== monthKey) {
+      await TenantRepository.resetQrScanMonth(tenantId, monthKey, { [dateKey]: 1 });
+      return;
+    }
+
+    await TenantRepository.incrementQrScanDay(tenantId, dateKey);
+  }
+
+  async getLoyaltyQrScanStats(tenantId) {
+    const { monthKey, day, daysInMonth, monthLabel } = getIndiaDateParts();
+    let row = await TenantRepository.findQrScanStats(tenantId);
+
+    if (!row || row.loyaltyQrScanMonth !== monthKey) {
+      // New month — clear previous month's counters automatically
+      if (row) {
+        await TenantRepository.resetQrScanMonth(tenantId, monthKey, {});
+      }
+      const empty = buildQrScanDays(daysInMonth, monthKey, {}, day);
+      return {
+        month: monthKey,
+        monthLabel,
+        total: 0,
+        days: empty.days,
+      };
+    }
+
+    const built = buildQrScanDays(daysInMonth, monthKey, row.loyaltyQrScansByDay || {}, day);
+    return {
+      month: monthKey,
+      monthLabel,
+      total: built.total,
+      days: built.days,
     };
   }
 
@@ -787,6 +902,30 @@ class LoyaltyService {
       primaryRewardStatus: offers[0]?.rewardStatus || 'collecting',
     });
 
+    try {
+      const tenantDoc = await TenantRepository.findById(tenant._id);
+      const ownerId = tenantDoc?.owner?._id || tenantDoc?.owner;
+      const UserRepository = require('@repositories/user.repository');
+      const customer = await UserRepository.findById(userId);
+      const customerLabel = customerName(customer || {});
+      if (ownerId) {
+        await NotificationService.notifyUser({
+          userId: ownerId,
+          type: 'bill_stamp',
+          title: 'New bill stamp',
+          message: `${customerLabel} collected a stamp for “${offerLabel}”.`,
+          link: '/admin/rewards',
+          meta: {
+            membershipId: String(membership._id),
+            offerKey: key,
+            offerTitle: offerLabel,
+          },
+        });
+      }
+    } catch {
+      // Notification failure should not block the stamp
+    }
+
     const card = formatCard(updated);
     return {
       card,
@@ -939,6 +1078,22 @@ class LoyaltyService {
     return out;
   }
 
+  async listAdminRecentBillStamps(adminUser) {
+    const tenantId = await this.getAdminTenantId(adminUser);
+    const rows = await LoyaltyMembershipRepository.findRecentBillStamps(tenantId, {
+      sinceHours: 24,
+      limit: 40,
+    });
+    return rows.map((row) => ({
+      id: String(row.id),
+      membershipId: String(row.membershipId || ''),
+      name: customerName(row),
+      offerTitle: String(row.offerTitle || 'Offer').trim() || 'Offer',
+      offerKey: row.offerKey || '',
+      stampedAt: row.stampedAt,
+    }));
+  }
+
   async approveStampRequest(adminUser, rawId) {
     const tenantId = await this.getAdminTenantId(adminUser);
     const { membershipId, requestId } = this.parseStampRequestId(rawId);
@@ -1038,19 +1193,38 @@ class LoyaltyService {
     return {
       loyaltyStampMode: readStampMode(tenant),
       shopName: tenant.name,
+      socialLinks: readSocialLinks(tenant),
     };
   }
 
-  async updateAdminSettings(adminUser, { loyaltyStampMode } = {}) {
+  async updateAdminSettings(adminUser, { loyaltyStampMode, socialLinks } = {}) {
     const tenantId = await this.getAdminTenantId(adminUser);
     const { LOYALTY_STAMP_MODE_VALUES } = require('@constants');
-    if (!LOYALTY_STAMP_MODE_VALUES.includes(loyaltyStampMode)) {
-      throw new AppError('Invalid loyalty stamp mode', HTTP_STATUS.BAD_REQUEST);
+    const patch = {};
+
+    if (loyaltyStampMode !== undefined) {
+      if (!LOYALTY_STAMP_MODE_VALUES.includes(loyaltyStampMode)) {
+        throw new AppError('Invalid loyalty stamp mode', HTTP_STATUS.BAD_REQUEST);
+      }
+      patch.loyaltyStampMode = loyaltyStampMode;
     }
-    const tenant = await TenantRepository.updateById(tenantId, { loyaltyStampMode });
+
+    if (socialLinks !== undefined) {
+      if (!socialLinks || typeof socialLinks !== 'object' || Array.isArray(socialLinks)) {
+        throw new AppError('Invalid social links', HTTP_STATUS.BAD_REQUEST);
+      }
+      patch.socialLinks = normalizeSocialLinks(socialLinks);
+    }
+
+    if (!Object.keys(patch).length) {
+      throw new AppError('Nothing to update', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const tenant = await TenantRepository.updateById(tenantId, patch);
     return {
       loyaltyStampMode: readStampMode(tenant),
       shopName: tenant.name,
+      socialLinks: readSocialLinks(tenant),
     };
   }
 
@@ -1101,6 +1275,7 @@ class LoyaltyService {
       const user = membership.user || {};
       const offers = ensureOffers(membership);
       const totalStamps = offers.reduce((sum, o) => sum + (o.stamps || 0), 0);
+      const stampsRequired = offers.reduce((sum, o) => sum + (o.stampsRequired || 0), 0);
       return {
         id: String(membership._id),
         name: customerName(user),
@@ -1110,10 +1285,84 @@ class LoyaltyService {
         joinedAt: membership.joinedAt,
         lastStampAt: membership.lastStampAt,
         totalStamps,
+        stampsRequired,
         offerCount: offers.length,
         status: membership.status === 'inactive' ? 'suspended' : 'active',
       };
     });
+  }
+
+  async getAdminCustomerDetail(adminUser, membershipId) {
+    const tenantId = await this.getAdminTenantId(adminUser);
+    const membership = await LoyaltyMembershipRepository.findByIdWithBills(membershipId);
+    if (!membership) {
+      throw new AppError('Customer not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (String(membership.tenant?._id || membership.tenant) !== String(tenantId)) {
+      throw new AppError('Access denied', HTTP_STATUS.FORBIDDEN);
+    }
+
+    const user = membership.user || {};
+    const offers = ensureOffers(membership);
+    const totalStamps = offers.reduce((sum, o) => sum + (o.stamps || 0), 0);
+    const stampsRequired = offers.reduce((sum, o) => sum + (o.stampsRequired || 0), 0);
+
+    const events = [];
+    (membership.bills || []).forEach((bill) => {
+      if (!bill?.stampedAt) return;
+      events.push({
+        at: bill.stampedAt,
+        offerTitle: bill.offerTitle || 'Stamp',
+        source: 'bill',
+      });
+    });
+    (membership.stampRequests || []).forEach((request) => {
+      if (request.status !== 'approved') return;
+      const at = request.resolvedAt || request.requestedAt;
+      if (!at) return;
+      events.push({
+        at,
+        offerTitle: request.offerTitle || 'Stamp',
+        source: 'request',
+      });
+    });
+    events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+    const scanHistory = events.map((event, index) => ({
+      index: index + 1,
+      at: event.at,
+      offerTitle: event.offerTitle,
+      source: event.source,
+    }));
+
+    const lastVisit =
+      scanHistory.length > 0
+        ? scanHistory[scanHistory.length - 1].at
+        : membership.lastStampAt || membership.joinedAt || null;
+
+    return {
+      id: String(membership._id),
+      name: customerName(user),
+      email: user.email || '',
+      phone: user.phone || '',
+      avatar: user.avatar || null,
+      joinedAt: membership.joinedAt,
+      lastStampAt: membership.lastStampAt,
+      totalStamps,
+      stampsRequired,
+      offerCount: offers.length,
+      status: membership.status === 'inactive' ? 'suspended' : 'active',
+      totalVisits: scanHistory.length,
+      lastVisit,
+      scanHistory,
+      offers: offers.map((offer) => ({
+        key: offer.key,
+        title: offer.title,
+        stamps: offer.stamps || 0,
+        stampsRequired: offer.stampsRequired || 0,
+        rewardStatus: offer.rewardStatus || 'collecting',
+      })),
+    };
   }
 
   async updateAdminCustomerStatus(adminUser, membershipId, status) {
@@ -1159,6 +1408,7 @@ class LoyaltyService {
       });
     });
     const tenant = await TenantRepository.findById(tenantId);
+    const qrScans = await this.getLoyaltyQrScanStats(tenantId);
     return {
       totalCustomers: rows.length,
       pendingRewards,
@@ -1166,6 +1416,7 @@ class LoyaltyService {
       redeemedRewards,
       activeCampaigns: catalog.filter((o) => o.status === 'active').length,
       loyaltyStampMode: readStampMode(tenant),
+      qrScans,
     };
   }
 

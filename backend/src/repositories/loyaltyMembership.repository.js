@@ -78,20 +78,27 @@ class LoyaltyMembershipRepository {
       offers,
       primaryStamps,
       primaryRewardStatus,
+      visitHistory,
     }
   ) {
+    const stampedAt = new Date();
+    const $set = {
+      offers,
+      stamps: primaryStamps,
+      rewardStatus: primaryRewardStatus,
+      lastStampAt: stampedAt,
+      lastOfferTitle: offerTitle,
+      lastOfferKey: offerKey,
+      lastBillDocumentName: billDocumentName,
+    };
+    if (Array.isArray(visitHistory)) {
+      $set.visitHistory = visitHistory;
+    }
+
     return LoyaltyMembership.findByIdAndUpdate(
       id,
       {
-        $set: {
-          offers,
-          stamps: primaryStamps,
-          rewardStatus: primaryRewardStatus,
-          lastStampAt: new Date(),
-          lastOfferTitle: offerTitle,
-          lastOfferKey: offerKey,
-          lastBillDocumentName: billDocumentName,
-        },
+        $set,
         $inc: { billCount: 1 },
         $push: {
           bills: {
@@ -99,7 +106,7 @@ class LoyaltyMembershipRepository {
             documentName: billDocumentName,
             offerKey,
             offerTitle,
-            stampedAt: new Date(),
+            stampedAt,
           },
         },
       },

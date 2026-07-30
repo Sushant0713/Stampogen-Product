@@ -17,6 +17,17 @@ import { getErrorMessage } from '@/utils';
 
 const ACCENT = '#021A54';
 
+const emptyPayout = {
+  accountHolderName: '',
+  accountNumber: '',
+  ifsc: '',
+  bankName: '',
+  upiId: '',
+};
+
+const inputClass =
+  'h-10 w-full rounded-lg border border-[#D0D5DD] bg-white px-3 text-sm text-[#101828] outline-none focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54]';
+
 function formatMoney(value) {
   const n = Number(value) || 0;
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -77,6 +88,37 @@ function StatCard({ icon: Icon, label, value, hint, tone = 'default' }) {
   );
 }
 
+function validatePayoutClient(payout) {
+  const accountHolderName = String(payout.accountHolderName || '').trim();
+  const accountNumber = String(payout.accountNumber || '').replace(/\s+/g, '').trim();
+  const ifsc = String(payout.ifsc || '').trim().toUpperCase();
+  const bankName = String(payout.bankName || '').trim();
+  const upiId = String(payout.upiId || '').trim();
+
+  const bankFields = [accountHolderName, accountNumber, ifsc, bankName];
+  const filled = bankFields.filter(Boolean).length;
+  const hasBank = filled === 4;
+  const hasPartial = filled > 0 && filled < 4;
+  const hasUpi = Boolean(upiId);
+
+  if (hasPartial) {
+    return 'Complete all bank fields or clear them and use UPI only.';
+  }
+  if (!hasBank && !hasUpi) {
+    return 'Provide bank details or a UPI ID (at least one required).';
+  }
+  if (hasBank && !/^\d{9,18}$/.test(accountNumber)) {
+    return 'Account number must be 9–18 digits.';
+  }
+  if (hasBank && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+    return 'Enter a valid IFSC (e.g. HDFC0001234).';
+  }
+  if (hasUpi && !/^[\w.-]{2,256}@[\w.-]{2,64}$/i.test(upiId)) {
+    return 'Enter a valid UPI ID (e.g. name@upi).';
+  }
+  return '';
+}
+
 export function AffiliateDashboard() {
   const { fullName, user } = useUser();
   const [loading, setLoading] = useState(true);
@@ -84,6 +126,9 @@ export function AffiliateDashboard() {
   const [summary, setSummary] = useState(null);
   const [redeems, setRedeems] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [payout, setPayout] = useState(emptyPayout);
+  const [saveForLater, setSaveForLater] = useState(true);
+  const [payoutError, setPayoutError] = useState('');
 
   const load = useCallback(async ({ silent = false } = {}) => {
     try {
@@ -92,8 +137,18 @@ export function AffiliateDashboard() {
         affiliateEarningsService.getSummary(),
         affiliateEarningsService.listRedeems(),
       ]);
-      setSummary(summaryRes.data?.data?.summary || null);
+      const nextSummary = summaryRes.data?.data?.summary || null;
+      setSummary(nextSummary);
       setRedeems(redeemsRes.data?.data?.redeems || []);
+      if (nextSummary?.savedPayout) {
+        setPayout({
+          accountHolderName: nextSummary.savedPayout.accountHolderName || '',
+          accountNumber: nextSummary.savedPayout.accountNumber || '',
+          ifsc: nextSummary.savedPayout.ifsc || '',
+          bankName: nextSummary.savedPayout.bankName || '',
+          upiId: nextSummary.savedPayout.upiId || '',
+        });
+      }
     } catch (error) {
       if (!silent) {
         toast.error(getErrorMessage(error, 'Unable to load earnings'));
@@ -107,17 +162,46 @@ export function AffiliateDashboard() {
     load();
   }, [load]);
 
+  const openRedeem = () => {
+    const saved = summary?.savedPayout || emptyPayout;
+    setPayout({
+      accountHolderName: saved.accountHolderName || '',
+      accountNumber: saved.accountNumber || '',
+      ifsc: saved.ifsc || '',
+      bankName: saved.bankName || '',
+      upiId: saved.upiId || '',
+    });
+    setSaveForLater(true);
+    setPayoutError('');
+    setConfirmOpen(true);
+  };
+
+  const updatePayout = (key, value) => {
+    setPayout((prev) => ({ ...prev, [key]: value }));
+    setPayoutError('');
+  };
+
   const handleRedeem = async () => {
+    const err = validatePayoutClient(payout);
+    if (err) {
+      setPayoutError(err);
+      return;
+    }
     try {
       setRedeeming(true);
-      const { data } = await affiliateEarningsService.redeem();
+      const { data } = await affiliateEarningsService.redeem({
+        ...payout,
+        ifsc: String(payout.ifsc || '').trim().toUpperCase(),
+        accountNumber: String(payout.accountNumber || '').replace(/\s+/g, ''),
+        saveForLater,
+      });
       const next = data?.data?.summary;
       const amount = data?.data?.redeem?.amount;
       if (next) setSummary(next);
       toast.success(
         amount != null
-          ? `Redeemed ${formatMoney(amount)}. Progress reset to zero.`
-          : 'Redeemed successfully'
+          ? `Redeem request for ${formatMoney(amount)} submitted.`
+          : 'Redeem request submitted'
       );
       setConfirmOpen(false);
       await load({ silent: true });
@@ -130,8 +214,6 @@ export function AffiliateDashboard() {
 
   const progressWidth = useMemo(() => {
     if (!summary?.minTarget) return 0;
-    // Allow visual fill past 100% capped at 100 for the bar fill,
-    // but show overflow separately
     return Math.min(100, Number(summary.progressPercent) || 0);
   }, [summary]);
 
@@ -254,7 +336,7 @@ export function AffiliateDashboard() {
           <button
             type="button"
             disabled={!summary?.canRedeem || redeeming}
-            onClick={() => setConfirmOpen(true)}
+            onClick={openRedeem}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-45"
             style={{ backgroundColor: ACCENT }}
           >
@@ -293,8 +375,8 @@ export function AffiliateDashboard() {
           </p>
         ) : (
           <p className="mt-4 rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] px-4 py-3 text-[13px] text-[#065F46]">
-            Target reached. Redeem {formatMoney(summary.currentTotal)} now — progress resets to ₹0
-            for the next clients.
+            Target reached. Redeem {formatMoney(summary.currentTotal)} now — share bank or UPI
+            details so Stampogen can pay you.
           </p>
         )}
       </div>
@@ -325,9 +407,27 @@ export function AffiliateDashboard() {
                     {formatMoney(row.amount)}
                   </p>
                   <p className="text-[12px] text-[#667085]">{formatDateTime(row.redeemedAt)}</p>
+                  {row.payoutMethod ? (
+                    <p className="mt-0.5 text-[11px] font-medium text-[#667085]">
+                      Via {row.payoutMethod === 'both' ? 'bank + UPI' : row.payoutMethod}
+                      {row.status === 'pending' ? ' · awaiting payout' : ''}
+                    </p>
+                  ) : null}
                 </div>
-                <span className="rounded-full bg-[#ECFDF5] px-2.5 py-1 text-[11px] font-semibold text-[#065F46]">
-                  Redeemed
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    row.status === 'paid'
+                      ? 'bg-[#ECFDF5] text-[#065F46]'
+                      : row.status === 'rejected'
+                        ? 'bg-[#FEF3F2] text-[#B42318]'
+                        : 'bg-[#FFFBEB] text-[#92400E]'
+                  }`}
+                >
+                  {row.status === 'paid'
+                    ? 'Paid'
+                    : row.status === 'rejected'
+                      ? 'Rejected'
+                      : 'Pending'}
                 </span>
               </li>
             ))}
@@ -337,16 +437,104 @@ export function AffiliateDashboard() {
 
       {confirmOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-[#101828]">Confirm redeem</h3>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-[#101828]">Redeem & payout details</h3>
             <p className="mt-2 text-sm leading-relaxed text-[#475467]">
               Redeem{' '}
               <span className="font-semibold text-[#021A54]">
                 {formatMoney(summary?.currentTotal)}
               </span>
-              ? This moves it into revenue redeemed and resets current progress to{' '}
-              <span className="font-semibold">₹0</span>. New client payments start a fresh total.
+              . Provide <strong>bank details or UPI</strong> (at least one). Super Admin will use
+              these to transfer money.
             </p>
+
+            <div className="mt-5 space-y-3">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-[#667085]">
+                Bank transfer
+              </p>
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-[#344054]">
+                  Account holder name
+                </label>
+                <input
+                  className={inputClass}
+                  value={payout.accountHolderName}
+                  onChange={(e) => updatePayout('accountHolderName', e.target.value)}
+                  placeholder="Name as on bank account"
+                  autoComplete="name"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-[#344054]">
+                  Account number
+                </label>
+                <input
+                  className={inputClass}
+                  value={payout.accountNumber}
+                  onChange={(e) => updatePayout('accountNumber', e.target.value)}
+                  placeholder="9–18 digit account number"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[13px] font-medium text-[#344054]">IFSC</label>
+                  <input
+                    className={inputClass}
+                    value={payout.ifsc}
+                    onChange={(e) => updatePayout('ifsc', e.target.value.toUpperCase())}
+                    placeholder="HDFC0001234"
+                    autoCapitalize="characters"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[13px] font-medium text-[#344054]">
+                    Bank name
+                  </label>
+                  <input
+                    className={inputClass}
+                    value={payout.bankName}
+                    onChange={(e) => updatePayout('bankName', e.target.value)}
+                    placeholder="Bank name"
+                  />
+                </div>
+              </div>
+
+              <p className="pt-2 text-[12px] font-semibold uppercase tracking-wide text-[#667085]">
+                Or UPI
+              </p>
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-[#344054]">
+                  UPI ID <span className="font-normal text-[#98A2B3]">(optional if bank filled)</span>
+                </label>
+                <input
+                  className={inputClass}
+                  value={payout.upiId}
+                  onChange={(e) => updatePayout('upiId', e.target.value)}
+                  placeholder="name@upi"
+                />
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={saveForLater}
+                  onChange={(e) => setSaveForLater(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-[#D0D5DD] text-[#021A54] focus:ring-[#021A54]"
+                />
+                <span className="text-[13px] leading-snug text-[#344054]">
+                  <span className="font-semibold text-[#101828]">Save these details</span> for next
+                  redeem. Uncheck to use them only for this request.
+                </span>
+              </label>
+
+              {payoutError ? (
+                <p className="rounded-lg border border-[#FECDCA] bg-[#FEF3F2] px-3 py-2 text-[13px] text-[#B42318]">
+                  {payoutError}
+                </p>
+              ) : null}
+            </div>
+
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
@@ -364,7 +552,7 @@ export function AffiliateDashboard() {
                 style={{ backgroundColor: ACCENT }}
               >
                 {redeeming ? <Loader2 size={15} className="animate-spin" /> : null}
-                Confirm redeem
+                Submit redeem
               </button>
             </div>
           </div>

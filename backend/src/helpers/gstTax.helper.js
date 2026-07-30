@@ -34,18 +34,54 @@ const STATE_CODE_BY_NAME = {
   'dadra and nagar haveli and daman and diu': '26',
   'dadra & nagar haveli and daman & diu': '26',
   maharashtra: '27',
+  mh: '27',
   karnataka: '29',
+  ka: '29',
   goa: '30',
+  ga: '30',
   lakshadweep: '31',
   kerala: '32',
+  kl: '32',
   'tamil nadu': '33',
+  tamilnadu: '33',
+  tn: '33',
   puducherry: '34',
   pondicherry: '34',
+  py: '34',
   'andaman and nicobar islands': '35',
   'andaman & nicobar islands': '35',
   telangana: '36',
+  ts: '36',
   'andhra pradesh': '37',
+  ap: '37',
   ladakh: '38',
+  // Common short names / codes
+  jk: '01',
+  hp: '02',
+  pb: '03',
+  ch: '04',
+  uk: '05',
+  ua: '05',
+  hr: '06',
+  dl: '07',
+  rj: '08',
+  up: '09',
+  br: '10',
+  sk: '11',
+  ar: '12',
+  nl: '13',
+  mn: '14',
+  mz: '15',
+  tr: '16',
+  ml: '17',
+  as: '18',
+  wb: '19',
+  jh: '20',
+  od: '21',
+  or: '21',
+  cg: '22',
+  mp: '23',
+  gj: '24',
 };
 
 function normalizeStateKey(value) {
@@ -74,10 +110,12 @@ function getStateCodeFromName(stateName) {
   if (/^\d{2}$/.test(key)) return key;
   if (STATE_CODE_BY_NAME[key]) return STATE_CODE_BY_NAME[key];
 
-  // Match known state inside free-form address text (longest name wins)
+  // Match known state inside free-form address text (longest name wins).
+  // Skip 2–3 letter abbreviations here — they false-match inside words (as, or, up…).
   let best = null;
   let bestLen = 0;
   for (const [name, code] of Object.entries(STATE_CODE_BY_NAME)) {
+    if (name.length < 4) continue;
     if (key.includes(name) && name.length > bestLen) {
       best = code;
       bestLen = name.length;

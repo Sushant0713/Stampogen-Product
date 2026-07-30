@@ -26,7 +26,7 @@ const DEFAULT_INVOICE_SETTINGS = {
     sampleInvoiceNumber: 'INV-2026-00210',
     sampleInvoiceDate: '',
     dueDays: 30,
-    taxMode: 'sgst_cgst',
+    taxMode: 'igst',
     gstRate: 18,
     igstRate: 18,
     sgstRate: 9,

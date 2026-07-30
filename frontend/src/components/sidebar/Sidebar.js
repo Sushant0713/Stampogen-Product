@@ -1,16 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/utils';
-import { APP_NAME } from '@/constants';
+import { APP_NAME, ROLES } from '@/constants';
 import { SIDEBAR_CONFIG } from '@/constants/sidebar';
+import { userService } from '@/services/user.service';
 
-function NavLink({ item, collapsed, pathname }) {
+function formatBadgeCount(count) {
+  const n = Number(count) || 0;
+  if (n <= 0) return null;
+  return n > 99 ? '99+' : String(n);
+}
+
+function Badge({ count, active = false }) {
+  const label = formatBadgeCount(count);
+  if (!label) return null;
+  return (
+    <span
+      className={cn(
+        'ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none',
+        active ? 'bg-white text-primary' : 'bg-[#D92D20] text-white'
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function NavLink({ item, collapsed, pathname, badgeCount = 0 }) {
   const Icon = item.icon;
   const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const badge = formatBadgeCount(badgeCount);
 
   if (item.disabled) {
     return (
@@ -31,25 +54,33 @@ function NavLink({ item, collapsed, pathname }) {
     <Link
       href={item.href}
       prefetch={false}
-      title={collapsed ? item.label : undefined}
+      title={collapsed ? `${item.label}${badge ? ` (${badge})` : ''}` : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+        'relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
         collapsed && 'justify-center px-2',
         isActive ? 'bg-primary text-white' : 'text-foreground hover:bg-muted hover:text-primary'
       )}
     >
       {Icon && <Icon size={18} />}
-      {!collapsed && <span>{item.label}</span>}
+      {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+      {!collapsed ? <Badge count={badgeCount} active={isActive} /> : null}
+      {collapsed && badge ? (
+        <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#D92D20]" />
+      ) : null}
     </Link>
   );
 }
 
-function NavGroup({ item, collapsed, pathname }) {
+function NavGroup({ item, collapsed, pathname, badges = {} }) {
   const Icon = item.icon;
   const childActive = item.children?.some(
     (child) => pathname === child.href || pathname.startsWith(`${child.href}/`)
   );
   const [open, setOpen] = useState(childActive);
+  const groupBadgeCount = (item.children || []).reduce((sum, child) => {
+    if (!child.badgeKey) return sum;
+    return sum + (Number(badges[child.badgeKey]) || 0);
+  }, 0);
 
   useEffect(() => {
     if (childActive) setOpen(true);
@@ -60,15 +91,24 @@ function NavGroup({ item, collapsed, pathname }) {
       <div className="space-y-1">
         <div
           className={cn(
-            'flex justify-center rounded-md px-2 py-2.5',
+            'relative flex justify-center rounded-md px-2 py-2.5',
             childActive ? 'bg-primary text-white' : 'text-foreground'
           )}
-          title={item.label}
+          title={`${item.label}${groupBadgeCount ? ` (${formatBadgeCount(groupBadgeCount)})` : ''}`}
         >
           {Icon && <Icon size={18} />}
+          {groupBadgeCount > 0 ? (
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#D92D20]" />
+          ) : null}
         </div>
         {item.children?.map((child) => (
-          <NavLink key={child.href} item={child} collapsed pathname={pathname} />
+          <NavLink
+            key={child.href}
+            item={child}
+            collapsed
+            pathname={pathname}
+            badgeCount={child.badgeKey ? badges[child.badgeKey] : 0}
+          />
         ))}
       </div>
     );
@@ -88,16 +128,23 @@ function NavGroup({ item, collapsed, pathname }) {
       >
         {Icon && <Icon size={18} />}
         <span className="flex-1 text-left">{item.label}</span>
+        <Badge count={groupBadgeCount} />
         <ChevronDown
           size={16}
-          className={cn('transition-transform', open ? 'rotate-180' : 'rotate-0')}
+          className={cn('shrink-0 transition-transform', open ? 'rotate-180' : 'rotate-0')}
         />
       </button>
 
       {open && (
-        <div className="mt-1 space-y-1 border-l border-border ml-4 pl-2">
+        <div className="mt-1 ml-4 space-y-1 border-l border-border pl-2">
           {item.children.map((child) => (
-            <NavLink key={child.href} item={child} collapsed={false} pathname={pathname} />
+            <NavLink
+              key={child.href}
+              item={child}
+              collapsed={false}
+              pathname={pathname}
+              badgeCount={child.badgeKey ? badges[child.badgeKey] : 0}
+            />
           ))}
         </div>
       )}
@@ -108,6 +155,28 @@ function NavGroup({ item, collapsed, pathname }) {
 export function Sidebar({ role, collapsed, onToggle }) {
   const pathname = usePathname();
   const config = SIDEBAR_CONFIG[role];
+  const [badges, setBadges] = useState({});
+
+  const loadBadges = useCallback(async () => {
+    if (role !== ROLES.SUPER_ADMIN) {
+      setBadges({});
+      return;
+    }
+    try {
+      const { data } = await userService.getAffiliateStats();
+      const stats = data?.data?.stats || {};
+      setBadges({
+        pendingApprovals: Number(stats.pendingApprovals) || 0,
+        pendingRedeems: Number(stats.pendingRedeems) || 0,
+      });
+    } catch {
+      // Keep previous badges on soft failure
+    }
+  }, [role]);
+
+  useEffect(() => {
+    loadBadges();
+  }, [loadBadges, pathname]);
 
   if (!config) return null;
 
@@ -138,13 +207,20 @@ export function Sidebar({ role, collapsed, onToggle }) {
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {config.items.map((item) =>
           item.children?.length ? (
-            <NavGroup key={item.label} item={item} collapsed={collapsed} pathname={pathname} />
+            <NavGroup
+              key={item.label}
+              item={item}
+              collapsed={collapsed}
+              pathname={pathname}
+              badges={badges}
+            />
           ) : (
             <NavLink
               key={item.label}
               item={item}
               collapsed={collapsed}
               pathname={pathname}
+              badgeCount={item.badgeKey ? badges[item.badgeKey] : 0}
             />
           )
         )}

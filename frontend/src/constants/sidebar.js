@@ -43,7 +43,8 @@ export const SIDEBAR_CONFIG = {
         icon: Handshake,
         children: [
           { label: 'Affiliate list', href: 'affiliates' },
-          { label: 'Pending Affiliate', href: 'affiliates/pending' },
+          { label: 'Pending Affiliate', href: 'affiliates/pending', badgeKey: 'pendingApprovals' },
+          { label: 'Redeem', href: 'affiliates/redeem', badgeKey: 'pendingRedeems' },
           { label: 'Affiliate Settings', href: 'affiliates/settings' },
         ],
       },

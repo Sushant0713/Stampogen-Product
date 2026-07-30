@@ -157,27 +157,28 @@ async function createTenantForAdmin(
     };
   }
 
+  const nameFromInput = String(tenantName || '').trim();
   const name =
-    String(tenantName || '').trim() ||
+    nameFromInput ||
     `${[user.firstName, user.lastName].filter(Boolean).join(' ') || 'Shop'}'s Shop`;
   const existingId = user.tenant?._id || user.tenant || null;
 
   if (existingId && (await TenantRepository.existsById(existingId))) {
     const existing = await TenantRepository.findById(existingId);
-    const patch = {
-      name: name || existing.name,
-      billingProfile: billing,
-      ...(categoryFields || {}),
-    };
+    // Never overwrite a saved billing profile with empty registration defaults
+    // (email verification calls this without address fields).
+    const patch = {};
+    if (nameFromInput) {
+      patch.name = nameFromInput;
+    }
     if (hasBillingProfile(billing)) {
+      patch.billingProfile = billing;
       patch.loyaltyStampMode = stampMode;
-      return TenantRepository.updateById(existingId, patch);
     }
-    if (stampMode !== existing.loyaltyStampMode) {
-      patch.loyaltyStampMode = stampMode;
-      return TenantRepository.updateById(existingId, patch);
+    if (categoryFields) {
+      Object.assign(patch, categoryFields);
     }
-    if (categoryFields || name) {
+    if (Object.keys(patch).length) {
       return TenantRepository.updateById(existingId, patch);
     }
     return existing;
@@ -555,9 +556,15 @@ class AuthService {
     });
 
     if (updatedUser.role?.slug === ROLES.ADMIN || expectedRole === ROLES.ADMIN) {
-      const tenant = await createTenantForAdmin(updatedUser, null, TENANT_STATUS.ACTIVE);
-      if (tenant?._id) {
-        await TenantRepository.updateById(tenant._id, { status: TENANT_STATUS.ACTIVE });
+      const tenantId = updatedUser.tenant?._id || updatedUser.tenant || null;
+      if (tenantId && (await TenantRepository.existsById(tenantId))) {
+        // Activate only — do not recreate/patch billing (address was saved at register)
+        await TenantRepository.updateById(tenantId, { status: TENANT_STATUS.ACTIVE });
+      } else {
+        const tenant = await createTenantForAdmin(updatedUser, null, TENANT_STATUS.ACTIVE);
+        if (tenant?._id) {
+          await TenantRepository.updateById(tenant._id, { status: TENANT_STATUS.ACTIVE });
+        }
       }
     } else if (updatedUser.tenant?._id || updatedUser.tenant) {
       const tenantId = updatedUser.tenant._id || updatedUser.tenant;

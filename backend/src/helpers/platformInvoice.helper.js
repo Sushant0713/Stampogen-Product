@@ -132,6 +132,11 @@ function resolveCustomer({ tenant, payment = null, customerOverride = null }) {
 
   const pan = override.pan || billing.pan || settings.pan || owner.pan || '';
 
+  const state =
+    String(override.state || billing.state || pay.customerState || '').trim() ||
+    // Fall back to parsing free-form address when structured state was wiped/missing
+    '';
+
   return {
     name: String(name).trim(),
     email: String(email).trim().toLowerCase(),
@@ -139,7 +144,8 @@ function resolveCustomer({ tenant, payment = null, customerOverride = null }) {
     address: String(address).trim(),
     gstin: String(gstin).trim().toUpperCase(),
     pan: String(pan).trim().toUpperCase(),
-    state: String(override.state || billing.state || '').trim(),
+    state,
+    addressForTax: String(address || billing.address || billing.state || '').trim(),
     organization: String(tenant?.name || '').trim(),
     contactName: String(ownerName || pay.customerName || '').trim(),
   };
@@ -174,16 +180,19 @@ function buildPlanChangeInvoice({
 
   const customer = resolveCustomer({ tenant, payment, customerOverride });
 
-  const taxMode =
-    payment?.taxMode ||
-    resolveTaxMode({
-      companyGstin: settings.company?.gstin,
-      customerGstin: customer.gstin,
-      companyState: settings.company?.address,
-      customerState: customer.state,
-    }) ||
-    defaults.taxMode ||
-    'igst';
+  // Always resolve from places of supply first (GSTIN / state).
+  // Do not prefer a stale payment.taxMode or settings default of sgst_cgst
+  // when the client is in a different state — that must be IGST.
+  const resolvedTaxMode = resolveTaxMode({
+    companyGstin: settings.company?.gstin,
+    customerGstin: customer.gstin,
+    companyState: settings.company?.address || settings.company?.state,
+    customerState: customer.state || customer.addressForTax || customer.address,
+  });
+  // Never fall back to invoice-settings defaults.taxMode — that value is driven by the
+  // sample customer GSTIN (often same-state → sgst_cgst) and would wrongly force CGST+SGST
+  // on interstate clients. Prefer place-of-supply; else IGST.
+  const taxMode = resolvedTaxMode || 'igst';
 
   const listAmount = Number(
     payment?.listAmount != null ? payment.listAmount : pricePerCycle
@@ -197,18 +206,40 @@ function buildPlanChangeInvoice({
   );
 
   let tax;
-  if (
+  const paymentMode = String(payment?.taxMode || '').trim();
+  const canReusePaymentTax =
     payment &&
     payment.taxAmount != null &&
     payment.payableAmount != null &&
-    Number(payment.payableAmount) >= 0
-  ) {
+    Number(payment.payableAmount) >= 0 &&
+    paymentMode === taxMode;
+
+  if (canReusePaymentTax) {
     const breakdown = {
       gst: Number(payment.gstAmount) || 0,
       cgst: Number(payment.cgstAmount) || 0,
       sgst: Number(payment.sgstAmount) || 0,
       igst: Number(payment.igstAmount) || 0,
     };
+    // If stored mode disagrees with amounts (e.g. IGST total parked only in taxAmount),
+    // normalize breakdown to the resolved/display mode.
+    if (taxMode === 'igst' && !(Number(breakdown.igst) > 0) && Number(payment.taxAmount) > 0) {
+      breakdown.igst = Number(payment.taxAmount) || 0;
+      breakdown.cgst = 0;
+      breakdown.sgst = 0;
+      breakdown.gst = 0;
+    }
+    if (
+      taxMode === 'sgst_cgst' &&
+      !(Number(breakdown.cgst) > 0 || Number(breakdown.sgst) > 0) &&
+      Number(payment.taxAmount) > 0
+    ) {
+      const half = Math.round((Number(payment.taxAmount) / 2) * 100) / 100;
+      breakdown.cgst = half;
+      breakdown.sgst = Number(payment.taxAmount) - half;
+      breakdown.igst = 0;
+      breakdown.gst = 0;
+    }
     tax = {
       taxLabel: payment.taxLabel || `Tax (${taxMode})`,
       taxAmt: Number(payment.taxAmount) || 0,
@@ -418,11 +449,20 @@ function rebuildInvoiceFromRecord({
     new Date().toISOString().slice(0, 10);
   const parsed = parseInvoiceNumber(invoiceNumber);
 
+  const billing =
+    tenant?.billingProfile && typeof tenant.billingProfile === 'object'
+      ? tenant.billingProfile
+      : {};
   const customerOverride = {
     name: record?.clientName || record?.shopName || '',
     email: record?.clientEmail || record?.recipient || '',
     organization: record?.shopName || '',
     contactName: record?.clientName || '',
+    gstin: billing.gstin || '',
+    state: billing.state || '',
+    address: billing.address || '',
+    phone: billing.phone || '',
+    pan: billing.pan || '',
   };
 
   return buildPlanChangeInvoice({

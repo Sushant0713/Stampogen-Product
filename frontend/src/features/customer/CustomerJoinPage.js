@@ -190,7 +190,9 @@ export function CustomerJoinPage({ slug }) {
               {shop.initials || shopInitials(shop.name)}
             </div>
             <div>
-              <h1 className="text-3xl font-extrabold tracking-tight">{shop.name}</h1>
+              <h1 className="text-3xl font-extrabold tracking-tight text-white">
+                {shop.name}
+              </h1>
               <p className="mt-1 text-sm text-white/70">{shop.campaign}</p>
             </div>
           </div>

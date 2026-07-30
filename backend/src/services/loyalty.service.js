@@ -15,6 +15,87 @@ const LEGACY_DEFAULT_OFFER_KEYS = new Set(['free_reward', 'percent_off']);
 
 const OFFER_COLORS = ['#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#021A54', '#14B8A6'];
 
+/** Visit / redeem history retained for 2 calendar months. */
+const HISTORY_RETENTION_MONTHS = 2;
+
+function historyCutoff(now = new Date()) {
+  const d = new Date(now);
+  d.setMonth(d.getMonth() - HISTORY_RETENTION_MONTHS);
+  return d;
+}
+
+function pruneDatedEntries(entries = [], cutoff = historyCutoff()) {
+  return (entries || []).filter((entry) => {
+    if (!entry?.at) return false;
+    const at = new Date(entry.at);
+    return !Number.isNaN(at.getTime()) && at >= cutoff;
+  });
+}
+
+function appendDatedHistory(existing = [], entry, cutoff = historyCutoff()) {
+  return pruneDatedEntries([...(existing || []), entry], cutoff);
+}
+
+function buildVisitEventsFromLegacy(membership) {
+  const events = [];
+  (membership.bills || []).forEach((bill) => {
+    if (!bill?.stampedAt) return;
+    events.push({
+      at: bill.stampedAt,
+      offerKey: bill.offerKey || '',
+      offerTitle: bill.offerTitle || 'Stamp',
+      source: 'bill',
+    });
+  });
+  (membership.stampRequests || []).forEach((request) => {
+    if (request.status !== 'approved') return;
+    const at = request.resolvedAt || request.requestedAt;
+    if (!at) return;
+    events.push({
+      at,
+      offerKey: request.offerKey || '',
+      offerTitle: request.offerTitle || 'Stamp',
+      source: 'request',
+    });
+  });
+  events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  return pruneDatedEntries(events);
+}
+
+/** Restart an offer cycle after a completed redeem so the customer can earn it again. */
+function restartOfferAfterRedeem(offer) {
+  if (!offer || offer.rewardStatus !== 'redeemed') return offer;
+  return {
+    ...offer,
+    stamps: 0,
+    rewardStatus: 'collecting',
+    verifiedAt: null,
+    redeemedAt: null,
+  };
+}
+
+/**
+ * Repeat customer = collected a stamp, then came back and collected another
+ * (same or different offer). No other rules.
+ */
+function isRepeatCustomer(membership) {
+  const totalStamps = ensureOffers(membership).reduce(
+    (sum, offer) => sum + (Number(offer.stamps) || 0),
+    0
+  );
+  if (totalStamps > 1) return true;
+
+  // After redeem, stamps reset to 0 — keep counting if they stamped 2+ times before
+  const visits = pruneDatedEntries(membership.visitHistory || []);
+  return visits.length > 1;
+}
+
+function countRedeemedRewards(membership) {
+  const history = pruneDatedEntries(membership.offerRedeemHistory || []);
+  if (history.length) return history.length;
+  return ensureOffers(membership).filter((o) => o.rewardStatus === 'redeemed').length;
+}
+
 function shopInitials(name = '') {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return 'S';
@@ -753,6 +834,18 @@ class LoyaltyService {
     let membership = await LoyaltyMembershipRepository.findByUserAndTenant(userId, tenant._id);
     if (membership) {
       membership = await this.syncMembershipCatalog(membership, catalog);
+      // Returning via shop QR: prior join counts as 1 even if field was never set
+      const lastAt = membership.lastShopQrScanAt
+        ? new Date(membership.lastShopQrScanAt).getTime()
+        : 0;
+      const recentlyCounted = lastAt > 0 && Date.now() - lastAt < 2 * 60 * 1000;
+      if (!recentlyCounted) {
+        const prev = Math.max(1, Number(membership.shopQrScanCount) || 0);
+        membership = await LoyaltyMembershipRepository.updateById(membership._id, {
+          shopQrScanCount: prev + 1,
+          lastShopQrScanAt: new Date(),
+        });
+      }
       return {
         card: formatCard(membership, catalog),
         alreadyMember: true,
@@ -769,6 +862,8 @@ class LoyaltyService {
       ...DEFAULT_CAMPAIGN,
       rewardStatus: 'collecting',
       offers,
+      shopQrScanCount: 1,
+      lastShopQrScanAt: new Date(),
     });
     membership = await LoyaltyMembershipRepository.findByUserAndTenant(userId, tenant._id);
 
@@ -870,7 +965,8 @@ class LoyaltyService {
       throw new AppError('This offer is not available right now', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const offer = offers[offerIndex];
+    const offer = restartOfferAfterRedeem(offers[offerIndex]);
+    offers[offerIndex] = offer;
     if (['pending', 'verified'].includes(offer.rewardStatus)) {
       throw new AppError(
         'This offer is waiting for the shop to verify. New stamps are paused.',
@@ -891,6 +987,17 @@ class LoyaltyService {
 
     const offerLabel = String(offerTitle || offer.title || '').trim().slice(0, 200);
     const fileName = String(billDocumentName || 'bill.jpg').trim().slice(0, 200);
+    const stampedAt = new Date();
+    let baseVisits = pruneDatedEntries(membership.visitHistory || []);
+    if (!baseVisits.length) {
+      baseVisits = buildVisitEventsFromLegacy(membership);
+    }
+    const visitHistory = appendDatedHistory(baseVisits, {
+      at: stampedAt,
+      offerKey: key,
+      offerTitle: offerLabel,
+      source: 'bill',
+    });
 
     const updated = await LoyaltyMembershipRepository.addStampWithBill(membership._id, {
       offerKey: key,
@@ -900,6 +1007,7 @@ class LoyaltyService {
       offers,
       primaryStamps: offers[0]?.stamps || 0,
       primaryRewardStatus: offers[0]?.rewardStatus || 'collecting',
+      visitHistory,
     });
 
     try {
@@ -971,7 +1079,8 @@ class LoyaltyService {
       throw new AppError('This offer is not available right now', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const offer = offers[offerIndex];
+    const offer = restartOfferAfterRedeem(offers[offerIndex]);
+    offers[offerIndex] = offer;
     if (['pending', 'verified'].includes(offer.rewardStatus)) {
       throw new AppError(
         'This offer is waiting for the shop. New stamp requests are paused.',
@@ -997,7 +1106,10 @@ class LoyaltyService {
       },
     ];
 
-    const updated = await LoyaltyMembershipRepository.updateById(membership._id, { stampRequests });
+    const updated = await LoyaltyMembershipRepository.updateById(membership._id, {
+      offers,
+      stampRequests,
+    });
 
     try {
       const tenantDoc = await TenantRepository.findById(tenant._id);
@@ -1129,14 +1241,28 @@ class LoyaltyService {
     );
 
     const offerLabel = request.offerTitle || offer.title;
+    const resolvedAt = new Date();
+    let baseVisits = pruneDatedEntries(membership.visitHistory || []);
+    if (!baseVisits.length) {
+      // Request mode has no bills — legacy visits already live on approved stampRequests
+      baseVisits = buildVisitEventsFromLegacy(membership);
+    }
+    const visitHistory = appendDatedHistory(baseVisits, {
+      at: resolvedAt,
+      offerKey: request.offerKey,
+      offerTitle: offerLabel,
+      source: 'request',
+    });
+
     const updated = await LoyaltyMembershipRepository.updateById(membership._id, {
       offers,
       stampRequests,
       stamps: offers[0]?.stamps || 0,
       rewardStatus: offers[0]?.rewardStatus || 'collecting',
-      lastStampAt: new Date(),
+      lastStampAt: resolvedAt,
       lastOfferKey: request.offerKey,
       lastOfferTitle: offerLabel,
+      visitHistory,
     });
 
     const { catalog } = await this.getCatalogForTenant(tenantId);
@@ -1190,16 +1316,19 @@ class LoyaltyService {
     const tenantId = await this.getAdminTenantId(adminUser);
     const tenant = await TenantRepository.findById(tenantId);
     if (!tenant) throw new AppError('Shop not found', HTTP_STATUS.NOT_FOUND);
+    const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
     return {
       loyaltyStampMode: readStampMode(tenant),
       shopName: tenant.name,
       socialLinks: readSocialLinks(tenant),
+      billingProfile: normalizeBillingProfile(tenant.billingProfile || {}),
     };
   }
 
-  async updateAdminSettings(adminUser, { loyaltyStampMode, socialLinks } = {}) {
+  async updateAdminSettings(adminUser, { loyaltyStampMode, socialLinks, billingProfile } = {}) {
     const tenantId = await this.getAdminTenantId(adminUser);
     const { LOYALTY_STAMP_MODE_VALUES } = require('@constants');
+    const { normalizeBillingProfile, hasBillingProfile } = require('@helpers/billingProfile.helper');
     const patch = {};
 
     if (loyaltyStampMode !== undefined) {
@@ -1216,15 +1345,47 @@ class LoyaltyService {
       patch.socialLinks = normalizeSocialLinks(socialLinks);
     }
 
+    if (billingProfile !== undefined) {
+      if (!billingProfile || typeof billingProfile !== 'object' || Array.isArray(billingProfile)) {
+        throw new AppError('Invalid billing profile', HTTP_STATUS.BAD_REQUEST);
+      }
+      const billing = normalizeBillingProfile(billingProfile);
+      if (!hasBillingProfile(billing)) {
+        throw new AppError('Billing address is required', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (!billing.street && !billing.address) {
+        throw new AppError('Street address is required', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (!billing.state) {
+        throw new AppError('State is required', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (!billing.city) {
+        throw new AppError('City is required', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (!/^\d{6}$/.test(billing.pin || '')) {
+        throw new AppError('PIN must be 6 digits', HTTP_STATUS.BAD_REQUEST);
+      }
+      patch.billingProfile = billing;
+      if (billing.phone) {
+        const UserRepository = require('@repositories/user.repository');
+        const ownerId = adminUser._id || adminUser.id;
+        if (ownerId) {
+          await UserRepository.updateById(ownerId, { phone: billing.phone });
+        }
+      }
+    }
+
     if (!Object.keys(patch).length) {
       throw new AppError('Nothing to update', HTTP_STATUS.BAD_REQUEST);
     }
 
     const tenant = await TenantRepository.updateById(tenantId, patch);
+    if (!tenant) throw new AppError('Shop not found', HTTP_STATUS.NOT_FOUND);
     return {
       loyaltyStampMode: readStampMode(tenant),
       shopName: tenant.name,
       socialLinks: readSocialLinks(tenant),
+      billingProfile: normalizeBillingProfile(tenant.billingProfile || {}),
     };
   }
 
@@ -1307,32 +1468,42 @@ class LoyaltyService {
     const totalStamps = offers.reduce((sum, o) => sum + (o.stamps || 0), 0);
     const stampsRequired = offers.reduce((sum, o) => sum + (o.stampsRequired || 0), 0);
 
-    const events = [];
-    (membership.bills || []).forEach((bill) => {
-      if (!bill?.stampedAt) return;
-      events.push({
-        at: bill.stampedAt,
-        offerTitle: bill.offerTitle || 'Stamp',
-        source: 'bill',
-      });
-    });
-    (membership.stampRequests || []).forEach((request) => {
-      if (request.status !== 'approved') return;
-      const at = request.resolvedAt || request.requestedAt;
-      if (!at) return;
-      events.push({
-        at,
-        offerTitle: request.offerTitle || 'Stamp',
-        source: 'request',
-      });
-    });
-    events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+    const cutoff = historyCutoff();
+    let visitHistory = pruneDatedEntries(membership.visitHistory || [], cutoff);
+    let offerRedeemHistory = pruneDatedEntries(membership.offerRedeemHistory || [], cutoff);
 
-    const scanHistory = events.map((event, index) => ({
+    // Backfill durable visit log from live bills / approved requests (pre-history records)
+    if (!visitHistory.length) {
+      visitHistory = buildVisitEventsFromLegacy(membership);
+    }
+
+    const historyChanged =
+      visitHistory.length !== (membership.visitHistory || []).length ||
+      offerRedeemHistory.length !== (membership.offerRedeemHistory || []).length ||
+      ((membership.visitHistory || []).length === 0 && visitHistory.length > 0);
+
+    if (historyChanged) {
+      void LoyaltyMembershipRepository.updateById(membership._id, {
+        visitHistory,
+        offerRedeemHistory,
+      }).catch((error) => {
+        console.warn('[loyalty] history prune/backfill failed:', error.message);
+      });
+    }
+
+    visitHistory = [...visitHistory].sort(
+      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
+    );
+    offerRedeemHistory = [...offerRedeemHistory].sort(
+      (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+    );
+
+    const scanHistory = visitHistory.map((event, index) => ({
       index: index + 1,
       at: event.at,
-      offerTitle: event.offerTitle,
-      source: event.source,
+      offerTitle: event.offerTitle || 'Stamp',
+      offerKey: event.offerKey || '',
+      source: event.source || 'bill',
     }));
 
     const lastVisit =
@@ -1355,6 +1526,11 @@ class LoyaltyService {
       totalVisits: scanHistory.length,
       lastVisit,
       scanHistory,
+      offerHistory: offerRedeemHistory.map((entry) => ({
+        at: entry.at,
+        offerKey: entry.offerKey || '',
+        offerTitle: entry.offerTitle || 'Offer',
+      })),
       offers: offers.map((offer) => ({
         key: offer.key,
         title: offer.title,
@@ -1400,12 +1576,16 @@ class LoyaltyService {
     let pendingRewards = 0;
     let redeemedRewards = 0;
     let pendingStampRequests = 0;
+    let repeatCustomers = 0;
     rows.forEach((membership) => {
       pendingStampRequests += (membership.stampRequests || []).filter((r) => r.status === 'pending').length;
       ensureOffers(membership).forEach((o) => {
         if (o.rewardStatus === 'pending' || o.rewardStatus === 'verified') pendingRewards += 1;
-        if (o.rewardStatus === 'redeemed') redeemedRewards += 1;
       });
+      redeemedRewards += countRedeemedRewards(membership);
+      if (isRepeatCustomer(membership)) {
+        repeatCustomers += 1;
+      }
     });
     const tenant = await TenantRepository.findById(tenantId);
     const qrScans = await this.getLoyaltyQrScanStats(tenantId);
@@ -1414,6 +1594,7 @@ class LoyaltyService {
       pendingRewards,
       pendingStampRequests,
       redeemedRewards,
+      repeatCustomers,
       activeCampaigns: catalog.filter((o) => o.status === 'active').length,
       loyaltyStampMode: readStampMode(tenant),
       qrScans,
@@ -1427,6 +1608,15 @@ class LoyaltyService {
 
     const redemptionCounts = {};
     rows.forEach((membership) => {
+      const history = pruneDatedEntries(membership.offerRedeemHistory || []);
+      if (history.length) {
+        history.forEach((entry) => {
+          const key = entry.offerKey;
+          if (!key) return;
+          redemptionCounts[key] = (redemptionCounts[key] || 0) + 1;
+        });
+        return;
+      }
       ensureOffers(membership).forEach((o) => {
         if (o.rewardStatus === 'redeemed') {
           redemptionCounts[o.key] = (redemptionCounts[o.key] || 0) + 1;
@@ -1702,6 +1892,12 @@ class LoyaltyService {
     );
     const remainingBills = (membership.bills || []).filter((b) => b.offerKey && b.offerKey !== offerKey);
 
+    // Keep durable visit log even when cancelling / clearing active bills
+    let visitHistory = pruneDatedEntries(membership.visitHistory || []);
+    if (!visitHistory.length) {
+      visitHistory = buildVisitEventsFromLegacy(membership);
+    }
+
     await LoyaltyMembershipRepository.updateById(membershipId, {
       offers,
       bills: remainingBills,
@@ -1712,6 +1908,8 @@ class LoyaltyService {
       lastOfferKey: '',
       lastOfferTitle: '',
       lastBillDocumentName: '',
+      visitHistory,
+      offerRedeemHistory: pruneDatedEntries(membership.offerRedeemHistory || []),
     });
 
     return formatAdminOfferRow(
@@ -1755,6 +1953,22 @@ class LoyaltyService {
           }
         : o
     );
+    const redeemedOffer = offers.find((o) => o.key === offerKey);
+    const redeemedAt = new Date();
+    const offerRedeemHistory = appendDatedHistory(membership.offerRedeemHistory, {
+      at: redeemedAt,
+      offerKey,
+      offerTitle: redeemedOffer?.title || detail.offer || detail.reward || 'Offer',
+    });
+
+    // Preserve visits before bills for this offer are cleared
+    let visitHistory = pruneDatedEntries(membership.visitHistory || []);
+    if (!visitHistory.length) {
+      visitHistory = buildVisitEventsFromLegacy(membership);
+    } else {
+      visitHistory = pruneDatedEntries(visitHistory);
+    }
+
     const remainingBills = (membership.bills || []).filter((b) => b.offerKey && b.offerKey !== offerKey);
 
     await LoyaltyMembershipRepository.updateById(membershipId, {
@@ -1763,8 +1977,10 @@ class LoyaltyService {
       billCount: remainingBills.length,
       stamps: offers[0]?.stamps || 0,
       rewardStatus: offers[0]?.rewardStatus || 'collecting',
-      redeemedAt: new Date(),
+      redeemedAt,
       lastBillDocumentName: '',
+      visitHistory,
+      offerRedeemHistory,
     });
 
     return formatAdminOfferRow(

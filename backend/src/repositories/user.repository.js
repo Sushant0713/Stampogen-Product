@@ -98,39 +98,50 @@ class UserRepository {
     };
   }
 
-  /** Single-pass counts for the affiliate list header (total / active / suspended). */
+  /** Counts for affiliate list header + sidebar badges. */
   async affiliateStats() {
     const RoleRepository = require('@repositories/role.repository');
     const { ROLES } = require('@constants/roles');
     const {
       AFFILIATE_APPROVAL_STATUS,
+      AFFILIATE_PENDING_STATUSES,
     } = require('@constants/affiliateApproval');
 
     const role = await RoleRepository.findBySlug(ROLES.AFFILIATE);
-    if (!role) return { total: 0, active: 0, inactive: 0 };
+    if (!role) {
+      return { total: 0, active: 0, inactive: 0, pendingApprovals: 0 };
+    }
 
-    const [row] = await User.aggregate([
-      {
-        $match: {
-          role: role._id,
-          // Include legacy affiliates with no approval field (mirrors list filter)
-          affiliateApprovalStatus: { $in: [AFFILIATE_APPROVAL_STATUS.APPROVED, null] },
+    const [approvedRow, pendingApprovals] = await Promise.all([
+      User.aggregate([
+        {
+          $match: {
+            role: role._id,
+            // Include legacy affiliates with no approval field (mirrors list filter)
+            affiliateApprovalStatus: { $in: [AFFILIATE_APPROVAL_STATUS.APPROVED, null] },
+          },
         },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          active: { $sum: { $cond: ['$isActive', 1, 0] } },
-          inactive: { $sum: { $cond: ['$isActive', 0, 1] } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            active: { $sum: { $cond: ['$isActive', 1, 0] } },
+            inactive: { $sum: { $cond: ['$isActive', 0, 1] } },
+          },
         },
-      },
+      ]),
+      User.countDocuments({
+        role: role._id,
+        affiliateApprovalStatus: { $in: AFFILIATE_PENDING_STATUSES },
+      }),
     ]);
 
+    const row = approvedRow[0];
     return {
       total: row?.total || 0,
       active: row?.active || 0,
       inactive: row?.inactive || 0,
+      pendingApprovals: pendingApprovals || 0,
     };
   }
 

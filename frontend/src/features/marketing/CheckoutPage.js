@@ -137,7 +137,7 @@ function CheckoutPageInner() {
           ...(code ? { discountCode: code } : {}),
           customerEmail: user?.email || '',
           customerGstin: billing.gstin || '',
-          customerState: billing.state || '',
+          customerState: billing.state || billing.address || '',
         };
         const { data } = await paymentService.preview(payload);
         setQuote(data.data.quote);
@@ -177,7 +177,7 @@ function CheckoutPageInner() {
         discountCode: code,
         customerEmail: form.customerEmail || user?.email || '',
         customerGstin: billing.gstin || '',
-        customerState: billing.state || '',
+        customerState: billing.state || billing.address || '',
       };
       const { data } = await paymentService.preview(payload);
       setQuote(data.data.quote);
@@ -233,7 +233,8 @@ function CheckoutPageInner() {
         })(),
         customerState: (() => {
           const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
-          return tenant?.billingProfile?.state || '';
+          const billing = tenant?.billingProfile || {};
+          return billing.state || billing.address || '';
         })(),
       });
 

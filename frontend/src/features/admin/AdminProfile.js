@@ -20,6 +20,10 @@ import {
   SocialPlatformIcon,
   emptySocialLinks,
 } from '@/features/shared/ShopSocialLinks';
+import {
+  BillingAddressFields,
+  composeBillingAddress,
+} from '@/components/forms/BillingAddressFields';
 import { loyaltyService } from '@/services/loyalty.service';
 import {
   DEFAULT_STAMP_SOUND_VOLUME,
@@ -28,6 +32,17 @@ import {
   setStampRequestSoundVolume,
   unlockStampRequestSound,
 } from '@/utils/stampRequestSound';
+
+const EMPTY_BILLING = {
+  phone: '',
+  street: '',
+  state: '',
+  stateCode: '',
+  city: '',
+  pin: '',
+  gstin: '',
+  pan: '',
+};
 
 function initials(fullName) {
   const parts = String(fullName || 'A').trim().split(/\s+/).filter(Boolean);
@@ -86,6 +101,10 @@ export function AdminProfile() {
   const [socialLinks, setSocialLinks] = useState(() => emptySocialLinks());
   const [savingSocial, setSavingSocial] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
+  const [billing, setBilling] = useState(EMPTY_BILLING);
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [savingBilling, setSavingBilling] = useState(false);
+  const [billingErrors, setBillingErrors] = useState({});
 
   useEffect(() => {
     setSoundVolume(getStampRequestSoundVolume());
@@ -101,6 +120,22 @@ export function AdminProfile() {
       if (settings?.socialLinks) {
         setSocialLinks({ ...emptySocialLinks(), ...settings.socialLinks });
       }
+      if (settings?.billingProfile) {
+        const bp = settings.billingProfile;
+        setBilling({
+          phone: bp.phone || '',
+          street: bp.street || '',
+          state: bp.state || '',
+          stateCode: '',
+          city: bp.city || '',
+          pin: bp.pin || '',
+          gstin: bp.gstin || '',
+          pan: bp.pan || '',
+        });
+        if (!bp.street && !bp.city && !bp.pin) {
+          setBillingOpen(true);
+        }
+      }
     } catch {
       // keep tenant value from user context
     }
@@ -109,6 +144,61 @@ export function AdminProfile() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  const handleBillingChange = (next) => {
+    setBilling((prev) => ({ ...prev, ...next }));
+    setBillingErrors({});
+  };
+
+  const handleSaveBilling = async () => {
+    const street = String(billing.street || '').trim();
+    const city = String(billing.city || '').trim();
+    const state = String(billing.state || '').trim();
+    const pin = String(billing.pin || '').trim();
+    const phone = String(billing.phone || '').trim();
+    const nextErrors = {};
+    if (street.length < 3) nextErrors.street = 'Street address is required';
+    if (!state) nextErrors.state = 'State is required';
+    if (!city) nextErrors.city = 'City is required';
+    if (!/^\d{6}$/.test(pin)) nextErrors.pin = 'PIN must be 6 digits';
+    if (phone && phone.replace(/\D/g, '').length < 8) nextErrors.phone = 'Enter a valid phone';
+    if (Object.keys(nextErrors).length) {
+      setBillingErrors(nextErrors);
+      toast.error('Please complete the billing address');
+      return;
+    }
+
+    setSavingBilling(true);
+    try {
+      const payload = {
+        phone,
+        street,
+        city,
+        state,
+        pin,
+        address: composeBillingAddress({ street, city, state, pin }),
+        gstin: String(billing.gstin || '').trim().toUpperCase(),
+        pan: String(billing.pan || '').trim().toUpperCase(),
+      };
+      const { data } = await loyaltyService.adminUpdateSettings({ billingProfile: payload });
+      const saved = data?.data?.settings?.billingProfile || payload;
+      setBilling({
+        phone: saved.phone || '',
+        street: saved.street || '',
+        state: saved.state || '',
+        stateCode: '',
+        city: saved.city || '',
+        pin: saved.pin || '',
+        gstin: saved.gstin || '',
+        pan: saved.pan || '',
+      });
+      toast.success('Billing address saved');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to save billing address'));
+    } finally {
+      setSavingBilling(false);
+    }
+  };
 
   const handleSoundVolumeChange = (next) => {
     const saved = setStampRequestSoundVolume(Number(next) / 100);
@@ -215,6 +305,90 @@ export function AdminProfile() {
           onChange={handleModeChange}
           disabled={savingMode}
         />
+      </div>
+
+      <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">
+        BILLING ADDRESS
+      </p>
+      <div className={adminCardClass('mb-5 overflow-hidden')}>
+        <button
+          type="button"
+          onClick={() => setBillingOpen((v) => !v)}
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-[#F8FAFC]"
+          aria-expanded={billingOpen}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-[#021A54]">Invoice &amp; client details</p>
+            <p className="mt-0.5 text-xs text-[#64748B]">
+              {billing.street
+                ? `${billing.street}${billing.city ? ` · ${billing.city}` : ''}`
+                : 'Add your shop address for invoices'}
+            </p>
+          </div>
+          <ChevronDown
+            size={18}
+            className={`shrink-0 text-[#94A3B8] transition ${billingOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        {billingOpen ? (
+          <div className="space-y-3 border-t border-[#F1F5F9] px-4 pb-4 pt-3">
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-bold text-[#021A54]">Phone</span>
+              <input
+                type="tel"
+                value={billing.phone}
+                onChange={(e) => handleBillingChange({ phone: e.target.value })}
+                placeholder="+91 98765 43210"
+                className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 text-[13px] text-[#021A54] outline-none transition placeholder:text-[#94A3B8] focus:border-[#3B82F6] focus:bg-white focus:ring-2 focus:ring-[#3B82F6]/20"
+              />
+              {billingErrors.phone ? (
+                <p className="mt-1 text-xs text-red-500">{billingErrors.phone}</p>
+              ) : null}
+            </label>
+
+            <BillingAddressFields
+              idPrefix="profile-"
+              values={billing}
+              errors={billingErrors}
+              onChange={handleBillingChange}
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] font-bold text-[#021A54]">
+                  GSTIN <span className="font-normal text-[#94A3B8]">(optional)</span>
+                </span>
+                <input
+                  value={billing.gstin}
+                  onChange={(e) => handleBillingChange({ gstin: e.target.value.toUpperCase() })}
+                  placeholder="22AAAAA0000A1Z5"
+                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 text-[13px] text-[#021A54] outline-none transition placeholder:text-[#94A3B8] focus:border-[#3B82F6] focus:bg-white focus:ring-2 focus:ring-[#3B82F6]/20"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] font-bold text-[#021A54]">
+                  PAN <span className="font-normal text-[#94A3B8]">(optional)</span>
+                </span>
+                <input
+                  value={billing.pan}
+                  onChange={(e) => handleBillingChange({ pan: e.target.value.toUpperCase() })}
+                  placeholder="ABCDE1234F"
+                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 text-[13px] text-[#021A54] outline-none transition placeholder:text-[#94A3B8] focus:border-[#3B82F6] focus:bg-white focus:ring-2 focus:ring-[#3B82F6]/20"
+                />
+              </label>
+            </div>
+
+            <button
+              type="button"
+              disabled={savingBilling}
+              onClick={handleSaveBilling}
+              className="mt-2 w-full rounded-2xl bg-[#021A54] py-3 text-sm font-bold text-white hover:bg-[#0B2C6E] disabled:opacity-60"
+            >
+              {savingBilling ? 'Saving…' : 'Save billing address'}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">

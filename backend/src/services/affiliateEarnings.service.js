@@ -3,6 +3,12 @@ const { HTTP_STATUS } = require('@constants');
 const { ROLES } = require('@constants/roles');
 const AffiliateEarningsRepository = require('@repositories/affiliateEarnings.repository');
 const AffiliateSettingsService = require('@services/affiliateSettings.service');
+const UserRepository = require('@repositories/user.repository');
+const {
+  normalizeAffiliatePayout,
+  payoutFromUser,
+  formatPayoutForResponse,
+} = require('@helpers/affiliatePayout.helper');
 
 function assertAffiliate(user) {
   const slug = user?.role?.slug || user?.role;
@@ -58,7 +64,6 @@ function pickCurrentClients(payments, currentTotal, commissionPercent) {
         customerName: payment.customerName || '',
         customerEmail: payment.customerEmail || '',
         planName: payment.planName || '',
-        /** What we credit the affiliate (settings % of taxable) */
         amount: earned,
         listAmount,
         discountAmount,
@@ -74,6 +79,39 @@ function pickCurrentClients(payments, currentTotal, commissionPercent) {
   return picked;
 }
 
+function mapRedeemRow(row) {
+  const rawAffiliate = row.affiliateUser;
+  const u =
+    rawAffiliate && typeof rawAffiliate === 'object' && (rawAffiliate.email || rawAffiliate.firstName)
+      ? rawAffiliate
+      : null;
+  const name = u
+    ? [u.firstName, u.middleName, u.lastName].filter(Boolean).join(' ').trim()
+    : '';
+  return {
+    id: String(row._id),
+    amount: Number(row.amount) || 0,
+    discountCode: row.discountCode || '',
+    redeemedAt: row.redeemedAt,
+    note: row.note || '',
+    status: row.status || 'pending',
+    decisionNote: row.decisionNote || '',
+    decidedAt: row.decidedAt || null,
+    payoutMethod: row.payoutMethod || '',
+    payout: formatPayoutForResponse(row),
+    affiliate: u
+      ? {
+          id: String(u._id || ''),
+          name: name || '—',
+          email: u.email || '',
+          phone: u.phone || '',
+          affiliateType: u.affiliateType || null,
+          discountCode: u.affiliateDiscountCode || row.discountCode || '',
+        }
+      : null,
+  };
+}
+
 class AffiliateEarningsService {
   async getSummary(user) {
     assertAffiliate(user);
@@ -87,7 +125,6 @@ class AffiliateEarningsService {
         ? user.affiliateMinimumTargetValue
         : typeConfig?.minimumTargetValue ?? 0
     );
-    // Prefer per-affiliate override, else Affiliate Settings earning %
     const commissionPercent = Math.min(
       100,
       Math.max(
@@ -108,7 +145,6 @@ class AffiliateEarningsService {
         })
       : [];
 
-    // Lifetime earning = sum of (taxable × earning%) for every referred paid client
     const lifetimeEarned = roundMoney(
       attributedPayments.reduce(
         (sum, payment) => sum + earningForPayment(payment, commissionPercent),
@@ -117,7 +153,6 @@ class AffiliateEarningsService {
     );
 
     const totalRedeemed = roundMoney(redeemStats.totalRedeemed);
-    // Current = what we owe this cycle (lifetime earning − already redeemed)
     const current = Math.max(0, roundMoney(lifetimeEarned - totalRedeemed));
     const totalRevenue = roundMoney(totalRedeemed + current);
     const canRedeem = minTarget > 0 && current >= minTarget;
@@ -136,7 +171,6 @@ class AffiliateEarningsService {
       affiliateType: user.affiliateType || null,
       typeLabel: typeConfig?.label || user.affiliateType || null,
       minTarget,
-      /** % from Affiliate Settings used to calculate what we pay the affiliate */
       commissionPercent,
       currentTotal: current,
       totalRevenue,
@@ -150,10 +184,11 @@ class AffiliateEarningsService {
       lastRedeemedAt: redeemStats.lastRedeemedAt,
       remainingToRedeem: minTarget > 0 ? Math.max(0, roundMoney(minTarget - current)) : 0,
       currentClients,
+      savedPayout: payoutFromUser(user),
     };
   }
 
-  async redeem(user, { note = '' } = {}) {
+  async redeem(user, body = {}) {
     assertAffiliate(user);
 
     const summary = await this.getSummary(user);
@@ -179,23 +214,40 @@ class AffiliateEarningsService {
       throw new AppError('Nothing available to redeem', HTTP_STATUS.BAD_REQUEST);
     }
 
+    const payout = normalizeAffiliatePayout(body);
+    const saveForLater = Boolean(body.saveForLater);
+    const note = String(body.note || '').trim().slice(0, 500);
+
     const redeem = await AffiliateEarningsRepository.createRedeem({
       affiliateUser: user._id,
       amount: summary.currentTotal,
       discountCode: summary.discountCode,
       attributedRevenueAtRedeem: summary.currentTotal,
       minTargetAtRedeem: summary.minTarget,
-      note: String(note || '').trim().slice(0, 500),
+      note,
+      accountHolderName: payout.accountHolderName,
+      accountNumber: payout.accountNumber,
+      ifsc: payout.ifsc,
+      bankName: payout.bankName,
+      upiId: payout.upiId,
+      payoutMethod: payout.payoutMethod,
+      status: 'pending',
       redeemedAt: new Date(),
     });
 
-    const next = await this.getSummary(user);
+    if (saveForLater) {
+      await UserRepository.updateById(user._id, {
+        affiliatePayoutAccountHolderName: payout.accountHolderName,
+        affiliatePayoutAccountNumber: payout.accountNumber,
+        affiliatePayoutIfsc: payout.ifsc,
+        affiliatePayoutBankName: payout.bankName,
+        affiliatePayoutUpiId: payout.upiId,
+      });
+    }
+
+    const next = await this.getSummary(await UserRepository.findById(user._id));
     return {
-      redeem: {
-        id: String(redeem._id),
-        amount: redeem.amount,
-        redeemedAt: redeem.redeemedAt,
-      },
+      redeem: mapRedeemRow(redeem.toObject ? redeem.toObject() : redeem),
       summary: next,
     };
   }
@@ -203,13 +255,158 @@ class AffiliateEarningsService {
   async listRedeems(user) {
     assertAffiliate(user);
     const rows = await AffiliateEarningsRepository.listRedeems(user._id, { limit: 30 });
-    return rows.map((row) => ({
-      id: String(row._id),
-      amount: Number(row.amount) || 0,
-      discountCode: row.discountCode || '',
-      redeemedAt: row.redeemedAt,
-      note: row.note || '',
-    }));
+    return rows.map((row) => mapRedeemRow(row));
+  }
+
+  async listAllRedeemsForAdmin(query = {}) {
+    const { page = 1, limit = 20, status = '', search = '' } = query;
+    const q = String(search || '')
+      .trim()
+      .toLowerCase();
+    const pageNum = Math.max(1, Number(page) || 1);
+    const lim = Math.min(100, Math.max(1, Number(limit) || 20));
+
+    // When searching, load a wider window then filter (affiliate volume is typically modest).
+    const fetchLimit = q ? 500 : lim;
+    const fetchPage = q ? 1 : pageNum;
+
+    const { rows, total: dbTotal } = await AffiliateEarningsRepository.listAllRedeems({
+      page: fetchPage,
+      limit: fetchLimit,
+      status,
+    });
+
+    let mapped = rows.map((row) => mapRedeemRow(row));
+    if (q) {
+      mapped = mapped.filter((row) => {
+        const hay = [
+          row.affiliate?.name,
+          row.affiliate?.email,
+          row.affiliate?.phone,
+          row.discountCode,
+          row.payout?.accountHolderName,
+          row.payout?.accountNumber,
+          row.payout?.ifsc,
+          row.payout?.bankName,
+          row.payout?.upiId,
+        ]
+          .map((v) => String(v || '').toLowerCase())
+          .join(' ');
+        return hay.includes(q);
+      });
+      const total = mapped.length;
+      const start = (pageNum - 1) * lim;
+      mapped = mapped.slice(start, start + lim);
+      return {
+        redeems: mapped,
+        pagination: {
+          page: pageNum,
+          limit: lim,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / lim)),
+        },
+      };
+    }
+
+    return {
+      redeems: mapped,
+      pagination: {
+        page: pageNum,
+        limit: lim,
+        total: dbTotal,
+        totalPages: Math.max(1, Math.ceil(dbTotal / lim)),
+      },
+    };
+  }
+
+  async markRedeemPaid(redeemId, { note = '' } = {}) {
+    const existing = await AffiliateEarningsRepository.findRedeemById(redeemId);
+    if (!existing) {
+      throw new AppError('Redeem request not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (existing.status === 'paid') {
+      throw new AppError('This redeem is already marked as paid', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (existing.status === 'rejected') {
+      throw new AppError('Cannot mark a rejected redeem as paid', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const decisionNote = String(note || '').trim().slice(0, 1000);
+    const updated = await AffiliateEarningsRepository.updateRedeemById(redeemId, {
+      status: 'paid',
+      decisionNote,
+      decidedAt: new Date(),
+    });
+
+    const affiliate = updated?.affiliateUser || existing.affiliateUser || {};
+    const email = affiliate.email;
+    const name = [affiliate.firstName, affiliate.middleName, affiliate.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    if (email) {
+      try {
+        const { sendAffiliateRedeemPaidEmail } = require('@services/email.service');
+        await sendAffiliateRedeemPaidEmail({
+          to: email,
+          name,
+          amount: updated.amount ?? existing.amount,
+          payoutMethod: updated.payoutMethod || existing.payoutMethod,
+        });
+      } catch (error) {
+        console.warn('[affiliate-redeem] Paid email failed:', error.message);
+      }
+    }
+
+    return mapRedeemRow(updated);
+  }
+
+  async rejectRedeem(redeemId, { note = '' } = {}) {
+    const existing = await AffiliateEarningsRepository.findRedeemById(redeemId);
+    if (!existing) {
+      throw new AppError('Redeem request not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (existing.status === 'rejected') {
+      throw new AppError('This redeem is already rejected', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (existing.status === 'paid') {
+      throw new AppError('Cannot reject a paid redeem', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const decisionNote = String(note || '').trim().slice(0, 1000);
+    if (!decisionNote) {
+      throw new AppError('Please provide a rejection reason', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const updated = await AffiliateEarningsRepository.updateRedeemById(redeemId, {
+      status: 'rejected',
+      decisionNote,
+      decidedAt: new Date(),
+    });
+
+    const affiliate = updated?.affiliateUser || existing.affiliateUser || {};
+    const email = affiliate.email;
+    const name = [affiliate.firstName, affiliate.middleName, affiliate.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    if (email) {
+      try {
+        const { sendAffiliateRedeemRejectedEmail } = require('@services/email.service');
+        await sendAffiliateRedeemRejectedEmail({
+          to: email,
+          name,
+          amount: updated.amount ?? existing.amount,
+          note: decisionNote,
+        });
+      } catch (error) {
+        console.warn('[affiliate-redeem] Reject email failed:', error.message);
+      }
+    }
+
+    return mapRedeemRow(updated);
   }
 }
 

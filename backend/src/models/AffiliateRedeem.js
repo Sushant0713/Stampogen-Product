@@ -36,17 +36,71 @@ const affiliateRedeemSchema = new mongoose.Schema(
       default: '',
       maxlength: 500,
     },
+    /** Snapshot of payout details used for this redeem */
+    accountHolderName: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 120,
+    },
+    accountNumber: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 32,
+    },
+    ifsc: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: '',
+      maxlength: 20,
+    },
+    bankName: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 120,
+    },
+    upiId: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: '',
+      maxlength: 120,
+    },
+    payoutMethod: {
+      type: String,
+      enum: ['bank', 'upi', 'both', ''],
+      default: '',
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'paid', 'rejected'],
+      default: 'pending',
+      index: true,
+    },
+    decisionNote: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 1000,
+    },
+    decidedAt: {
+      type: Date,
+      default: null,
+    },
     redeemedAt: {
       type: Date,
       default: Date.now,
       index: true,
     },
-  },
-  {
+  },  {
     timestamps: true,
   }
 );
 
 affiliateRedeemSchema.index({ affiliateUser: 1, redeemedAt: -1 });
+affiliateRedeemSchema.index({ redeemedAt: -1 });
 
 module.exports = mongoose.model('AffiliateRedeem', affiliateRedeemSchema);

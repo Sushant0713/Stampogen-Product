@@ -105,7 +105,13 @@ class AffiliateEarningsRepository {
     }
 
     const [row] = await AffiliateRedeem.aggregate([
-      { $match: { affiliateUser: oid } },
+      {
+        $match: {
+          affiliateUser: oid,
+          // Rejected redeems unlock the amount back into current total
+          status: { $in: ['pending', 'paid'] },
+        },
+      },
       {
         $group: {
           _id: null,
@@ -133,6 +139,64 @@ class AffiliateEarningsRepository {
     return AffiliateRedeem.find({ affiliateUser: oid })
       .sort({ redeemedAt: -1 })
       .limit(limit)
+      .lean();
+  }
+
+  async listAllRedeems({ page = 1, limit = 20, status = '' } = {}) {
+    const filter = {};
+    if (status === 'pending' || status === 'paid' || status === 'rejected') {
+      filter.status = status;
+    }
+
+    const pageNum = Math.max(1, Number(page) || 1);
+    const lim = Math.min(100, Math.max(1, Number(limit) || 20));
+    const skip = (pageNum - 1) * lim;
+
+    const [rows, total] = await Promise.all([
+      AffiliateRedeem.find(filter)
+        .populate({
+          path: 'affiliateUser',
+          select:
+            'firstName middleName lastName email phone affiliateType affiliateDiscountCode',
+        })
+        .sort({ redeemedAt: -1 })
+        .skip(skip)
+        .limit(lim)
+        .lean(),
+      AffiliateRedeem.countDocuments(filter),
+    ]);
+
+    return { rows, total, page: pageNum, limit: lim };
+  }
+
+  async countRedeemsByStatus(status = 'pending') {
+    if (status !== 'pending' && status !== 'paid' && status !== 'rejected') {
+      return 0;
+    }
+    return AffiliateRedeem.countDocuments({ status });
+  }
+
+  async findRedeemById(id) {
+    const oid = toObjectId(id);
+    if (!oid) return null;
+    return AffiliateRedeem.findById(oid)
+      .populate({
+        path: 'affiliateUser',
+        select:
+          'firstName middleName lastName email phone affiliateType affiliateDiscountCode',
+      })
+      .lean();
+  }
+
+  async updateRedeemById(id, data) {
+    const oid = toObjectId(id);
+    if (!oid) return null;
+    return AffiliateRedeem.findByIdAndUpdate(id, data, { new: true, runValidators: true })
+      .populate({
+        path: 'affiliateUser',
+        select:
+          'firstName middleName lastName email phone affiliateType affiliateDiscountCode',
+      })
       .lean();
   }
 

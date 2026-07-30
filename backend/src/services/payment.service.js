@@ -79,6 +79,7 @@ async function resolveCustomerTaxContext({
     .trim()
     .toUpperCase();
   let state = String(customerState || '').trim();
+  let address = '';
 
   if (email) {
     try {
@@ -89,13 +90,23 @@ async function resolveCustomerTaxContext({
         const billing = tenant?.billingProfile || {};
         if (!gstin && billing.gstin) gstin = String(billing.gstin).trim().toUpperCase();
         if (!state && billing.state) state = String(billing.state).trim();
+        address = [
+          billing.address,
+          billing.street,
+          [billing.city, billing.state].filter(Boolean).join(', '),
+          billing.pin ? `PIN ${billing.pin}` : '',
+        ]
+          .map((part) => String(part || '').trim())
+          .filter(Boolean)
+          .join('\n');
+        if (!state && address) state = address;
       }
     } catch {
       // ignore lookup failures — still quote with whatever we have
     }
   }
 
-  return { gstin, state, email };
+  return { gstin, state, address, email };
 }
 
 async function applyGstToQuote(taxableAmount, customerCtx = {}) {
@@ -103,15 +114,15 @@ async function applyGstToQuote(taxableAmount, customerCtx = {}) {
   const defaults = settings.defaults || {};
   const company = settings.company || {};
 
-  const taxMode =
-    resolveTaxMode({
-      companyGstin: company.gstin,
-      customerGstin: customerCtx.gstin,
-      companyState: company.address,
-      customerState: customerCtx.state,
-    }) ||
-    defaults.taxMode ||
-    'igst';
+  const resolvedTaxMode = resolveTaxMode({
+    companyGstin: company.gstin,
+    customerGstin: customerCtx.gstin,
+    companyState: company.address || company.state,
+    customerState: customerCtx.state || customerCtx.address,
+  });
+  // Prefer place-of-supply resolution. Default to IGST (not SGST+CGST) when unknown —
+  // most clients are outside the company state.
+  const taxMode = resolvedTaxMode || 'igst';
 
   const tax = calcLineTax({
     taxable: taxableAmount,

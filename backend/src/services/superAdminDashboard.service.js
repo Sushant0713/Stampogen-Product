@@ -347,6 +347,7 @@ class SuperAdminDashboardService {
       User.countDocuments({ ...approvedAffiliateFilter, isActive: true }),
       User.countDocuments(pendingAffiliateFilter),
       AffiliateRedeem.aggregate([
+        { $match: { status: { $ne: 'rejected' } } },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
       ]),
       PlatformInvoice.aggregate([

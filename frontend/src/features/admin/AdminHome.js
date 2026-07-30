@@ -77,6 +77,7 @@ export function AdminHome() {
     pendingRewards: 0,
     pendingStampRequests: 0,
     redeemedRewards: 0,
+    repeatCustomers: 0,
     activeCampaigns: 0,
     qrScans: { month: '', monthLabel: '', total: 0, days: [] },
   });
@@ -92,8 +93,6 @@ export function AdminHome() {
 
   useEffect(() => {
     loadStats();
-    const id = setInterval(loadStats, 10000);
-    return () => clearInterval(id);
   }, [loadStats]);
 
   const displayName = useMemo(() => firstName(fullName), [fullName]);
@@ -123,6 +122,13 @@ export function AdminHome() {
         value: String(stats.redeemedRewards || 0),
         emoji: '✅',
         href: '/admin/rewards',
+      },
+      {
+        label: 'Repeat Customers',
+        value: String(stats.repeatCustomers || 0),
+        emoji: '🔁',
+        href: '/admin/customers',
+        title: 'Customers who collected a stamp, then came back for another',
       },
     ],
     [stats]
@@ -328,11 +334,12 @@ export function AdminHome() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 lg:gap-3">
         {statCards.map((card) => (
           <Link
             key={card.label}
             href={card.href}
+            title={card.title}
             className={adminCardClass(
               'flex flex-col gap-1.5 p-2.5 shadow-[0_6px_14px_rgba(2,26,84,0.06)] transition active:scale-[0.98] lg:p-4'
             )}

@@ -78,6 +78,7 @@ router.patch(
   isAdmin,
   body('loyaltyStampMode').optional().isIn(['bill', 'request']).withMessage('Invalid loyalty stamp mode'),
   body('socialLinks').optional().isObject().withMessage('Social links must be an object'),
+  body('billingProfile').optional().isObject().withMessage('Billing profile must be an object'),
   validate,
   LoyaltyController.adminUpdateSettings
 );

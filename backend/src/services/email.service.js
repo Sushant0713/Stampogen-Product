@@ -526,6 +526,95 @@ ${expiresLabel ? `\nThis link expires on ${expiresLabel}.\n` : ''}
   return sendMail({ to, subject, html, text });
 };
 
+const sendAffiliateRedeemPaidEmail = async ({ to, name, amount, payoutMethod = '' }) => {
+  const safeName = name || 'there';
+  const amountLabel = `₹${Number(amount || 0).toLocaleString('en-IN')}`;
+  const methodLabel =
+    payoutMethod === 'both'
+      ? 'bank transfer / UPI'
+      : payoutMethod === 'upi'
+        ? 'UPI'
+        : payoutMethod === 'bank'
+          ? 'bank transfer'
+          : 'your registered payout method';
+  const subject = `Stampogen payout completed — ${amountLabel}`;
+  const text = `Hi ${safeName},
+
+Your affiliate redeem request for ${amountLabel} has been marked as paid.
+
+We have completed the payout via ${methodLabel}.
+
+Thank you for partnering with Stampogen.
+
+— Stampogen`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #101828;">
+      <div style="background: #021A54; color: #fff; padding: 20px 24px;">
+        <h1 style="margin: 0; font-size: 20px;">Stampogen</h1>
+      </div>
+      <div style="border: 1px solid #E5E7EB; padding: 24px;">
+        <p style="margin: 0 0 12px;">Hi ${safeName},</p>
+        <p style="margin: 0 0 12px;">
+          Your affiliate redeem request for
+          <strong style="color:#021A54;">${amountLabel}</strong>
+          has been <strong style="color:#065F46;">paid</strong>.
+        </p>
+        <p style="margin: 0 0 12px;">
+          Payout method: ${methodLabel}.
+        </p>
+        <p style="margin: 20px 0 0; color: #667085; font-size: 14px;">
+          Thank you for partnering with Stampogen.
+        </p>
+      </div>
+    </div>
+  `;
+  return sendMail({ to, subject, html, text });
+};
+
+const sendAffiliateRedeemRejectedEmail = async ({
+  to,
+  name,
+  amount,
+  note = '',
+}) => {
+  const safeName = name || 'there';
+  const amountLabel = `₹${Number(amount || 0).toLocaleString('en-IN')}`;
+  const noteBlock = note
+    ? `<p style="margin: 16px 0 0; color: #344054;"><strong>Reason:</strong> ${note}</p>`
+    : '';
+  const subject = `Stampogen redeem request update — ${amountLabel}`;
+  const text = `Hi ${safeName},
+
+Your affiliate redeem request for ${amountLabel} was not approved.
+
+${note ? `Reason: ${note}` : ''}
+
+The amount has been returned to your current earnings balance so you can redeem again after updating details if needed.
+
+— Stampogen`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #101828;">
+      <div style="background: #021A54; color: #fff; padding: 20px 24px;">
+        <h1 style="margin: 0; font-size: 20px;">Stampogen</h1>
+      </div>
+      <div style="border: 1px solid #E5E7EB; padding: 24px;">
+        <p style="margin: 0 0 12px;">Hi ${safeName},</p>
+        <p style="margin: 0 0 12px;">
+          Your affiliate redeem request for
+          <strong style="color:#021A54;">${amountLabel}</strong>
+          was <strong style="color:#B42318;">not approved</strong>.
+        </p>
+        ${noteBlock}
+        <p style="margin: 16px 0 0; color: #667085; font-size: 14px;">
+          The amount has been returned to your current earnings balance so you can redeem again
+          after updating payout details if needed.
+        </p>
+      </div>
+    </div>
+  `;
+  return sendMail({ to, subject, html, text });
+};
+
 module.exports = {
   sendMail,
   sendOtpEmail,
@@ -534,6 +623,8 @@ module.exports = {
   sendAffiliateLoginCredentialsEmail,
   sendAffiliateHoldAgreementEmail,
   sendAffiliateSignedAgreementUploadEmail,
+  sendAffiliateRedeemPaidEmail,
+  sendAffiliateRedeemRejectedEmail,
   buildSuperAdminInterviewEmail,
   formatInterviewAt,
 };

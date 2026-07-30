@@ -266,6 +266,39 @@ const userSchema = new mongoose.Schema(
       default: null,
       min: 0,
     },
+    /** Optional saved payout details for future redeems */
+    affiliatePayoutAccountHolderName: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 120,
+    },
+    affiliatePayoutAccountNumber: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 32,
+    },
+    affiliatePayoutIfsc: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: '',
+      maxlength: 20,
+    },
+    affiliatePayoutBankName: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 120,
+    },
+    affiliatePayoutUpiId: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: '',
+      maxlength: 120,
+    },
     /** One-time link to view issued login details (email avoids putting password in body) */
     affiliateCredentialsClaimTokenHash: {
       type: String,

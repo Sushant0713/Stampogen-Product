@@ -180,7 +180,16 @@ class UserService {
   }
 
   async getAffiliateStats() {
-    return UserRepository.affiliateStats();
+    const AffiliateEarningsRepository = require('@repositories/affiliateEarnings.repository');
+    const [stats, pendingRedeems] = await Promise.all([
+      UserRepository.affiliateStats(),
+      AffiliateEarningsRepository.countRedeemsByStatus('pending'),
+    ]);
+    return {
+      ...stats,
+      pendingApprovals: Number(stats.pendingApprovals) || 0,
+      pendingRedeems: Number(pendingRedeems) || 0,
+    };
   }
 
   async createAffiliate(data) {

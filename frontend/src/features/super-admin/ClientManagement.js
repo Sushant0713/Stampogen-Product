@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -12,6 +13,7 @@ import {
   UserCheck,
   UserMinus,
   Users,
+  X,
 } from 'lucide-react';
 import { tenantService } from '@/services/tenant.service';
 import { planService } from '@/services/plan.service';
@@ -28,6 +30,9 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Inactive' },
   { value: 'pending', label: 'Pending' },
 ];
+
+const actionBtnClass =
+  'inline-flex h-8 w-full items-center justify-center gap-1 rounded-md border bg-white px-3 text-[12px] font-semibold transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -58,6 +63,73 @@ function accountBadgeClass(status) {
   if (status === 'inactive') return 'bg-gray-100 text-gray-600';
   if (status === 'pending') return 'bg-amber-50 text-amber-700';
   return 'bg-emerald-50 text-emerald-700';
+}
+
+function ownerDisplayName(owner = {}) {
+  return (
+    owner.fullName ||
+    [owner.firstName, owner.lastName].filter(Boolean).join(' ') ||
+    '—'
+  );
+}
+
+function formatClientAddress(client) {
+  const bp = client?.billingProfile || {};
+  if (String(bp.address || '').trim()) {
+    return String(bp.address).trim();
+  }
+  const line = [bp.street, bp.city, bp.state, bp.pin]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(', ');
+  return line || '—';
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-3 border-b border-[#F2F4F7] py-2.5 last:border-b-0">
+      <p className="text-[13px] font-medium text-[#667085]">{label}</p>
+      <p className="break-words text-[13px] text-[#101828]">{value || '—'}</p>
+    </div>
+  );
+}
+
+function ModalShell({ title, onClose, children, wide = false, footer = null }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-white shadow-xl ${
+          wide ? 'max-w-2xl' : 'max-w-lg'
+        }`}
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#F2F4F7] bg-white px-5 py-4">
+          <h3 className="text-base font-semibold text-[#101828]">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#667085] hover:bg-[#F2F4F7]"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="px-5 py-4">{children}</div>
+        {footer ? (
+          <div className="sticky bottom-0 border-t border-[#F2F4F7] bg-white px-5 py-4">
+            {footer}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ label, value, icon: Icon }) {
@@ -101,6 +173,11 @@ export function ClientManagement() {
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState(null);
   const [assignablePlans, setAssignablePlans] = useState([]);
+  const [viewClient, setViewClient] = useState(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [planClient, setPlanClient] = useState(null);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [planSaving, setPlanSaving] = useState(false);
   const pageRef = useRef(1);
 
   useEffect(() => {
@@ -213,6 +290,81 @@ export function ClientManagement() {
     const end = Math.min(pagination.page * pagination.limit, pagination.total);
     return `${start}–${end} of ${pagination.total}`;
   }, [pagination]);
+
+  const handleView = async (client) => {
+    try {
+      setViewLoading(true);
+      setViewClient(client);
+      const { data } = await tenantService.getById(client._id);
+      setViewClient(data?.data?.tenant || client);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to load client'));
+      setViewClient(null);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const openChangePlan = (client) => {
+    setPlanClient(client);
+    setSelectedPlanId('');
+  };
+
+  const closeChangePlan = () => {
+    if (planSaving) return;
+    setPlanClient(null);
+    setSelectedPlanId('');
+  };
+
+  const handleChangePlan = async () => {
+    if (!planClient || !selectedPlanId) {
+      toast.error('Select a plan first');
+      return;
+    }
+    const selected = assignablePlans.find(
+      (plan) => String(plan.id || plan._id) === String(selectedPlanId)
+    );
+    if (!selected) {
+      toast.error('Selected plan is unavailable');
+      return;
+    }
+
+    try {
+      setPlanSaving(true);
+      setActionId(planClient._id);
+      const { data } = await tenantService.changePlan(planClient._id, {
+        planId: selected.id || selected._id,
+        planName: selected.name,
+        planCode: selected.code,
+      });
+      const invoice = data?.data?.tenant?.invoice;
+      if (invoice?.invoiceNumber) {
+        toast.success(
+          invoice.emailed
+            ? `Plan changed to ${selected.name}. Invoice ${invoice.invoiceNumber} emailed.`
+            : `Plan changed to ${selected.name}. Invoice ${invoice.invoiceNumber} generated.`
+        );
+      } else {
+        toast.success(`Plan changed to ${selected.name}`);
+      }
+      setPlanClient(null);
+      setSelectedPlanId('');
+      await Promise.all([loadClients(pagination.page), loadStats()]);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to change plan'));
+    } finally {
+      setPlanSaving(false);
+      setActionId(null);
+    }
+  };
+
+  const planOptionsForClient = useMemo(() => {
+    if (!planClient) return [];
+    const currentName = String(planClient.billing?.planName || '').toLowerCase();
+    return assignablePlans.filter(
+      (plan) => String(plan.name || '').toLowerCase() !== currentName
+    );
+  }, [assignablePlans, planClient]);
 
   const handleSuspend = async (client) => {
     const nextStatus = client.status === 'suspended' ? 'active' : 'suspended';
@@ -513,83 +665,36 @@ export function ClientManagement() {
                         {formatDate(client.createdAt)}
                       </td>
                       <td className="px-5 py-4 align-top">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex min-w-[120px] flex-col gap-2">
                           <button
                             type="button"
-                            onClick={() => toast(`Viewing ${client.name}`)}
-                            disabled={busy}
-                            className="h-8 rounded-md border px-3 text-[12px] font-semibold transition hover:bg-primary-50 disabled:opacity-50"
+                            onClick={() => handleView(client)}
+                            disabled={busy || viewLoading}
+                            className={actionBtnClass}
                             style={{ borderColor: ACCENT, color: ACCENT }}
                           >
                             View
                           </button>
-                          <select
+                          <button
+                            type="button"
+                            onClick={() => openChangePlan(client)}
                             disabled={busy || assignablePlans.length === 0}
-                            defaultValue=""
-                            onChange={async (event) => {
-                              const planId = event.target.value;
-                              event.target.value = '';
-                              if (!planId) return;
-                              const selected = assignablePlans.find(
-                                (plan) => String(plan.id || plan._id) === String(planId)
-                              );
-                              if (!selected) return;
-                              try {
-                                setActionId(client._id);
-                                const { data } = await tenantService.changePlan(client._id, {
-                                  planId: selected.id || selected._id,
-                                  planName: selected.name,
-                                  planCode: selected.code,
-                                });
-                                const invoice = data?.data?.tenant?.invoice;
-                                if (invoice?.invoiceNumber) {
-                                  toast.success(
-                                    invoice.emailed
-                                      ? `Plan changed to ${selected.name}. Invoice ${invoice.invoiceNumber} emailed.`
-                                      : `Plan changed to ${selected.name}. Invoice ${invoice.invoiceNumber} generated.`
-                                  );
-                                } else {
-                                  toast.success(`Plan changed to ${selected.name}`);
-                                }
-                                await Promise.all([
-                                  loadClients(pagination.page),
-                                  loadStats(),
-                                ]);
-                              } catch (error) {
-                                toast.error(getErrorMessage(error, 'Unable to change plan'));
-                              } finally {
-                                setActionId(null);
-                              }
-                            }}
-                            className="h-8 rounded-md border border-primary bg-white px-2 text-[12px] font-semibold text-primary outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                            aria-label={`Change plan for ${client.name}`}
+                            className={actionBtnClass}
+                            style={{ borderColor: ACCENT, color: ACCENT }}
+                            title={
+                              assignablePlans.length === 0
+                                ? 'No assignable plans available'
+                                : `Change plan for ${client.name}`
+                            }
                           >
-                            <option value="" disabled>
-                              Change plan
-                            </option>
-                            {assignablePlans
-                              .filter(
-                                (plan) =>
-                                  String(plan.name || '').toLowerCase() !==
-                                  String(billing.planName || '').toLowerCase()
-                              )
-                              .map((plan) => {
-                                const id = plan.id || plan._id;
-                                const priceLabel = plan.priceCustom
-                                  ? 'Custom'
-                                  : formatMoney(plan.priceAmount || 0);
-                                return (
-                                  <option key={id} value={id}>
-                                    {plan.name} · {priceLabel}
-                                  </option>
-                                );
-                              })}
-                          </select>
+                            Change plan
+                            <ChevronDown size={14} />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleSuspend(client)}
                             disabled={busy}
-                            className="h-8 rounded-md border px-3 text-[12px] font-semibold transition hover:bg-primary-50 disabled:opacity-50"
+                            className={actionBtnClass}
                             style={{ borderColor: ACCENT, color: ACCENT }}
                           >
                             {client.status === 'suspended' ? 'Activate' : 'Suspend'}
@@ -598,7 +703,7 @@ export function ClientManagement() {
                             type="button"
                             onClick={() => handleDelete(client)}
                             disabled={busy}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#D92D20] text-white transition hover:bg-[#B42318] disabled:opacity-50"
+                            className="inline-flex h-8 w-full items-center justify-center rounded-md bg-[#D92D20] text-white transition hover:bg-[#B42318] disabled:opacity-50"
                             aria-label={`Delete ${client.name}`}
                           >
                             <Trash2 size={14} />
@@ -640,6 +745,141 @@ export function ClientManagement() {
           </div>
         </div>
       </div>
+
+      {viewClient ? (
+        <ModalShell
+          title="Client details"
+          wide
+          onClose={() => {
+            if (!viewLoading) setViewClient(null);
+          }}
+        >
+          {viewLoading ? (
+            <p className="py-8 text-center text-sm text-[#667085]">Loading client...</p>
+          ) : (
+            <div>
+              <DetailRow label="Client" value={ownerDisplayName(viewClient.owner)} />
+              <DetailRow label="Email" value={viewClient.owner?.email} />
+              <DetailRow
+                label="Phone"
+                value={viewClient.owner?.phone || viewClient.billingProfile?.phone}
+              />
+              <DetailRow label="Company" value={viewClient.name} />
+              <DetailRow label="Slug" value={viewClient.slug} />
+              <DetailRow label="Address" value={formatClientAddress(viewClient)} />
+              <DetailRow label="Account" value={accountLabel(viewClient.status)} />
+              <DetailRow
+                label="Email sign-up"
+                value={viewClient.owner?.isEmailVerified ? 'Verified' : 'Unverified'}
+              />
+              <DetailRow
+                label="Plan"
+                value={
+                  viewClient.billing?.planName && viewClient.billing.planName !== 'No plan'
+                    ? `${viewClient.billing.planName} · ${formatMoney(
+                        viewClient.billing.pricePerCycle || 0
+                      )} / cycle`
+                    : 'No plan'
+                }
+              />
+              <DetailRow
+                label="Subscription"
+                value={viewClient.billing?.subscription || 'None'}
+              />
+              <DetailRow label="Cycles" value={String(viewClient.billing?.cycles ?? 0)} />
+              <DetailRow
+                label="Discount"
+                value={
+                  viewClient.billing?.discountCode ||
+                  (Array.isArray(viewClient.billing?.discountCodes) &&
+                  viewClient.billing.discountCodes.length
+                    ? viewClient.billing.discountCodes.join(', ')
+                    : '—')
+                }
+              />
+              <DetailRow
+                label="Revenue"
+                value={formatMoney(viewClient.billing?.revenue || 0)}
+              />
+              <DetailRow label="Joined" value={formatDate(viewClient.createdAt)} />
+            </div>
+          )}
+        </ModalShell>
+      ) : null}
+
+      {planClient ? (
+        <ModalShell
+          title="Change plan"
+          onClose={closeChangePlan}
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeChangePlan}
+                disabled={planSaving}
+                className="h-10 rounded-lg border border-[#D0D5DD] px-4 text-sm font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleChangePlan}
+                disabled={planSaving || !selectedPlanId || planOptionsForClient.length === 0}
+                className="h-10 rounded-lg px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ backgroundColor: ACCENT }}
+              >
+                {planSaving ? 'Updating...' : 'Confirm change'}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-[#101828]">{planClient.name}</p>
+              <p className="mt-0.5 text-[13px] text-[#667085]">
+                Current plan:{' '}
+                <span className="font-medium text-[#344054]">
+                  {planClient.billing?.planName && planClient.billing.planName !== 'No plan'
+                    ? planClient.billing.planName
+                    : 'No plan'}
+                </span>
+              </p>
+            </div>
+
+            {planOptionsForClient.length === 0 ? (
+              <p className="rounded-lg border border-[#F2F4F7] bg-[#F9FAFB] px-3 py-3 text-sm text-[#667085]">
+                No other assignable plans are available for this client.
+              </p>
+            ) : (
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  New plan
+                </span>
+                <select
+                  value={selectedPlanId}
+                  onChange={(event) => setSelectedPlanId(event.target.value)}
+                  disabled={planSaving}
+                  className="h-11 w-full rounded-lg border border-[#D0D5DD] bg-white px-3 text-sm text-[#101828] outline-none focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54] disabled:opacity-50"
+                >
+                  <option value="">Select a plan</option>
+                  {planOptionsForClient.map((plan) => {
+                    const id = plan.id || plan._id;
+                    const priceLabel = plan.priceCustom
+                      ? 'Custom'
+                      : formatMoney(plan.priceAmount || 0);
+                    return (
+                      <option key={id} value={id}>
+                        {plan.name} · {priceLabel}
+                        {plan.billing ? ` / ${String(plan.billing).toLowerCase()}` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+            )}
+          </div>
+        </ModalShell>
+      ) : null}
     </div>
   );
 }

@@ -361,6 +361,36 @@ export function AdminCustomers() {
                       </div>
                     )}
                   </div>
+
+                  <div className="mt-5">
+                    <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#94A3B8]">
+                      Offer History
+                    </p>
+                    <p className="mb-2 text-[11px] text-[#94A3B8]">
+                      Redeemed offers from the last 2 months
+                    </p>
+                    {(detail.offerHistory || []).length === 0 ? (
+                      <p className="rounded-xl bg-[#F8FAFC] px-3 py-4 text-center text-[12px] text-[#94A3B8]">
+                        No redemptions yet
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {detail.offerHistory.map((entry, index) => (
+                          <div
+                            key={`${entry.offerKey || 'offer'}-${entry.at}-${index}`}
+                            className="flex items-center justify-between gap-3 rounded-xl bg-[#EEF2FF] px-3 py-2.5"
+                          >
+                            <span className="truncate text-[12px] font-bold text-[#021A54]">
+                              {entry.offerTitle || 'Offer'}
+                            </span>
+                            <span className="shrink-0 text-[11px] font-medium text-[#64748B]">
+                              {formatScanAt(entry.at)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>

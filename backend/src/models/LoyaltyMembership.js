@@ -105,6 +105,58 @@ const stampRequestSchema = new mongoose.Schema(
   { _id: true }
 );
 
+/** Durable visit / redeem logs — survive bill wipe on redeem; pruned after ~2 months. */
+const visitHistorySchema = new mongoose.Schema(
+  {
+    at: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+    offerKey: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 80,
+    },
+    offerTitle: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 200,
+    },
+    source: {
+      type: String,
+      enum: ['bill', 'request'],
+      default: 'bill',
+    },
+  },
+  { _id: false }
+);
+
+const offerRedeemHistorySchema = new mongoose.Schema(
+  {
+    at: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+    offerKey: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 80,
+    },
+    offerTitle: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 200,
+    },
+  },
+  { _id: false }
+);
+
 const loyaltyMembershipSchema = new mongoose.Schema(
   {
     user: {
@@ -186,6 +238,27 @@ const loyaltyMembershipSchema = new mongoose.Schema(
       type: [billSchema],
       default: [],
       select: false,
+    },
+    visitHistory: {
+      type: [visitHistorySchema],
+      default: [],
+    },
+    offerRedeemHistory: {
+      type: [offerRedeemHistorySchema],
+      default: [],
+    },
+    /**
+     * Times this customer completed the shop-QR join flow (/join → join API).
+     * First join = 1; each later scan while already a member increments.
+     */
+    shopQrScanCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    lastShopQrScanAt: {
+      type: Date,
+      default: null,
     },
     /** @deprecated membership-level status; prefer offers[].rewardStatus */
     rewardStatus: {

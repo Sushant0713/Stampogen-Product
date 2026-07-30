@@ -4,6 +4,7 @@ export { PlanList } from '@/features/super-admin/PlanList';
 export { DiscountList } from '@/features/super-admin/DiscountList';
 export { FeatureList } from '@/features/super-admin/FeatureList';
 export { InvoiceSettings } from '@/features/super-admin/InvoiceSettings';
+export { AffiliateRedeemList } from '@/features/super-admin/AffiliateRedeemList';
 export {
   InvoicePreview,
   TAX_MODES,

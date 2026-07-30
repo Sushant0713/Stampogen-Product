@@ -35,217 +35,6 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
-function safeFileName(shopName) {
-  const base = String(shopName || 'loyalty-qr')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-  return `${base || 'loyalty-qr'}.png`;
-}
-
-/** Mobile Safari/Chrome often print the parent page from a hidden iframe. */
-function prefersQrDownload() {
-  if (typeof window === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  const mobileUa = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-  const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
-  const narrow = window.matchMedia?.('(max-width: 768px)')?.matches;
-  return Boolean(mobileUa || (coarse && narrow));
-}
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-async function buildQrPosterPng({ value, shopName = '' }) {
-  const qrDataUrl = await QRCode.toDataURL(value, {
-    width: 900,
-    margin: 2,
-    color: { dark: '#021A54', light: '#FFFFFF' },
-  });
-
-  const width = 1080;
-  const height = 1520;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-
-  // Background
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, '#F7FAFF');
-  grad.addColorStop(0.35, '#FFFFFF');
-  grad.addColorStop(1, '#FFFFFF');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, width, height);
-
-  // Soft orbs
-  ctx.fillStyle = '#E8F0FF';
-  ctx.beginPath();
-  ctx.arc(width - 40, -40, 220, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(40, height + 20, 160, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Card border
-  ctx.strokeStyle = '#DCE5F5';
-  ctx.lineWidth = 6;
-  roundRect(ctx, 48, 48, width - 96, height - 96, 48);
-  ctx.stroke();
-
-  let y = 140;
-
-  try {
-    const logo = await loadImage(`${window.location.origin}/logo.png`);
-    const logoW = 360;
-    const logoH = (logo.height / logo.width) * logoW;
-    ctx.drawImage(logo, (width - logoW) / 2, y, logoW, logoH);
-    y += logoH + 48;
-  } catch {
-    y += 20;
-  }
-
-  // Eyebrow pill
-  const eyebrow = 'LOYALTY REWARDS';
-  ctx.font = '800 28px ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial, sans-serif';
-  const eyebrowW = ctx.measureText(eyebrow).width + 56;
-  ctx.fillStyle = '#EAF1FF';
-  roundRect(ctx, (width - eyebrowW) / 2, y, eyebrowW, 56, 28);
-  ctx.fill();
-  ctx.fillStyle = '#1649AF';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(eyebrow, width / 2, y + 28);
-  y += 90;
-
-  if (shopName) {
-    ctx.fillStyle = '#021A54';
-    ctx.font = '800 44px ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial, sans-serif';
-    wrapCenteredText(ctx, shopName, width / 2, y, width - 160, 52);
-    y += 90;
-  }
-
-  // QR card
-  const qrSize = 720;
-  const qrX = (width - qrSize) / 2;
-  const pad = 28;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.shadowColor = 'rgba(2, 26, 84, 0.14)';
-  ctx.shadowBlur = 36;
-  ctx.shadowOffsetY = 18;
-  roundRect(ctx, qrX - pad, y, qrSize + pad * 2, qrSize + pad * 2, 36);
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = '#DFE7F4';
-  ctx.lineWidth = 2;
-  roundRect(ctx, qrX - pad, y, qrSize + pad * 2, qrSize + pad * 2, 36);
-  ctx.stroke();
-
-  const qrImg = await loadImage(qrDataUrl);
-  ctx.drawImage(qrImg, qrX, y + pad, qrSize, qrSize);
-  y += qrSize + pad * 2 + 56;
-
-  ctx.fillStyle = '#021A54';
-  ctx.font = '800 52px ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('Scan & Earn Rewards', width / 2, y);
-  y += 56;
-
-  ctx.fillStyle = '#64748B';
-  ctx.font = '600 28px ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial, sans-serif';
-  wrapCenteredText(
-    ctx,
-    'Open your phone camera and scan the QR code to join our loyalty programme.',
-    width / 2,
-    y,
-    width - 180,
-    38
-  );
-  y += 110;
-
-  ctx.fillStyle = '#A0AEC0';
-  ctx.font = '800 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial, sans-serif';
-  ctx.fillText('POWERED BY STAMPOGEN', width / 2, y);
-
-  return canvas.toDataURL('image/png');
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
-}
-
-function wrapCenteredText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = String(text).split(/\s+/).filter(Boolean);
-  let line = '';
-  let cy = y;
-  for (let i = 0; i < words.length; i += 1) {
-    const test = line ? `${line} ${words[i]}` : words[i];
-    if (ctx.measureText(test).width > maxWidth && line) {
-      ctx.fillText(line, x, cy);
-      line = words[i];
-      cy += lineHeight;
-    } else {
-      line = test;
-    }
-  }
-  if (line) ctx.fillText(line, x, cy);
-}
-
-async function downloadOrSharePng(dataUrl, fileName) {
-  const res = await fetch(dataUrl);
-  const blob = await res.blob();
-  const file = new File([blob], fileName, { type: 'image/png' });
-
-  if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: 'Loyalty QR',
-        text: 'Stampogen loyalty QR',
-      });
-      return 'share';
-    } catch (err) {
-      // User cancelled share sheet — not an error for UX
-      if (err?.name === 'AbortError') return 'cancelled';
-    }
-  }
-
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = objectUrl;
-  link.download = fileName;
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-
-  // iOS often ignores download — open image so user can long-press Save
-  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent || '');
-  if (isIOS) {
-    window.open(objectUrl, '_blank', 'noopener,noreferrer');
-  }
-
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-  return 'download';
-}
-
 function buildPrintHtml({ dataUrl, logoUrl, shopName }) {
   return `<!doctype html>
 <html>
@@ -352,6 +141,9 @@ function buildPrintHtml({ dataUrl, logoUrl, shopName }) {
         letter-spacing: .16em;
         color: #A0AEC0;
       }
+      @media screen {
+        body { background: #EEF2F7; }
+      }
     </style>
   </head>
   <body>
@@ -379,7 +171,31 @@ function buildPrintHtml({ dataUrl, logoUrl, shopName }) {
 </html>`;
 }
 
-async function printViaPopup({ value, shopName = '' }) {
+function waitForImages(doc) {
+  const images = Array.from(doc.images || []);
+  if (!images.length) return Promise.resolve();
+  return Promise.all(
+    images.map(
+      (image) =>
+        new Promise((done) => {
+          if (image.complete) {
+            done();
+            return;
+          }
+          image.onload = done;
+          image.onerror = done;
+        })
+    )
+  );
+}
+
+/**
+ * Opens the loyalty QR poster print dialog (mobile + desktop).
+ * Uses a real browser tab/window so mobile does not print the admin page.
+ */
+export async function printLoyaltyQr({ value, shopName = '' }) {
+  if (!value || typeof window === 'undefined') return;
+
   const dataUrl = await QRCode.toDataURL(value, {
     width: 900,
     margin: 2,
@@ -388,74 +204,51 @@ async function printViaPopup({ value, shopName = '' }) {
   const logoUrl = `${window.location.origin}/logo.png`;
   const html = buildPrintHtml({ dataUrl, logoUrl, shopName });
 
-  const win = window.open('', '_blank', 'noopener,noreferrer,width=820,height=1100');
+  // Do not use "noopener" — it makes window.open return null and we cannot call print().
+  let win = window.open('', '_blank', 'width=820,height=1100');
+
   if (!win) {
-    // Popup blocked — fall back to download
-    const png = await buildQrPosterPng({ value, shopName });
-    return downloadOrSharePng(png, safeFileName(shopName));
-  }
-
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-
-  await new Promise((resolve) => {
-    const images = Array.from(win.document.images || []);
-    if (!images.length) {
-      resolve();
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    win = window.open(url, '_blank');
+    if (!win) {
+      // Last resort: same tab (user can use browser back after print)
+      window.location.assign(url);
       return;
     }
-    Promise.all(
-      images.map(
-        (image) =>
-          new Promise((done) => {
-            if (image.complete) {
-              done();
-              return;
-            }
-            image.onload = done;
-            image.onerror = done;
-          })
-      )
-    ).then(resolve);
-  });
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } else {
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  }
 
-  win.focus();
-  win.print();
-  // Close after print dialog (best-effort; some browsers ignore)
-  setTimeout(() => {
+  await waitForImages(win.document);
+  // Small delay helps mobile browsers finish layout before print
+  await new Promise((r) => setTimeout(r, 300));
+
+  try {
+    win.focus();
+    win.print();
+  } catch {
+    /* ignore */
+  }
+
+  const closeLater = () => {
     try {
       win.close();
     } catch {
       /* ignore */
     }
-  }, 500);
-  return 'print';
-}
-
-/**
- * Desktop: open a print poster.
- * Mobile: download / share a PNG (hidden iframe print dumps the whole admin page).
- * @returns {'print'|'download'|'share'|'cancelled'}
- */
-export async function printLoyaltyQr({ value, shopName = '' }) {
-  if (!value || typeof window === 'undefined') return 'cancelled';
-
-  if (prefersQrDownload()) {
-    const png = await buildQrPosterPng({ value, shopName });
-    return downloadOrSharePng(png, safeFileName(shopName));
-  }
-
-  return printViaPopup({ value, shopName });
+  };
+  win.addEventListener?.('afterprint', closeLater);
+  setTimeout(closeLater, 60_000);
 }
 
 export function buildJoinUrl(tenantSlug) {
-  // Prefer the domain the admin is currently on so QR matches after a domain cutover
-  // even if NEXT_PUBLIC_APP_URL was baked with the old host at build time.
   if (typeof window !== 'undefined' && window.location?.origin) {
     return `${window.location.origin}/join/${tenantSlug}`;
   }
-  // Fallback (SSR / print): NEXT_PUBLIC_APP_URL — e.g. https://app.stampogen.in/join/{slug}
   const base = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
   return `${base || 'http://localhost:3000'}/join/${tenantSlug}`;
 }

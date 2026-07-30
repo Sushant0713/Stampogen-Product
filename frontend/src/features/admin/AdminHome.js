@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Eye, Printer } from 'lucide-react';
+import { Eye, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   Area,
@@ -151,11 +151,9 @@ export function AdminHome() {
       return;
     }
     try {
-      const mode = await printLoyaltyQr({ value: joinUrl, shopName });
-      if (mode === 'download') toast.success('QR image downloaded');
-      else if (mode === 'share') toast.success('QR ready to share or save');
+      await printLoyaltyQr({ value: joinUrl, shopName });
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Could not save QR'));
+      toast.error(getErrorMessage(error, 'Could not print QR'));
     }
   };
 
@@ -320,14 +318,8 @@ export function AdminHome() {
               onClick={handlePrintQr}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-[#021A54] py-2 text-[11.5px] font-bold text-white active:scale-95"
             >
-              <span className="inline-flex items-center gap-1.5 md:hidden">
-                <Download size={12} />
-                Download QR
-              </span>
-              <span className="hidden items-center gap-1.5 md:inline-flex">
-                <Printer size={12} />
-                Print QR
-              </span>
+              <Printer size={12} />
+              Print QR
             </button>
             <button
               type="button"

@@ -9,6 +9,7 @@ import { CUSTOMER_BG } from '@/features/customer/customerTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
 import { cn, getErrorMessage, getLoginPath } from '@/utils';
+import { installCustomerStampSoundUnlock } from '@/utils/customerStampSound';
 
 export function CustomerAppLayout({ children, hideNav = false }) {
   const router = useRouter();
@@ -16,6 +17,11 @@ export function CustomerAppLayout({ children, hideNav = false }) {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const authReady = initialized && !loading && Boolean(user) && userRole === ROLES.USER;
+
+  useEffect(() => {
+    if (!authReady) return undefined;
+    return installCustomerStampSoundUnlock();
+  }, [authReady]);
 
   useEffect(() => {
     if (!initialized || loading) return;

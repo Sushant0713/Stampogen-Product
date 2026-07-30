@@ -26,6 +26,7 @@ import {
   getStampRequestSoundVolume,
   playStampRequestSound,
   setStampRequestSoundVolume,
+  unlockStampRequestSound,
 } from '@/utils/stampRequestSound';
 
 function initials(fullName) {
@@ -115,7 +116,9 @@ export function AdminProfile() {
   };
 
   const handlePreviewSound = () => {
-    playStampRequestSound();
+    void unlockStampRequestSound().then(() => {
+      playStampRequestSound();
+    });
   };
 
   const handleModeChange = async (nextMode) => {

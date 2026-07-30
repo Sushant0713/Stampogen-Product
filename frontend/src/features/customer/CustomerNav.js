@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { CustomerSoundSettings } from '@/features/customer/CustomerSoundSettings';
 import { cn } from '@/utils';
 
 const NAV = [
@@ -88,6 +89,9 @@ export function CustomerSidebar() {
           );
         })}
       </nav>
+      <div className="border-t border-[#E2E8F0] p-4">
+        <CustomerSoundSettings compact />
+      </div>
     </aside>
   );
 }

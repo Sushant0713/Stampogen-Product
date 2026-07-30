@@ -2,10 +2,15 @@
 const SOUND_SRC = '/sounds/stamp-request.wav?v=3';
 
 const STORAGE_KEY = 'stampogen.stampRequestSoundVolume';
+const UNLOCK_EVENT = 'stampogen:stamp-sound-unlock';
+
 /** Default start volume — loud but not clipped. */
 export const DEFAULT_STAMP_SOUND_VOLUME = 0.95;
 
 let audioEl = null;
+let unlocked = false;
+let unlockBound = false;
+let unlockPromise = null;
 
 function clampVolume(value) {
   const n = Number(value);
@@ -44,21 +49,132 @@ function getAudio() {
   if (!audioEl) {
     audioEl = new Audio(SOUND_SRC);
     audioEl.preload = 'auto';
+    audioEl.setAttribute('playsinline', 'true');
+    audioEl.setAttribute('webkit-playsinline', 'true');
   }
   audioEl.volume = getStampRequestSoundVolume();
   return audioEl;
 }
 
-/** Soft Stampogen chime for new admin stamp-request toasts. */
+export function isStampRequestSoundUnlocked() {
+  return unlocked;
+}
+
+function markUnlocked() {
+  if (unlocked) return;
+  unlocked = true;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(UNLOCK_EVENT));
+  }
+}
+
+/**
+ * Unlock WebAudio / HTMLAudio after a user gesture (required on mobile Chrome).
+ * Safe to call multiple times; subsequent calls are no-ops.
+ */
+export async function unlockStampRequestSound() {
+  if (typeof window === 'undefined') return false;
+  if (unlocked) return true;
+  if (unlockPromise) return unlockPromise;
+
+  unlockPromise = (async () => {
+    try {
+      const audio = getAudio();
+      if (!audio) return false;
+
+      // Silent unlock: play muted, then reset so later notifications can play aloud.
+      const previousVolume = audio.volume;
+      audio.muted = true;
+      audio.volume = 0;
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // ignore seek errors before metadata
+      }
+      await audio.play();
+      audio.pause();
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // ignore
+      }
+      audio.muted = false;
+      audio.volume = previousVolume || getStampRequestSoundVolume();
+      markUnlocked();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      unlockPromise = null;
+    }
+  })();
+
+  return unlockPromise;
+}
+
+/**
+ * Bind one-time listeners so the first tap/click/keypress unlocks notification audio.
+ * Call once from the admin shell.
+ */
+export function installStampSoundUnlock() {
+  if (typeof window === 'undefined' || unlockBound || unlocked) return () => {};
+
+  unlockBound = true;
+  const events = ['pointerdown', 'touchstart', 'click', 'keydown'];
+
+  const onGesture = () => {
+    void unlockStampRequestSound().then((ok) => {
+      if (ok) {
+        events.forEach((name) => window.removeEventListener(name, onGesture, true));
+      }
+    });
+  };
+
+  events.forEach((name) => window.addEventListener(name, onGesture, { capture: true, passive: true }));
+
+  return () => {
+    events.forEach((name) => window.removeEventListener(name, onGesture, true));
+    unlockBound = false;
+  };
+}
+
+export function subscribeStampSoundUnlock(listener) {
+  if (typeof window === 'undefined') return () => {};
+  const handler = () => listener?.(true);
+  window.addEventListener(UNLOCK_EVENT, handler);
+  return () => window.removeEventListener(UNLOCK_EVENT, handler);
+}
+
+/** Soft Stampogen chime for new admin stamp-request / bill toasts. */
 export function playStampRequestSound() {
   try {
     const audio = getAudio();
     if (!audio) return;
-    audio.volume = getStampRequestSoundVolume();
-    audio.currentTime = 0;
-    void audio.play().catch(() => {
-      // Autoplay may be blocked until the admin interacts with the page.
-    });
+
+    const run = () => {
+      audio.muted = false;
+      audio.volume = getStampRequestSoundVolume();
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // ignore
+      }
+      void audio.play().then(() => {
+        markUnlocked();
+      }).catch(() => {
+        // Still blocked — toast continues without sound.
+      });
+    };
+
+    if (!unlocked) {
+      // Best-effort: if this call happens inside a gesture, unlock first.
+      void unlockStampRequestSound().then((ok) => {
+        if (ok) run();
+      });
+      return;
+    }
+
+    run();
   } catch {
     // Ignore audio errors — toast still shows.
   }

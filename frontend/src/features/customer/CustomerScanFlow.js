@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { PartyPopper } from '@/features/customer/PartyPopper';
 import { loyaltyService } from '@/services/loyalty.service';
 import { getErrorMessage } from '@/utils';
+import { playCustomerStampSound, unlockCustomerStampSound } from '@/utils/customerStampSound';
 
 export function CustomerScanFlow({ slug }) {
   const router = useRouter();
@@ -113,6 +114,7 @@ export function CustomerScanFlow({ slug }) {
       const big = Boolean(data.data?.pendingReview);
       setCelebrateBig(big);
       setCelebrate(true);
+      void unlockCustomerStampSound().then(() => playCustomerStampSound());
       window.setTimeout(() => {
         router.push(`/app/cards/${slug}`);
       }, big ? 2200 : 1600);

@@ -10,6 +10,7 @@ import { ShopSocialLinks } from '@/features/shared/ShopSocialLinks';
 import { customerCardClass, relativeTime } from '@/features/customer/customerTheme';
 import { loyaltyService } from '@/services/loyalty.service';
 import { getErrorMessage } from '@/utils';
+import { playCustomerStampSound, unlockCustomerStampSound } from '@/utils/customerStampSound';
 
 export function CustomerCardDetail({ slug }) {
   const router = useRouter();
@@ -42,6 +43,7 @@ export function CustomerCardDetail({ slug }) {
       setCard(data.data.card);
       toast.success(data.message || 'Sent to the shop for verification');
       setCelebrate(true);
+      void unlockCustomerStampSound().then(() => playCustomerStampSound());
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to redeem'));
     } finally {

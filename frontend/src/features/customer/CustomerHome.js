@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { FeaturedCard, LoyaltyCardListItem } from '@/features/customer/LoyaltyCard';
+import { CustomerSoundSettings } from '@/features/customer/CustomerSoundSettings';
 import { customerCardClass } from '@/features/customer/customerTheme';
 import { loyaltyService } from '@/services/loyalty.service';
 import { getErrorMessage } from '@/utils';
@@ -101,6 +102,8 @@ export function CustomerHome() {
           </div>
         ))}
       </div>
+
+      <CustomerSoundSettings className="lg:hidden" />
 
       <div className="grid gap-4 lg:grid-cols-5 lg:items-start lg:gap-6">
         <div className="lg:col-span-3">

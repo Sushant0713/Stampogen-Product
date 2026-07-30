@@ -70,88 +70,134 @@ function buildPosterHtml({ dataUrl, logoUrl, shopName }) {
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title></title>
   <style>
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%;
-      min-height: 100%;
-      background: #fff;
+      height: 100%;
+      background: #EEF2F7;
       color: #021A54;
       font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    /* Mobile / on-screen preview: px layout so nothing overlaps or clips */
     body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 10mm;
+      display: block;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px 16px 24px;
     }
     .poster {
       width: 100%;
-      max-width: 170mm;
-      padding: 12mm 10mm;
+      max-width: 420px;
+      margin: 0 auto;
+      padding: 24px 18px;
       border: 2px solid #DCE5F5;
-      border-radius: 16px;
+      border-radius: 20px;
       text-align: center;
       background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
     }
-    .logo { width: 48mm; height: auto; margin: 0 auto 6mm; display: block; object-fit: contain; }
+    .logo {
+      width: min(180px, 55vw);
+      height: auto;
+      display: block;
+      object-fit: contain;
+    }
     .eyebrow {
       display: inline-block;
-      margin-bottom: 4mm;
-      padding: 2mm 4mm;
+      padding: 6px 12px;
       border-radius: 999px;
       background: #EAF1FF;
       color: #1649AF;
-      font-size: 9pt;
+      font-size: 10px;
       font-weight: 800;
       letter-spacing: .12em;
     }
-    .shop { margin: 0 0 5mm; font-size: 16pt; font-weight: 800; line-height: 1.25; }
+    .shop {
+      width: 100%;
+      padding: 0 4px;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.3;
+      word-break: break-word;
+    }
     .qr-card {
-      display: inline-block;
-      padding: 3mm;
+      display: block;
+      width: fit-content;
+      max-width: 100%;
+      margin: 4px auto 0;
+      padding: 10px;
       border: 1px solid #DFE7F4;
-      border-radius: 10px;
+      border-radius: 14px;
       background: #fff;
     }
-    .qr { display: block; width: 85mm; height: 85mm; }
-    .headline { margin: 5mm 0 3mm; font-size: 18pt; font-weight: 800; line-height: 1.2; }
+    .qr {
+      display: block;
+      width: min(240px, 68vw);
+      height: auto;
+      aspect-ratio: 1 / 1;
+    }
+    .headline {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
     .sub {
-      max-width: 120mm;
-      margin: 0 auto;
-      font-size: 10pt;
+      max-width: 320px;
+      font-size: 13px;
       line-height: 1.45;
       font-weight: 600;
       color: #64748B;
     }
     .brand {
-      margin-top: 6mm;
-      font-size: 8pt;
+      font-size: 10px;
       font-weight: 800;
       letter-spacing: .14em;
       color: #A0AEC0;
     }
+    /* Printed PDF / paper: A4 poster sizing */
     @media print {
       html, body {
         width: 210mm;
         height: 297mm;
         background: #fff !important;
+        overflow: hidden !important;
       }
-      body { padding: 12mm; }
-      .poster {
-        max-width: none;
-        width: 100%;
-        min-height: 273mm;
+      body {
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
+        padding: 12mm;
       }
+      .poster {
+        width: 100%;
+        max-width: none;
+        min-height: 273mm;
+        margin: 0;
+        padding: 14mm 12mm;
+        border-radius: 16px;
+        gap: 5mm;
+        justify-content: center;
+      }
+      .logo { width: 48mm; }
+      .eyebrow {
+        font-size: 9pt;
+        padding: 2mm 4mm;
+      }
+      .shop { font-size: 16pt; }
+      .qr-card { padding: 3mm; border-radius: 10px; }
+      .qr { width: 85mm; height: 85mm; }
+      .headline { font-size: 18pt; }
+      .sub { max-width: 120mm; font-size: 10pt; }
+      .brand { font-size: 8pt; margin-top: 2mm; }
     }
   </style>
 </head>
@@ -205,12 +251,14 @@ export async function printLoyaltyQr({ value, shopName = '' }) {
       background: #0f172a;
     }
     #${SHELL_ID} iframe {
-      flex: 1;
+      flex: 1 1 auto;
       width: 100%;
+      min-height: 0;
       border: 0;
-      background: #fff;
+      background: #EEF2F7;
     }
     #${SHELL_ID} .actions {
+      flex: 0 0 auto;
       display: flex;
       gap: 10px;
       padding: 12px 16px calc(12px + env(safe-area-inset-bottom));

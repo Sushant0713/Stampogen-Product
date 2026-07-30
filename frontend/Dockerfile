@@ -16,8 +16,8 @@ COPY . .
 # Build-time public URL / Google client (can also be set at runtime for non-NEXT_PUBLIC)
 ARG NEXT_PUBLIC_API_URL=/api/v1
 ARG NEXT_PUBLIC_APP_NAME=Stampogen
-ARG NEXT_PUBLIC_APP_URL=http://localhost:3080
-ARG NEXT_PUBLIC_MARKETING_URL=
+ARG NEXT_PUBLIC_APP_URL=https://app.stampogen.in
+ARG NEXT_PUBLIC_MARKETING_URL=https://stampogen.in
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=
 ARG BACKEND_URL=http://backend:5000
 

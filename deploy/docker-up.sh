@@ -21,6 +21,7 @@ if [[ ! -f .env ]]; then
   echo "==> Creating .env for compose build args"
   cat > .env <<EOF
 NEXT_PUBLIC_APP_URL=https://${DOMAIN}
+NEXT_PUBLIC_MARKETING_URL=https://${MARKETING_DOMAIN:-stampogen.in}
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=
 STAMPOGEN_HTTP_PORT=${PORT}
 STAMPOGEN_HTTP_BIND=127.0.0.1

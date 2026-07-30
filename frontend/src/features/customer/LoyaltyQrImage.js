@@ -219,6 +219,7 @@ export function buildJoinUrl(tenantSlug) {
   if (typeof window !== 'undefined' && window.location?.origin) {
     return `${window.location.origin}/join/${tenantSlug}`;
   }
+  // Fallback (SSR / print): NEXT_PUBLIC_APP_URL — e.g. https://app.stampogen.in/join/{slug}
   const base = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
   return `${base || 'http://localhost:3000'}/join/${tenantSlug}`;
 }

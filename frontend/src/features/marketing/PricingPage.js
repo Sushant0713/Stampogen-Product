@@ -133,20 +133,30 @@ function NavLink({ item }) {
 }
 
 function BrandMark() {
+  const homeHref = MARKETING_LINKS.home === '#' ? '/pricing' : MARKETING_LINKS.home;
+  const className = 'relative inline-flex shrink-0 items-center leading-none';
+  const logo = (
+    <Image
+      src="/logo.png"
+      alt="Stampogen — Stamp . Reward . Repeat"
+      width={180}
+      height={48}
+      priority
+      className="h-8 w-auto object-contain object-left sm:h-9"
+    />
+  );
+
+  if (homeHref.startsWith('http')) {
+    return (
+      <a href={homeHref} className={className} aria-label="Stampogen home">
+        {logo}
+      </a>
+    );
+  }
+
   return (
-    <Link
-      href={MARKETING_LINKS.home === '#' ? '/pricing' : MARKETING_LINKS.home}
-      className="relative inline-flex shrink-0 items-center leading-none"
-      aria-label="Stampogen home"
-    >
-      <Image
-        src="/logo.png"
-        alt="Stampogen — Stamp . Reward . Repeat"
-        width={180}
-        height={48}
-        priority
-        className="h-8 w-auto object-contain object-left sm:h-9"
-      />
+    <Link href={homeHref} className={className} aria-label="Stampogen home">
+      {logo}
     </Link>
   );
 }
@@ -169,14 +179,25 @@ function MarketingNav() {
         </nav>
 
         <div className="justify-self-end">
-          <Link
-            href={MARKETING_LINKS.shopOwnerLogin}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 sm:text-[13px]"
-            style={{ backgroundColor: COLORS.navy }}
-          >
-            Login as shop owner
-            <span aria-hidden>→</span>
-          </Link>
+          {MARKETING_LINKS.shopOwnerLogin.startsWith('http') ? (
+            <a
+              href={MARKETING_LINKS.shopOwnerLogin}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 sm:text-[13px]"
+              style={{ backgroundColor: COLORS.navy }}
+            >
+              Login as shop owner
+              <span aria-hidden>→</span>
+            </a>
+          ) : (
+            <Link
+              href={MARKETING_LINKS.shopOwnerLogin}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 sm:text-[13px]"
+              style={{ backgroundColor: COLORS.navy }}
+            >
+              Login as shop owner
+              <span aria-hidden>→</span>
+            </Link>
+          )}
         </div>
       </div>
 

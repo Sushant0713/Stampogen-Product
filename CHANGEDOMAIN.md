@@ -91,12 +91,27 @@ Change:
 
 ```env
 NEXT_PUBLIC_APP_URL=https://NEW_DOMAIN
+NEXT_PUBLIC_MARKETING_URL=https://MARKETING_DOMAIN
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=...same or updated...
 STAMPOGEN_HTTP_PORT=3081
 STAMPOGEN_HTTP_BIND=127.0.0.1
 ```
 
-`NEXT_PUBLIC_APP_URL` is baked into the frontend image at build time — you **must rebuild** after this change (Step 5).
+Example (current production):
+
+```env
+NEXT_PUBLIC_APP_URL=https://app.stampogen.in
+NEXT_PUBLIC_MARKETING_URL=https://stampogen.in
+```
+
+These control:
+
+| Env | Used for |
+|-----|----------|
+| `NEXT_PUBLIC_APP_URL` | Login as shop owner, loyalty QR `/join/{slug}`, emails/backend `FRONTEND_URL` should match |
+| `NEXT_PUBLIC_MARKETING_URL` | Pricing nav: Home, About us, Affiliate Program |
+
+`NEXT_PUBLIC_*` values are baked into the frontend image at build time — you **must rebuild** after this change (Step 5).
 
 **Do not commit** `.env`.
 
@@ -236,7 +251,7 @@ These do not affect the live site until you change the real `.env` / `.env.docke
 
 1. DNS A record for `NEW_DOMAIN` → VPS  
 2. `.env.docker`: `FRONTEND_URL`, `CORS_ORIGIN`, `GOOGLE_CALLBACK_URL`, `SMTP_FROM`  
-3. `.env`: `NEXT_PUBLIC_APP_URL`  
+3. `.env`: `NEXT_PUBLIC_APP_URL` + `NEXT_PUBLIC_MARKETING_URL`  
 4. Nginx `server_name NEW_DOMAIN` → `127.0.0.1:3081`  
 5. `bash deploy/vps-update.sh` (or `docker compose up -d --build`)  
 6. `certbot --nginx -d NEW_DOMAIN`  

@@ -39,6 +39,7 @@ services:
         NEXT_PUBLIC_API_URL: /api/v1
         NEXT_PUBLIC_APP_NAME: Stampogen
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3080}
+        NEXT_PUBLIC_MARKETING_URL: ${NEXT_PUBLIC_MARKETING_URL:-}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
         BACKEND_URL: http://backend:5000
     container_name: stampogen-web

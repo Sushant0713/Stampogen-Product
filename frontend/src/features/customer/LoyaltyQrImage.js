@@ -35,16 +35,17 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
-const PRINT_ROOT_ID = 'stampogen-qr-print-root';
-const PRINT_STYLE_ID = 'stampogen-qr-print-style';
+const SHELL_ID = 'stampogen-qr-print-shell';
+const STYLE_ID = 'stampogen-qr-print-shell-style';
 
-function cleanupPrintOverlay() {
-  document.getElementById(PRINT_ROOT_ID)?.remove();
-  document.getElementById(PRINT_STYLE_ID)?.remove();
+function cleanupPrintShell() {
+  document.getElementById(SHELL_ID)?.remove();
+  document.getElementById(STYLE_ID)?.remove();
+  document.documentElement.classList.remove('stampogen-qr-printing');
 }
 
-function waitForImages(root) {
-  const images = Array.from(root.querySelectorAll('img'));
+function waitForDocImages(doc) {
+  const images = Array.from(doc.images || []);
   if (!images.length) return Promise.resolve();
   return Promise.all(
     images.map(
@@ -57,130 +58,165 @@ function waitForImages(root) {
           const finish = () => done();
           image.onload = finish;
           image.onerror = finish;
-          // Don't hang forever if a remote asset stalls (e.g. logo)
-          setTimeout(finish, 2500);
+          setTimeout(finish, 2000);
         })
     )
   );
 }
 
-/**
- * Same-document print overlay — reliable on mobile (avoids "Preparing preview…" hang
- * from blank popup windows + document.write).
- */
-export async function printLoyaltyQr({ value, shopName = '' }) {
-  if (!value || typeof window === 'undefined') return;
-
-  cleanupPrintOverlay();
-
-  // Keep QR modest so mobile print preview stays fast
-  const dataUrl = await QRCode.toDataURL(value, {
-    width: 512,
-    margin: 2,
-    color: { dark: '#021A54', light: '#FFFFFF' },
-  });
-  const logoUrl = `${window.location.origin}/logo.png`;
-  const shopBlock = shopName
-    ? `<div class="shop">${escapeHtml(shopName)}</div>`
-    : '';
-
-  const style = document.createElement('style');
-  style.id = PRINT_STYLE_ID;
-  style.textContent = `
-    #${PRINT_ROOT_ID} {
-      position: fixed;
-      inset: 0;
-      z-index: 2147483646;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      background: #EEF2F7;
-      overflow: auto;
+function buildPosterHtml({ dataUrl, logoUrl, shopName }) {
+  // Empty <title> reduces browser header text in some print UIs
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title></title>
+  <style>
+    @page { size: A4 portrait; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      background: #fff;
+      color: #021A54;
+      font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    #${PRINT_ROOT_ID} .poster {
-      width: min(100%, 420px);
-      margin: auto;
-      padding: 28px 22px;
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10mm;
+    }
+    .poster {
+      width: 100%;
+      max-width: 170mm;
+      padding: 12mm 10mm;
       border: 2px solid #DCE5F5;
-      border-radius: 24px;
-      background: #fff;
+      border-radius: 16px;
       text-align: center;
-      color: #021A54;
-      font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+      background: #fff;
     }
-    #${PRINT_ROOT_ID} .logo {
-      width: 160px;
-      height: auto;
-      object-fit: contain;
-      margin: 0 auto 12px;
-      display: block;
-    }
-    #${PRINT_ROOT_ID} .eyebrow {
+    .logo { width: 48mm; height: auto; margin: 0 auto 6mm; display: block; object-fit: contain; }
+    .eyebrow {
       display: inline-block;
-      margin: 0 0 10px;
-      padding: 6px 12px;
+      margin-bottom: 4mm;
+      padding: 2mm 4mm;
       border-radius: 999px;
       background: #EAF1FF;
       color: #1649AF;
-      font-size: 10px;
+      font-size: 9pt;
       font-weight: 800;
       letter-spacing: .12em;
     }
-    #${PRINT_ROOT_ID} .shop {
-      margin: 0 0 12px;
-      font-size: 18px;
-      font-weight: 800;
-      line-height: 1.25;
-    }
-    #${PRINT_ROOT_ID} .qr-card {
+    .shop { margin: 0 0 5mm; font-size: 16pt; font-weight: 800; line-height: 1.25; }
+    .qr-card {
       display: inline-block;
-      padding: 10px;
+      padding: 3mm;
       border: 1px solid #DFE7F4;
-      border-radius: 16px;
+      border-radius: 10px;
       background: #fff;
     }
-    #${PRINT_ROOT_ID} .qr {
-      display: block;
-      width: 240px;
-      height: 240px;
-    }
-    #${PRINT_ROOT_ID} .headline {
-      margin: 14px 0 6px;
-      font-size: 22px;
-      font-weight: 800;
-      line-height: 1.2;
-    }
-    #${PRINT_ROOT_ID} .sub {
+    .qr { display: block; width: 85mm; height: 85mm; }
+    .headline { margin: 5mm 0 3mm; font-size: 18pt; font-weight: 800; line-height: 1.2; }
+    .sub {
+      max-width: 120mm;
       margin: 0 auto;
-      max-width: 320px;
-      font-size: 13px;
+      font-size: 10pt;
       line-height: 1.45;
       font-weight: 600;
       color: #64748B;
     }
-    #${PRINT_ROOT_ID} .brand {
-      margin-top: 14px;
-      font-size: 10px;
+    .brand {
+      margin-top: 6mm;
+      font-size: 8pt;
       font-weight: 800;
       letter-spacing: .14em;
       color: #A0AEC0;
     }
-    #${PRINT_ROOT_ID} .screen-actions {
+    @media print {
+      html, body {
+        width: 210mm;
+        height: 297mm;
+        background: #fff !important;
+      }
+      body { padding: 12mm; }
+      .poster {
+        max-width: none;
+        width: 100%;
+        min-height: 273mm;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="poster">
+    <img class="logo" src="${logoUrl}" alt="" />
+    <div class="eyebrow">LOYALTY REWARDS</div>
+    ${shopName ? `<div class="shop">${escapeHtml(shopName)}</div>` : ''}
+    <div class="qr-card">
+      <img class="qr" src="${dataUrl}" alt="Loyalty QR" />
+    </div>
+    <h1 class="headline">Scan &amp; Earn Rewards</h1>
+    <p class="sub">Open your phone camera and scan the QR code to join our loyalty programme and start collecting stamps.</p>
+    <div class="brand">POWERED BY STAMPOGEN</div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Print only the QR poster (no admin page).
+ * Uses a full-screen iframe so homepage / nav / date chrome from the app are not included.
+ * Browser header/footer (date, URL) — turn off “Headers and footers” in the print dialog.
+ */
+export async function printLoyaltyQr({ value, shopName = '' }) {
+  if (!value || typeof window === 'undefined') return;
+
+  cleanupPrintShell();
+
+  const dataUrl = await QRCode.toDataURL(value, {
+    width: 640,
+    margin: 2,
+    color: { dark: '#021A54', light: '#FFFFFF' },
+  });
+  const logoUrl = `${window.location.origin}/logo.png`;
+  const html = buildPosterHtml({ dataUrl, logoUrl, shopName });
+
+  const style = document.createElement('style');
+  style.id = STYLE_ID;
+  style.textContent = `
+    html.stampogen-qr-printing,
+    html.stampogen-qr-printing body {
+      overflow: hidden !important;
+    }
+    #${SHELL_ID} {
       position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 2147483647;
+      inset: 0;
+      z-index: 2147483646;
+      display: flex;
+      flex-direction: column;
+      background: #0f172a;
+    }
+    #${SHELL_ID} iframe {
+      flex: 1;
+      width: 100%;
+      border: 0;
+      background: #fff;
+    }
+    #${SHELL_ID} .actions {
       display: flex;
       gap: 10px;
       padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-      background: rgba(255,255,255,.96);
-      border-top: 1px solid #E2E8F0;
+      background: #0f172a;
     }
-    #${PRINT_ROOT_ID} .screen-actions button {
+    #${SHELL_ID} .actions button {
       flex: 1;
       border: 0;
       border-radius: 12px;
@@ -188,89 +224,74 @@ export async function printLoyaltyQr({ value, shopName = '' }) {
       font-size: 15px;
       font-weight: 700;
     }
-    #${PRINT_ROOT_ID} .btn-print {
-      background: #021A54;
-      color: #fff;
-    }
-    #${PRINT_ROOT_ID} .btn-close {
-      background: #F1F5F9;
-      color: #021A54;
-    }
+    #${SHELL_ID} .btn-print { background: #fff; color: #021A54; }
+    #${SHELL_ID} .btn-close { background: #334155; color: #fff; }
+    /* Hide the entire app if anything tries to print the parent document */
     @media print {
-      @page { margin: 12mm; }
+      @page { margin: 0; }
       html, body {
-        background: #fff !important;
-        height: auto !important;
-        overflow: visible !important;
-      }
-      body > *:not(#${PRINT_ROOT_ID}) {
-        display: none !important;
-      }
-      #${PRINT_ROOT_ID} {
-        position: static !important;
-        inset: auto !important;
+        margin: 0 !important;
         padding: 0 !important;
         background: #fff !important;
-        overflow: visible !important;
-        display: block !important;
       }
-      #${PRINT_ROOT_ID} .screen-actions {
-        display: none !important;
+      body * { visibility: hidden !important; }
+      #${SHELL_ID},
+      #${SHELL_ID} * { visibility: visible !important; }
+      #${SHELL_ID} {
+        position: fixed !important;
+        inset: 0 !important;
+        background: #fff !important;
       }
-      #${PRINT_ROOT_ID} .poster {
+      #${SHELL_ID} .actions { display: none !important; }
+      #${SHELL_ID} iframe {
+        position: absolute !important;
+        inset: 0 !important;
         width: 100% !important;
-        max-width: none !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-      }
-      #${PRINT_ROOT_ID} .qr {
-        width: 90mm !important;
-        height: 90mm !important;
+        height: 100% !important;
       }
     }
   `;
 
-  const root = document.createElement('div');
-  root.id = PRINT_ROOT_ID;
-  root.setAttribute('role', 'dialog');
-  root.setAttribute('aria-label', 'Print loyalty QR');
-  root.innerHTML = `
-    <div class="poster">
-      <img class="logo" src="${logoUrl}" alt="Stampogen" />
-      <div class="eyebrow">LOYALTY REWARDS</div>
-      ${shopBlock}
-      <div class="qr-card">
-        <img class="qr" src="${dataUrl}" alt="Loyalty QR code" />
-      </div>
-      <h1 class="headline">Scan &amp; Earn Rewards</h1>
-      <p class="sub">Open your phone camera and scan the QR code to join our loyalty programme and start collecting stamps.</p>
-      <div class="brand">POWERED BY STAMPOGEN</div>
-    </div>
-    <div class="screen-actions">
+  const shell = document.createElement('div');
+  shell.id = SHELL_ID;
+  shell.innerHTML = `
+    <iframe title="Loyalty QR print"></iframe>
+    <div class="actions">
       <button type="button" class="btn-close" data-action="close">Close</button>
-      <button type="button" class="btn-print" data-action="print">Print</button>
+      <button type="button" class="btn-print" data-action="print">Print QR</button>
     </div>
   `;
 
   document.head.appendChild(style);
-  document.body.appendChild(root);
+  document.body.appendChild(shell);
+  document.documentElement.classList.add('stampogen-qr-printing');
+
+  const iframe = shell.querySelector('iframe');
+  const doc = iframe.contentDocument;
+  doc.open();
+  doc.write(html);
+  doc.close();
 
   const close = () => {
-    window.removeEventListener('afterprint', onAfterPrint);
-    cleanupPrintOverlay();
+    cleanupPrintShell();
   };
-  const onAfterPrint = () => close();
 
-  root.querySelector('[data-action="close"]')?.addEventListener('click', close);
-  root.querySelector('[data-action="print"]')?.addEventListener('click', () => {
-    window.print();
-  });
+  const runPrint = () => {
+    try {
+      // Print the iframe document only — not the admin homepage
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch {
+      window.print();
+    }
+  };
 
-  await waitForImages(root);
-  window.addEventListener('afterprint', onAfterPrint);
+  shell.querySelector('[data-action="close"]')?.addEventListener('click', close);
+  shell.querySelector('[data-action="print"]')?.addEventListener('click', runPrint);
 
-  // Open system print UI immediately (same document = works on mobile)
-  window.print();
+  await waitForDocImages(doc);
+  await new Promise((r) => setTimeout(r, 150));
+  runPrint();
 }
 
 export function buildJoinUrl(tenantSlug) {

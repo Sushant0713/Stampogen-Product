@@ -214,7 +214,9 @@ export async function printLoyaltyQr({ value, shopName = '' }) {
 }
 
 export function buildJoinUrl(tenantSlug) {
-  if (typeof window !== 'undefined' && !process.env.NEXT_PUBLIC_APP_URL) {
+  // Prefer the domain the admin is currently on so QR matches after a domain cutover
+  // even if NEXT_PUBLIC_APP_URL was baked with the old host at build time.
+  if (typeof window !== 'undefined' && window.location?.origin) {
     return `${window.location.origin}/join/${tenantSlug}`;
   }
   const base = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');

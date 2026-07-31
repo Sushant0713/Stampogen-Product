@@ -234,6 +234,11 @@ class PlanService {
       enabled: body.enabled !== undefined ? body.enabled : current.enabled,
       description: body.description !== undefined ? body.description : current.description,
       ctaText: body.ctaText !== undefined ? body.ctaText : current.ctaText,
+      featuredOnWebsite:
+        body.featuredOnWebsite !== undefined
+          ? body.featuredOnWebsite
+          : Boolean(current.featuredOnWebsite),
+      badgeText: body.badgeText !== undefined ? body.badgeText : current.badgeText,
     };
 
     if (body.enabled !== undefined && body.status === undefined) {

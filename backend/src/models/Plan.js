@@ -90,6 +90,18 @@ const planSchema = new mongoose.Schema(
       default: 'Get early access',
       maxlength: 60,
     },
+    /** Show highlight badge + emphasis on /pricing */
+    featuredOnWebsite: {
+      type: Boolean,
+      default: false,
+    },
+    /** Badge label when featuredOnWebsite is on (e.g. MOST STAMPED, POPULAR) */
+    badgeText: {
+      type: String,
+      trim: true,
+      default: 'MOST STAMPED',
+      maxlength: 40,
+    },
   },
   {
     timestamps: true,

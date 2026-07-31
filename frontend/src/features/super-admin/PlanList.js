@@ -29,6 +29,8 @@ const EMPTY_FORM = {
   enabled: true,
   description: '',
   ctaText: 'Get early access',
+  featuredOnWebsite: false,
+  badgeText: 'MOST STAMPED',
 };
 
 const fieldClass =
@@ -161,6 +163,9 @@ function PlanViewPanel({ plan, onClose, availableFeatures = [] }) {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <DetailItem label="Button text">{plan.ctaText || 'Get early access'}</DetailItem>
+          <DetailItem label="Pricing badge">
+            {plan.featuredOnWebsite ? plan.badgeText || 'MOST STAMPED' : 'Off'}
+          </DetailItem>
           <DetailItem label="Price">{formatPrice(plan)}</DetailItem>
           <DetailItem label="MRP">
             {plan.priceCustom || !(Number(plan.mrpAmount) > 0)
@@ -670,6 +675,39 @@ function PlanForm({ form, setForm, mode, onClose, onSave, availableFeatures = []
                 toast when the button is clicked (no checkout).
               </p>
             </div>
+            <div className="lg:col-span-2 rounded-xl border border-[#F2F4F7] bg-[#F9FAFB] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-sm font-medium text-[#344054]">Featured badge on pricing</span>
+                  <p className="mt-0.5 text-[11px] text-[#98A2B3]">
+                    On = show badge + highlight border on /pricing
+                  </p>
+                </div>
+                <Toggle
+                  checked={form.featuredOnWebsite}
+                  label="Featured badge on pricing"
+                  onChange={() => update('featuredOnWebsite', !form.featuredOnWebsite)}
+                />
+              </div>
+              {form.featuredOnWebsite ? (
+                <div className="mt-3">
+                  <label className={labelClass} htmlFor="plan-badge-text">
+                    Badge text
+                  </label>
+                  <input
+                    id="plan-badge-text"
+                    className={fieldClass}
+                    value={form.badgeText}
+                    onChange={(event) => update('badgeText', event.target.value)}
+                    placeholder="MOST STAMPED"
+                    maxLength={40}
+                  />
+                  <p className="mt-1 text-[11px] text-[#98A2B3]">
+                    Examples: MOST STAMPED, POPULAR, BEST VALUE
+                  </p>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 rounded-xl border border-[#F2F4F7] bg-[#F9FAFB] p-4 sm:grid-cols-3">
@@ -866,6 +904,8 @@ export function PlanList() {
       enabled: Boolean(row.enabled),
       description: row.description || '',
       ctaText: row.ctaText || 'Get early access',
+      featuredOnWebsite: Boolean(row.featuredOnWebsite),
+      badgeText: row.badgeText || 'MOST STAMPED',
     });
     scrollToPanel();
   };
@@ -889,6 +929,8 @@ export function PlanList() {
       enabled: Boolean(values.enabled),
       description: values.description.trim(),
       ctaText: values.ctaText.trim() || 'Get early access',
+      featuredOnWebsite: Boolean(values.featuredOnWebsite),
+      badgeText: values.badgeText.trim() || 'MOST STAMPED',
     };
 
     try {

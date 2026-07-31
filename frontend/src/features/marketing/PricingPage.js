@@ -51,12 +51,8 @@ function formatMrpPrice(plan) {
 }
 
 function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
-  const paidPlans = plans.filter((p) => !p.priceCustom && Number(p.priceAmount) > 0);
-  const featuredId =
-    plans.find((p) => String(p.code).toLowerCase() === 'growth')?.id ||
-    paidPlans[0]?.id ||
-    null;
-  const featured = plan.id === featuredId;
+  const featured = Boolean(plan.featuredOnWebsite);
+  const badgeLabel = String(plan.badgeText || 'MOST STAMPED').trim() || 'MOST STAMPED';
 
   const isCustom = Boolean(plan.priceCustom);
   const isFree = !isCustom && Number(plan.priceAmount) === 0;
@@ -104,7 +100,7 @@ function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
     toastMessage: cta,
     variant,
     featured,
-    badge: featured ? 'MOST STAMPED' : null,
+    badge: featured ? badgeLabel : null,
     order: index,
   };
 }

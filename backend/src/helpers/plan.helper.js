@@ -71,6 +71,8 @@ function toPlanView(doc, extras = {}) {
     enabled: Boolean(plain.enabled),
     description: plain.description || '',
     ctaText: plain.ctaText || 'Get early access',
+    featuredOnWebsite: Boolean(plain.featuredOnWebsite),
+    badgeText: plain.badgeText || 'MOST STAMPED',
     createdAt: plain.createdAt,
     updatedAt: plain.updatedAt,
   };
@@ -92,6 +94,8 @@ function toPublicPlanView(doc) {
     description: view.description,
     ctaText: view.ctaText,
     enabled: Boolean(view.enabled),
+    featuredOnWebsite: Boolean(view.featuredOnWebsite),
+    badgeText: view.badgeText || 'MOST STAMPED',
     features: (view.features || []).map((f) => ({
       id: f.id,
       name: f.name,
@@ -130,6 +134,8 @@ function normalizePlanPayload(body = {}) {
     enabled: body.enabled === undefined ? true : Boolean(body.enabled),
     description: String(body.description || '').trim(),
     ctaText: String(body.ctaText || '').trim() || 'Get early access',
+    featuredOnWebsite: Boolean(body.featuredOnWebsite),
+    badgeText: String(body.badgeText || '').trim() || 'MOST STAMPED',
   };
 }
 

@@ -15,6 +15,15 @@ const createPlanValidator = [
   body('mrpAmount').optional().isFloat({ min: 0 }).withMessage('MRP must be 0 or greater'),
   body('users').optional().isInt({ min: 0 }).withMessage('Users limit must be 0 or greater'),
   body('usersUnlimited').optional().isBoolean().withMessage('usersUnlimited must be a boolean'),
+  body('featuredOnWebsite')
+    .optional()
+    .isBoolean()
+    .withMessage('featuredOnWebsite must be a boolean'),
+  body('badgeText')
+    .optional()
+    .trim()
+    .isLength({ max: 40 })
+    .withMessage('Badge text must be at most 40 characters'),
 ];
 
 const updatePlanValidator = [
@@ -38,6 +47,15 @@ const updatePlanValidator = [
     .withMessage('visibleSuperAdmin must be a boolean'),
   body('users').optional().isInt({ min: 0 }).withMessage('Users limit must be 0 or greater'),
   body('usersUnlimited').optional().isBoolean().withMessage('usersUnlimited must be a boolean'),
+  body('featuredOnWebsite')
+    .optional()
+    .isBoolean()
+    .withMessage('featuredOnWebsite must be a boolean'),
+  body('badgeText')
+    .optional()
+    .trim()
+    .isLength({ max: 40 })
+    .withMessage('Badge text must be at most 40 characters'),
 ];
 
 const planIdValidator = [param('id').isMongoId().withMessage('Invalid plan ID')];

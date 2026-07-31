@@ -40,6 +40,18 @@ class DiscountController {
     }
   }
 
+  async getPublic(req, res, next) {
+    try {
+      const result = await DiscountService.getPublicOneTime();
+      return sendSuccess(res, {
+        message: 'Public discounts retrieved',
+        data: result,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   async getById(req, res, next) {
     try {
       const discount = await DiscountService.getById(req.params.id);

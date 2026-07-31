@@ -159,6 +159,7 @@ function PortalRegisterFormInner({ role }) {
   const searchParams = useSearchParams();
   const { setUser } = useAuth();
   const planCode = searchParams.get('plan') || '';
+  const discountCode = searchParams.get('discount') || '';
   const schema = getRegisterSchema(role);
   const copy = REGISTER_COPY[role] || REGISTER_COPY[ROLES.ADMIN];
   const showTenant = role === ROLES.ADMIN;
@@ -363,13 +364,15 @@ function PortalRegisterFormInner({ role }) {
       return;
     }
     if (planCode) {
+      const params = new URLSearchParams({ plan: planCode });
+      if (discountCode) params.set('discount', discountCode);
       // Hard nav avoids auth-shell racing checkout
-      window.location.assign(`/checkout?plan=${encodeURIComponent(planCode)}`);
+      window.location.assign(`/checkout?${params.toString()}`);
       return;
     }
     // Soft nav keeps SPA cache — pricing feels instant
     router.push('/pricing');
-  }, [planCode, role, router]);
+  }, [discountCode, planCode, role, router]);
 
   const handleGoogleAccessToken = useCallback(
     async (accessToken) => {
@@ -386,8 +389,10 @@ function PortalRegisterFormInner({ role }) {
           toast.error('Account already exists. Please sign in instead.');
           const loginPath = getLoginPath(role);
           if (role === ROLES.ADMIN && planCode) {
+            const checkoutParams = new URLSearchParams({ plan: planCode });
+            if (discountCode) checkoutParams.set('discount', discountCode);
             router.push(
-              `${loginPath}?redirect=${encodeURIComponent(`/checkout?plan=${encodeURIComponent(planCode)}`)}`
+              `${loginPath}?redirect=${encodeURIComponent(`/checkout?${checkoutParams.toString()}`)}`
             );
           } else {
             router.push(loginPath);
@@ -426,7 +431,7 @@ function PortalRegisterFormInner({ role }) {
         toast.error(getErrorMessage(error, 'Unable to load Google profile'));
       }
     },
-    [googleForm, isSuperAdmin, planCode, role, router, secretCodeValue, setUser]
+    [discountCode, googleForm, isSuperAdmin, planCode, role, router, secretCodeValue, setUser]
   );
 
   const onGoogleComplete = async (values) => {
@@ -510,8 +515,10 @@ function PortalRegisterFormInner({ role }) {
         setGoogleDraft(null);
         const loginPath = getLoginPath(role);
         if (role === ROLES.ADMIN && planCode) {
+          const checkoutParams = new URLSearchParams({ plan: planCode });
+          if (discountCode) checkoutParams.set('discount', discountCode);
           router.push(
-            `${loginPath}?redirect=${encodeURIComponent(`/checkout?plan=${encodeURIComponent(planCode)}`)}`
+            `${loginPath}?redirect=${encodeURIComponent(`/checkout?${checkoutParams.toString()}`)}`
           );
         } else {
           router.push(loginPath);
@@ -582,6 +589,7 @@ function PortalRegisterFormInner({ role }) {
         toast.success('OTP sent to your email');
         const params = new URLSearchParams({ email: values.email });
         if (planCode) params.set('plan', planCode);
+        if (discountCode) params.set('discount', discountCode);
         router.push(`/${role}/verify-email?${params.toString()}`);
         return;
       }

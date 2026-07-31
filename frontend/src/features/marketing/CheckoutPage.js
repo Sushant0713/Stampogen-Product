@@ -67,12 +67,13 @@ function CheckoutPageInner() {
   const { user, logout, loading: authLoading, initialized } = useAuth();
   const planCode = searchParams.get('plan') || '';
   const planId = searchParams.get('planId') || '';
+  const urlDiscount = searchParams.get('discount') || '';
 
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [discountInput, setDiscountInput] = useState('');
+  const [discountInput, setDiscountInput] = useState(urlDiscount);
   const [appliedCode, setAppliedCode] = useState('');
   const [form, setForm] = useState({
     customerName: '',
@@ -91,7 +92,10 @@ function CheckoutPageInner() {
 
     if (!user) {
       const plan = planCode || planId;
-      router.replace(`/admin/register?plan=${encodeURIComponent(plan)}`);
+      const params = new URLSearchParams();
+      if (plan) params.set('plan', plan);
+      if (urlDiscount) params.set('discount', urlDiscount);
+      router.replace(`/admin/register?${params.toString()}`);
       return;
     }
 
@@ -104,10 +108,11 @@ function CheckoutPageInner() {
     if (!user.isEmailVerified) {
       const params = new URLSearchParams({ email: user.email || '' });
       if (planCode) params.set('plan', planCode);
+      if (urlDiscount) params.set('discount', urlDiscount);
       toast('Please verify your email before payment');
       router.replace(`/admin/verify-email?${params.toString()}`);
     }
-  }, [initialized, authLoading, user, roleSlug, planKey, planCode, planId, router]);
+  }, [initialized, authLoading, user, roleSlug, planKey, planCode, planId, urlDiscount, router]);
 
   useEffect(() => {
     if (!user) return;
@@ -158,8 +163,8 @@ function CheckoutPageInner() {
   useEffect(() => {
     if (!initialized || authLoading) return;
     if (!user || roleSlug !== ROLES.ADMIN || !user.isEmailVerified) return;
-    loadQuote('');
-  }, [loadQuote, initialized, authLoading, user, roleSlug]);
+    loadQuote(urlDiscount || '');
+  }, [loadQuote, initialized, authLoading, user, roleSlug, urlDiscount]);
 
   const applyDiscount = async () => {
     const code = discountInput.trim();

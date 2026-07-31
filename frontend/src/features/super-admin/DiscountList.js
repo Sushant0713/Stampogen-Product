@@ -20,6 +20,7 @@ import {
 import { discountService } from '@/services/discount.service';
 import { planService } from '@/services/plan.service';
 import { getErrorMessage } from '@/utils';
+import { notifyPricingPlansChanged } from '@/utils/pricingSync';
 
 const PAGE_SIZE = 10;
 const PRIMARY = '#021A54';
@@ -764,6 +765,9 @@ export function DiscountList() {
       }
       closeForm();
       await loadDiscounts();
+      if (payload.type === 'One Time Discount') {
+        notifyPricingPlansChanged();
+      }
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to save discount'));
     } finally {
@@ -803,6 +807,9 @@ export function DiscountList() {
       if (editingId === row.id) closeForm();
       toast.success('Discount deleted');
       await loadDiscounts();
+      if (row.type === 'One Time Discount') {
+        notifyPricingPlansChanged();
+      }
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to delete discount'));
     }

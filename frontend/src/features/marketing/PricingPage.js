@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { Copy, Tag, Ticket } from 'lucide-react';
 import { MARKETING_LINKS } from '@/constants/marketing';
 import { planService } from '@/services/plan.service';
+import { discountService } from '@/services/discount.service';
 import { getErrorMessage, getRoleSlug } from '@/utils';
 import { subscribePricingPlansChanged } from '@/utils/pricingSync';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,9 +52,56 @@ function formatMrpPrice(plan) {
   }).format(mrp);
 }
 
-function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
+function formatInr(amount) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Number(amount) || 0);
+}
+
+function discountAppliesToPlan(discount, plan) {
+  if (!discount || !plan || plan.priceCustom || Number(plan.priceAmount) <= 0) return false;
+  const planName = String(plan.name || '').trim().toLowerCase();
+  const billing = String(plan.billing || '').trim().toLowerCase();
+  const specific = String(discount.specificPlan || 'Any plan').trim();
+  const cycle = String(discount.billingCycle || 'All billing cycles').trim();
+  if (specific !== 'Any plan' && specific.toLowerCase() !== planName) return false;
+  if (cycle !== 'All billing cycles' && cycle.toLowerCase() !== billing) return false;
+  return true;
+}
+
+function salePriceAmount(priceAmount, discount) {
+  const amount = Number(priceAmount) || 0;
+  if (!discount) return amount;
+  if (discount.amountType === 'flat') {
+    return Math.max(0, amount - (Number(discount.amountValue) || 0));
+  }
+  const pct = Math.min(100, Math.max(0, Number(discount.amountValue) || 0));
+  return Math.round((amount * (100 - pct)) / 100);
+}
+
+function pickBestDiscount(discounts, plan) {
+  const matches = (discounts || []).filter((d) => discountAppliesToPlan(d, plan));
+  if (!matches.length) return null;
+  return matches.reduce((best, next) => {
+    const bestSale = salePriceAmount(plan.priceAmount, best);
+    const nextSale = salePriceAmount(plan.priceAmount, next);
+    return nextSale < bestSale ? next : best;
+  });
+}
+
+function withDiscountQuery(href, discountCode) {
+  if (!href || !discountCode) return href;
+  if (href.startsWith('mailto:') || href.startsWith('http')) return href;
+  const join = href.includes('?') ? '&' : '?';
+  return `${href}${join}discount=${encodeURIComponent(discountCode)}`;
+}
+
+function mapPlanToCard(plan, index, plans, { canCheckout = false, discounts = [] } = {}) {
   const featured = Boolean(plan.featuredOnWebsite);
   const badgeLabel = String(plan.badgeText || 'MOST STAMPED').trim() || 'MOST STAMPED';
+  const offer = pickBestDiscount(discounts, plan);
 
   const isCustom = Boolean(plan.priceCustom);
   const isFree = !isCustom && Number(plan.priceAmount) === 0;
@@ -61,7 +110,6 @@ function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
   let cta = customCta || 'Get early access';
   const planQuery = encodeURIComponent(plan.code || plan.id);
   const enabled = plan.enabled !== false;
-  // Not registered → create account with this plan; already registered admin → pay
   let href = canCheckout
     ? `/checkout?plan=${planQuery}`
     : `/admin/register?plan=${planQuery}`;
@@ -79,12 +127,22 @@ function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
     variant = 'solid';
   }
 
+  if (offer?.code) {
+    href = withDiscountQuery(href, offer.code);
+  }
+
+  const baseAmount = Number(plan.priceAmount) || 0;
+  const discountedAmount = offer ? salePriceAmount(baseAmount, offer) : null;
+  const showSale =
+    offer && discountedAmount != null && discountedAmount < baseAmount && !isCustom && !isFree;
+
   return {
     id: plan.id,
     name: plan.name,
     eyebrow: isCustom ? 'Multi-location' : null,
     mrp: formatMrpPrice(plan),
-    price: formatCardPrice(plan),
+    price: showSale ? formatInr(discountedAmount) : formatCardPrice(plan),
+    originalPrice: showSale ? formatCardPrice(plan) : null,
     period: isCustom ? '' : plan.period || '/month',
     blurb: plan.description || '',
     features: (plan.features || [])
@@ -101,6 +159,15 @@ function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
     variant,
     featured,
     badge: featured ? badgeLabel : null,
+    offer: showSale
+      ? {
+          code: offer.code,
+          label: offer.offerLabel,
+          name: offer.name,
+          description: offer.description || '',
+          remainingUses: offer.remainingUses,
+        }
+      : null,
     order: index,
   };
 }
@@ -260,6 +327,110 @@ function FeatureRow({ feature }) {
   );
 }
 
+function copyCode(code) {
+  if (!code || typeof navigator === 'undefined' || !navigator.clipboard) {
+    toast.error('Unable to copy code');
+    return;
+  }
+  navigator.clipboard
+    .writeText(code)
+    .then(() => toast.success(`Copied ${code}`))
+    .catch(() => toast.error('Unable to copy code'));
+}
+
+function OneTimeOfferStrip({ offers }) {
+  if (!offers?.length) return null;
+
+  return (
+    <section className="mt-10 overflow-hidden rounded-2xl border border-[#E5D8C8] bg-gradient-to-br from-[#FFF8F0] via-[#F7F5EE] to-[#EEF3FF] px-5 py-5 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span
+            className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
+            style={{ backgroundColor: COLORS.red }}
+          >
+            <Ticket size={18} />
+          </span>
+          <div>
+            <p
+              className="text-[11px] font-bold uppercase tracking-[0.14em]"
+              style={{ color: COLORS.red }}
+            >
+              One-time launch offer
+            </p>
+            <h2
+              className="mt-1 font-[family-name:var(--font-outfit)] text-[22px] font-bold tracking-tight sm:text-[24px]"
+              style={{ color: COLORS.ink }}
+            >
+              Limited coupons for first-time shops
+            </h2>
+            <p className="mt-1 max-w-xl text-[14px] leading-relaxed" style={{ color: COLORS.muted }}>
+              Apply at checkout on your first payment. Codes disappear when the use limit is reached.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+        {offers.map((offer) => (
+          <li
+            key={offer.id}
+            className="flex flex-col gap-3 rounded-xl border border-[#E8DFD2] bg-white/80 px-4 py-3.5 backdrop-blur"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-bold" style={{ color: COLORS.ink }}>
+                  {offer.name}
+                </p>
+                <p className="mt-0.5 text-[13px] font-semibold" style={{ color: COLORS.red }}>
+                  {offer.offerLabel}
+                  {offer.specificPlan && offer.specificPlan !== 'Any plan'
+                    ? ` · ${offer.specificPlan}`
+                    : ' · All plans'}
+                </p>
+                {offer.description ? (
+                  <p className="mt-1 text-[12px] leading-snug" style={{ color: COLORS.muted }}>
+                    {offer.description}
+                  </p>
+                ) : null}
+              </div>
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
+                style={{ backgroundColor: COLORS.navy }}
+              >
+                <Tag size={11} />
+                {offer.offerLabel}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <code
+                className="rounded-lg border border-dashed px-3 py-1.5 text-[13px] font-bold tracking-[0.06em]"
+                style={{ borderColor: COLORS.navy, color: COLORS.navy, backgroundColor: '#F3F6FB' }}
+              >
+                {offer.code}
+              </code>
+              <button
+                type="button"
+                onClick={() => copyCode(offer.code)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12px] font-bold text-white transition hover:opacity-90"
+                style={{ backgroundColor: COLORS.navy }}
+              >
+                <Copy size={13} />
+                Copy code
+              </button>
+              {offer.remainingUses != null ? (
+                <span className="text-[11px] font-medium" style={{ color: COLORS.muted }}>
+                  {offer.remainingUses} left
+                </span>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function PlanCard({ plan }) {
   const [showAllFeatures, setShowAllFeatures] = useState(false);
   const disabledCta = plan.enabled === false;
@@ -337,9 +508,26 @@ function PlanCard({ plan }) {
         {plan.name}
       </h2>
 
+      {plan.offer ? (
+        <div
+          className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold"
+          style={{ backgroundColor: '#FCEBE8', color: COLORS.red }}
+        >
+          <Ticket size={12} />
+          <span className="truncate">{plan.offer.label} with {plan.offer.code}</span>
+        </div>
+      ) : null}
+
       {plan.price ? (
         <div className="mt-4">
-          {plan.mrp ? (
+          {plan.originalPrice ? (
+            <p
+              className="font-[family-name:var(--font-outfit)] text-[18px] font-semibold leading-none tracking-tight"
+              style={{ color: COLORS.muted, textDecoration: 'line-through' }}
+            >
+              {plan.originalPrice}
+            </p>
+          ) : plan.mrp ? (
             <p
               className="font-[family-name:var(--font-outfit)] text-[20px] font-semibold leading-none tracking-tight"
               style={{ color: COLORS.ink, textDecoration: 'line-through' }}
@@ -347,7 +535,7 @@ function PlanCard({ plan }) {
               {plan.mrp}
             </p>
           ) : null}
-          <p className={`flex items-baseline gap-1 ${plan.mrp ? 'mt-1.5' : ''}`}>
+          <p className={`flex items-baseline gap-1 ${plan.originalPrice || plan.mrp ? 'mt-1.5' : ''}`}>
             <span
               className="font-[family-name:var(--font-outfit)] text-[42px] font-bold leading-none tracking-tight"
               style={{ color: COLORS.ink }}
@@ -358,6 +546,17 @@ function PlanCard({ plan }) {
               {plan.period}
             </span>
           </p>
+          {plan.offer ? (
+            <button
+              type="button"
+              onClick={() => copyCode(plan.offer.code)}
+              className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-bold underline underline-offset-2 transition hover:opacity-70"
+              style={{ color: COLORS.navy }}
+            >
+              <Copy size={12} />
+              Copy {plan.offer.code}
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4 h-[42px]" />
@@ -406,6 +605,7 @@ export function PricingPage() {
       return [];
     }
   });
+  const [discounts, setDiscounts] = useState([]);
   const [loading, setLoading] = useState(() => {
     if (typeof window === 'undefined') return true;
     try {
@@ -441,10 +641,15 @@ export function PricingPage() {
           setLoading(true);
           setError('');
         }
-        const { data } = await planService.getPublic({ force });
+        const [plansRes, discountsRes] = await Promise.all([
+          planService.getPublic({ force }),
+          discountService.getPublic().catch(() => null),
+        ]);
         if (cancelled) return;
-        const nextPlans = data?.data?.plans || [];
+        const nextPlans = plansRes.data?.data?.plans || [];
+        const nextDiscounts = discountsRes?.data?.data?.discounts || [];
         setPlans(nextPlans);
+        setDiscounts(nextDiscounts);
         persist(nextPlans);
         setError('');
       } catch (err) {
@@ -470,8 +675,8 @@ export function PricingPage() {
   }, []);
 
   const cards = useMemo(
-    () => plans.map((plan, index) => mapPlanToCard(plan, index, plans, { canCheckout })),
-    [plans, canCheckout]
+    () => plans.map((plan, index) => mapPlanToCard(plan, index, plans, { canCheckout, discounts })),
+    [plans, canCheckout, discounts]
   );
 
   return (
@@ -500,6 +705,8 @@ export function PricingPage() {
         >
           No setup fee, no long contract. Pay more only once more than one counter needs a QR.
         </p>
+
+        <OneTimeOfferStrip offers={discounts} />
 
         {loading && cards.length === 0 ? (
           <div className="mt-16 text-center text-[15px]" style={{ color: COLORS.muted }}>

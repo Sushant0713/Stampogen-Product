@@ -5,6 +5,7 @@ const DiscountRepository = require('@repositories/discount.repository');
 const {
   normalizePayload,
   toDiscountView,
+  toPublicDiscountView,
   assertDiscountRules,
   ANY_PLAN,
 } = require('@helpers/discount.helper');
@@ -71,6 +72,42 @@ class DiscountService {
 
   async getStats() {
     return DiscountRepository.getStats();
+  }
+
+  async getPublicOneTime() {
+    const result = await DiscountRepository.findAll(
+      {
+        type: 'One Time Discount',
+        enabled: true,
+      },
+      {
+        page: 1,
+        limit: 50,
+        sort: '-createdAt',
+        search: '',
+      }
+    );
+
+    const now = new Date();
+    const discounts = result.discounts
+      .map((doc) => {
+        const view = toDiscountView(doc);
+        if (view.lifecycle !== 'Active') return null;
+        // Double-check window / uses against live clock
+        const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+        if (plain.startDate && new Date(plain.startDate) > now) return null;
+        if (plain.endDate && new Date(plain.endDate) < now) return null;
+        if (
+          plain.maxUses != null &&
+          Number(plain.usageUsed || 0) >= Number(plain.maxUses)
+        ) {
+          return null;
+        }
+        return toPublicDiscountView(doc);
+      })
+      .filter(Boolean);
+
+    return { discounts };
   }
 
   async getById(id) {

@@ -122,6 +122,30 @@ function toDiscountView(doc) {
   };
 }
 
+/** Slim public payload for /pricing — One Time Discount offers only. */
+function toPublicDiscountView(doc) {
+  const view = toDiscountView(doc);
+  const remaining =
+    view.maxUses == null ? null : Math.max(0, Number(view.maxUses) - Number(view.usageUsed || 0));
+
+  return {
+    id: view.id,
+    name: view.name,
+    code: view.code,
+    description: view.description === '—' ? '' : view.description,
+    amountType: view.amountType,
+    amountValue: view.amountValue,
+    offerLabel:
+      view.amountType === 'flat'
+        ? `₹${Number(view.amountValue || 0).toLocaleString('en-IN')} off`
+        : `${Number(view.amountValue || 0)}% off`,
+    specificPlan: view.specificPlan,
+    billingCycle: view.billingCycle,
+    scheduleUntil: view.scheduleUntil,
+    remainingUses: remaining,
+  };
+}
+
 function normalizePayload(body = {}) {
   const amountType =
     body.amountType === 'Flat (INR)' || body.amountType === 'flat' ? 'flat' : 'percentage';
@@ -277,6 +301,7 @@ module.exports = {
   resolveLifecycle,
   formatOffer,
   toDiscountView,
+  toPublicDiscountView,
   normalizePayload,
   assertDiscountRules,
   evaluateDiscount,

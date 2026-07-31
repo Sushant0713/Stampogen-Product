@@ -24,6 +24,7 @@ function VerifyEmailFormInner({ role }) {
   const { setUser } = useAuth();
   const email = searchParams.get('email') || '';
   const planCode = searchParams.get('plan') || '';
+  const discountCode = searchParams.get('discount') || '';
   const purpose = searchParams.get('purpose') === 'login' ? 'login' : 'email_verification';
   const isLoginOtp = purpose === 'login';
 
@@ -82,7 +83,9 @@ function VerifyEmailFormInner({ role }) {
       // Admin onboarding: plan selected → pay; otherwise choose a plan on pricing
       if (role === ROLES.ADMIN) {
         if (planCode) {
-          window.location.assign(`/checkout?plan=${encodeURIComponent(planCode)}`);
+          const params = new URLSearchParams({ plan: planCode });
+          if (discountCode) params.set('discount', discountCode);
+          window.location.assign(`/checkout?${params.toString()}`);
           return;
         }
         router.replace('/pricing');

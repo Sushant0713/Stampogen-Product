@@ -12,6 +12,8 @@ const {
 
 const router = express.Router();
 
+router.get('/public', DiscountController.getPublic);
+
 router.use(authenticate, isSuperAdmin);
 
 router.get('/stats', DiscountController.getStats);

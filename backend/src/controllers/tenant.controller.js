@@ -5,15 +5,12 @@ const { HTTP_STATUS } = require('@constants');
 class TenantController {
   async create(req, res, next) {
     try {
-      const tenant = await TenantService.create({
-        ...req.body,
-        ownerId: req.body.ownerId || req.user._id,
-      });
+      const result = await TenantService.createClient(req.body);
 
       return sendSuccess(res, {
         statusCode: HTTP_STATUS.CREATED,
-        message: 'Tenant created',
-        data: { tenant },
+        message: 'Client created',
+        data: result,
       });
     } catch (error) {
       return next(error);

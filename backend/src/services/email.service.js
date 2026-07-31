@@ -615,6 +615,54 @@ The amount has been returned to your current earnings balance so you can redeem 
   return sendMail({ to, subject, html, text });
 };
 
+const sendAdminClientCredentialsEmail = async ({
+  to,
+  name,
+  email,
+  password,
+  shopName,
+  loginUrl,
+}) => {
+  const subject = 'Your Stampogen shop owner account';
+  const displayName = name || 'there';
+  const text = [
+    `Hi ${displayName},`,
+    '',
+    `A Stampogen shop account was created for ${shopName || 'your business'}.`,
+    '',
+    `Login: ${loginUrl || ''}`,
+    `Email: ${email}`,
+    `Temporary password: ${password}`,
+    '',
+    'Sign in and change your password after first login.',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #101828;">
+      <div style="background: #021A54; color: #fff; padding: 20px 24px;">
+        <h1 style="margin: 0; font-size: 20px;">Stampogen</h1>
+      </div>
+      <div style="padding: 24px; border: 1px solid #E4E7EC; border-top: 0;">
+        <p style="margin: 0 0 12px;">Hi ${displayName},</p>
+        <p style="margin: 0 0 16px;">
+          A shop owner account was created for
+          <strong>${shopName || 'your business'}</strong>.
+        </p>
+        <div style="background: #F8FAFC; border: 1px solid #E4E7EC; border-radius: 10px; padding: 14px 16px; margin: 0 0 16px;">
+          <p style="margin: 0 0 8px; font-size: 13px;"><strong>Login:</strong> ${loginUrl || ''}</p>
+          <p style="margin: 0 0 8px; font-size: 13px;"><strong>Email:</strong> ${email}</p>
+          <p style="margin: 0; font-size: 13px;"><strong>Temporary password:</strong> ${password}</p>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: #667085;">
+          Sign in and change your password after first login.
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendMail({ to, subject, html, text });
+};
+
 module.exports = {
   sendMail,
   sendOtpEmail,
@@ -625,6 +673,7 @@ module.exports = {
   sendAffiliateSignedAgreementUploadEmail,
   sendAffiliateRedeemPaidEmail,
   sendAffiliateRedeemRejectedEmail,
+  sendAdminClientCredentialsEmail,
   buildSuperAdminInterviewEmail,
   formatInterviewAt,
 };

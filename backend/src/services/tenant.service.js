@@ -1,14 +1,20 @@
 const AppError = require('@utils/AppError');
-const { HTTP_STATUS, TENANT_STATUS } = require('@constants');
+const { HTTP_STATUS, TENANT_STATUS, SHOP_CATEGORIES, SHOP_CATEGORY_VALUES, LOYALTY_STAMP_MODES, LOYALTY_STAMP_MODE_VALUES } = require('@constants');
+const { ROLES } = require('@constants/roles');
 const { slugify } = require('@helpers');
+const crypto = require('crypto');
+const config = require('@config');
 const TenantRepository = require('@repositories/tenant.repository');
 const UserRepository = require('@repositories/user.repository');
+const RoleRepository = require('@repositories/role.repository');
 const PlanRepository = require('@repositories/plan.repository');
 const OAuthRepository = require('@repositories/oauth.repository');
 const RefreshTokenRepository = require('@repositories/refreshToken.repository');
 const EmailOtpRepository = require('@repositories/emailOtp.repository');
 const PlatformInvoiceService = require('@services/platformInvoice.service');
 const PaymentRepository = require('@repositories/payment.repository');
+const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
+const { sendAdminClientCredentialsEmail } = require('@services/email.service');
 const {
   PLAN_RATES,
   buildSegment,
@@ -220,6 +226,167 @@ class TenantService {
     return {
       ...tenant.toObject(),
       billing: summarizeBilling(tenant),
+    };
+  }
+
+  /**
+   * Super Admin → Add Client: create shop owner (admin) + tenant in one step.
+   * Issues a temporary password and emails login details when SMTP is configured.
+   */
+  async createClient(data = {}) {
+    const firstName = String(data.firstName || '').trim();
+    const middleName = String(data.middleName || '').trim();
+    const lastName = String(data.lastName || '').trim();
+    const email = String(data.email || '').trim().toLowerCase();
+    const phone = String(data.phone || '').trim();
+    const tenantName = String(data.name || data.tenantName || '').trim();
+    const category = String(data.category || '').trim();
+    const customCategory = String(data.customCategory || '').trim().slice(0, 100);
+    const loyaltyStampMode = LOYALTY_STAMP_MODE_VALUES.includes(data.loyaltyStampMode)
+      ? data.loyaltyStampMode
+      : LOYALTY_STAMP_MODES.BILL;
+
+    if (!firstName || !lastName) {
+      throw new AppError('First and last name are required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!email) {
+      throw new AppError('Email is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (phone.length < 8) {
+      throw new AppError('Valid phone number is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!tenantName || tenantName.length < 2) {
+      throw new AppError('Company / shop name is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!SHOP_CATEGORY_VALUES.includes(category)) {
+      throw new AppError('Shop category is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (category === SHOP_CATEGORIES.CUSTOM && customCategory.length < 2) {
+      throw new AppError('Please enter your custom category', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const billingProfile = normalizeBillingProfile({
+      phone,
+      address: data.address,
+      street: data.street,
+      city: data.city,
+      state: data.state,
+      pin: data.pin,
+      gstin: data.gstin,
+      pan: data.pan,
+    });
+
+    if (!billingProfile.street && !billingProfile.address) {
+      throw new AppError('Street address is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!billingProfile.state) {
+      throw new AppError('State is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!billingProfile.city) {
+      throw new AppError('City is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!/^\d{6}$/.test(billingProfile.pin || '')) {
+      throw new AppError('Valid 6-digit PIN code is required', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const existing = await UserRepository.findByEmail(email);
+    if (existing) {
+      throw new AppError('Email already registered', HTTP_STATUS.CONFLICT);
+    }
+
+    const role = await RoleRepository.findBySlug(ROLES.ADMIN);
+    if (!role) {
+      throw new AppError('Admin role not found. Please seed the database.', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const issuedPassword =
+      String(data.password || '').trim() ||
+      `Sp${crypto.randomBytes(4).toString('hex')}9a`;
+
+    const user = await UserRepository.create({
+      firstName,
+      middleName,
+      lastName,
+      email,
+      phone: billingProfile.phone || phone,
+      password: issuedPassword,
+      role: role._id,
+      isEmailVerified: true,
+      isActive: true,
+    });
+
+    const tenantSlug = data.slug
+      ? String(data.slug).trim().toLowerCase()
+      : await this.uniqueSlug(tenantName);
+
+    if (await TenantRepository.findBySlug(tenantSlug)) {
+      await UserRepository.deleteById(user._id);
+      throw new AppError('Tenant slug already exists', HTTP_STATUS.CONFLICT);
+    }
+
+    let tenant;
+    try {
+      tenant = await TenantRepository.create({
+        name: tenantName,
+        slug: tenantSlug,
+        owner: user._id,
+        status: TENANT_STATUS.ACTIVE,
+        billingProfile,
+        loyaltyStampMode,
+        category,
+        customCategory: category === SHOP_CATEGORIES.CUSTOM ? customCategory : '',
+      });
+    } catch (error) {
+      await UserRepository.deleteById(user._id);
+      throw new AppError(
+        error.message || 'Unable to create client shop',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    await UserRepository.updateById(user._id, { tenant: tenant._id });
+
+    let finalTenant = await this.getById(tenant._id);
+
+    if (data.planId || data.planCode || data.planName) {
+      try {
+        finalTenant = await this.changePlan(tenant._id, {
+          planId: data.planId,
+          planCode: data.planCode,
+          planName: data.planName,
+        });
+      } catch (error) {
+        // Client is created; plan can be assigned later
+        console.warn('[createClient] plan assign failed:', error.message || error);
+      }
+    }
+
+    const loginUrl = `${String(config.frontendUrl || '').replace(/\/$/, '')}/admin/login`;
+    try {
+      await sendAdminClientCredentialsEmail({
+        to: email,
+        name: [firstName, lastName].filter(Boolean).join(' ') || firstName,
+        email,
+        password: issuedPassword,
+        shopName: tenantName,
+        loginUrl,
+      });
+    } catch (error) {
+      console.error('[createClient] Failed to email credentials:', error.message || error);
+    }
+
+    return {
+      tenant: finalTenant,
+      owner: {
+        _id: user._id,
+        firstName,
+        middleName,
+        lastName,
+        email,
+        phone: billingProfile.phone || phone,
+      },
+      issuedPassword,
+      loginUrl,
     };
   }
 

@@ -18,10 +18,35 @@ import {
 import { tenantService } from '@/services/tenant.service';
 import { planService } from '@/services/plan.service';
 import { getErrorMessage } from '@/utils';
-import { subscribeClientsChanged } from '@/utils/clientsSync';
+import { subscribeClientsChanged, notifyClientsChanged } from '@/utils/clientsSync';
+import { SHOP_CATEGORIES, SHOP_CATEGORY_OPTIONS } from '@/constants';
+import {
+  BillingAddressFields,
+  composeBillingAddress,
+} from '@/components/forms/BillingAddressFields';
 
 const PAGE_SIZE = 10;
 const ACCENT = '#021A54';
+
+const EMPTY_ADD_FORM = {
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  name: '',
+  category: '',
+  customCategory: '',
+  street: '',
+  city: '',
+  state: '',
+  stateCode: '',
+  pin: '',
+  gstin: '',
+  pan: '',
+  planId: '',
+  password: '',
+};
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -33,6 +58,9 @@ const STATUS_OPTIONS = [
 
 const actionBtnClass =
   'inline-flex h-8 w-full items-center justify-center gap-1 rounded-md border bg-white px-3 text-[12px] font-semibold transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50';
+
+const inputClass =
+  'h-10 w-full rounded-lg border border-[#D0D5DD] bg-white px-3 text-sm text-[#101828] outline-none focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54]';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -178,6 +206,10 @@ export function ClientManagement() {
   const [planClient, setPlanClient] = useState(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [planSaving, setPlanSaving] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
+  const [addSaving, setAddSaving] = useState(false);
+  const [issuedCredentials, setIssuedCredentials] = useState(null);
   const pageRef = useRef(1);
 
   useEffect(() => {
@@ -443,6 +475,7 @@ export function ClientManagement() {
       setActionId(client._id);
       await tenantService.remove(client._id);
       toast.success('Client deleted');
+      notifyClientsChanged();
       const nextPage =
         clients.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
       await Promise.all([loadClients(nextPage), loadStats()]);
@@ -450,6 +483,107 @@ export function ClientManagement() {
       toast.error(getErrorMessage(error, 'Unable to delete client'));
     } finally {
       setActionId(null);
+    }
+  };
+
+  const handleAddOpen = () => {
+    setAddForm(EMPTY_ADD_FORM);
+    setAddOpen(true);
+  };
+
+  const handleAddSave = async () => {
+    if (!addForm.firstName.trim() || !addForm.lastName.trim()) {
+      toast.error('First and last name are required');
+      return;
+    }
+    if (!addForm.email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+    if (!addForm.phone.trim() || addForm.phone.trim().length < 8) {
+      toast.error('Valid phone number is required');
+      return;
+    }
+    if (!addForm.name.trim()) {
+      toast.error('Company / shop name is required');
+      return;
+    }
+    if (!addForm.category) {
+      toast.error('Shop category is required');
+      return;
+    }
+    if (
+      addForm.category === SHOP_CATEGORIES.CUSTOM &&
+      addForm.customCategory.trim().length < 2
+    ) {
+      toast.error('Please enter a custom category');
+      return;
+    }
+    if (!addForm.street.trim()) {
+      toast.error('Street address is required');
+      return;
+    }
+    if (!addForm.state.trim() || !addForm.city.trim()) {
+      toast.error('State and city are required');
+      return;
+    }
+    if (!/^\d{6}$/.test(addForm.pin.trim())) {
+      toast.error('Valid 6-digit PIN is required');
+      return;
+    }
+
+    try {
+      setAddSaving(true);
+      const payload = {
+        firstName: addForm.firstName.trim(),
+        middleName: addForm.middleName.trim(),
+        lastName: addForm.lastName.trim(),
+        email: addForm.email.trim(),
+        phone: addForm.phone.trim(),
+        name: addForm.name.trim(),
+        category: addForm.category,
+        customCategory:
+          addForm.category === SHOP_CATEGORIES.CUSTOM
+            ? addForm.customCategory.trim()
+            : '',
+        street: addForm.street.trim(),
+        city: addForm.city.trim(),
+        state: addForm.state.trim(),
+        pin: addForm.pin.trim(),
+        address: composeBillingAddress({
+          street: addForm.street,
+          city: addForm.city,
+          state: addForm.state,
+          pin: addForm.pin,
+        }),
+        gstin: addForm.gstin.trim(),
+        pan: addForm.pan.trim(),
+        ...(addForm.planId ? { planId: addForm.planId } : {}),
+        ...(addForm.password.trim() ? { password: addForm.password.trim() } : {}),
+      };
+
+      const { data } = await tenantService.create(payload);
+      const result = data?.data || {};
+      if (result.issuedPassword) {
+        setIssuedCredentials({
+          name:
+            [result.owner?.firstName, result.owner?.lastName].filter(Boolean).join(' ') ||
+            addForm.firstName,
+          email: result.owner?.email || addForm.email,
+          password: result.issuedPassword,
+          shopName: result.tenant?.name || addForm.name,
+          loginUrl: result.loginUrl || '',
+        });
+      }
+      toast.success('Client created');
+      notifyClientsChanged();
+      setAddOpen(false);
+      setAddForm(EMPTY_ADD_FORM);
+      await Promise.all([loadClients(1), loadStats()]);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to create client'));
+    } finally {
+      setAddSaving(false);
     }
   };
 
@@ -466,7 +600,7 @@ export function ClientManagement() {
         </div>
         <button
           type="button"
-          onClick={() => toast('Add Client coming soon')}
+          onClick={handleAddOpen}
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white transition hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
@@ -877,6 +1011,296 @@ export function ClientManagement() {
                 </select>
               </label>
             )}
+          </div>
+        </ModalShell>
+      ) : null}
+
+      {addOpen ? (
+        <ModalShell
+          title="Add Client"
+          wide
+          onClose={() => {
+            if (!addSaving) setAddOpen(false);
+          }}
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAddOpen(false)}
+                disabled={addSaving}
+                className="h-10 rounded-lg border border-[#D0D5DD] px-4 text-sm font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddSave}
+                disabled={addSaving}
+                className="h-10 rounded-lg px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ backgroundColor: ACCENT }}
+              >
+                {addSaving ? 'Creating...' : 'Create client'}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  First name *
+                </span>
+                <input
+                  className={inputClass}
+                  value={addForm.firstName}
+                  onChange={(e) => setAddForm((f) => ({ ...f, firstName: e.target.value }))}
+                  disabled={addSaving}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Middle name
+                </span>
+                <input
+                  className={inputClass}
+                  value={addForm.middleName}
+                  onChange={(e) => setAddForm((f) => ({ ...f, middleName: e.target.value }))}
+                  disabled={addSaving}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Last name *
+                </span>
+                <input
+                  className={inputClass}
+                  value={addForm.lastName}
+                  onChange={(e) => setAddForm((f) => ({ ...f, lastName: e.target.value }))}
+                  disabled={addSaving}
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Email *
+                </span>
+                <input
+                  type="email"
+                  className={inputClass}
+                  value={addForm.email}
+                  onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+                  disabled={addSaving}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Phone *
+                </span>
+                <input
+                  className={inputClass}
+                  value={addForm.phone}
+                  onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))}
+                  disabled={addSaving}
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                Company / shop name *
+              </span>
+              <input
+                className={inputClass}
+                value={addForm.name}
+                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+                disabled={addSaving}
+              />
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Category *
+                </span>
+                <select
+                  className={inputClass}
+                  value={addForm.category}
+                  onChange={(e) => setAddForm((f) => ({ ...f, category: e.target.value }))}
+                  disabled={addSaving}
+                >
+                  <option value="">Select category</option>
+                  {SHOP_CATEGORY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {addForm.category === SHOP_CATEGORIES.CUSTOM ? (
+                <label className="block">
+                  <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                    Custom category *
+                  </span>
+                  <input
+                    className={inputClass}
+                    value={addForm.customCategory}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, customCategory: e.target.value }))
+                    }
+                    disabled={addSaving}
+                  />
+                </label>
+              ) : (
+                <label className="block">
+                  <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                    Plan (optional)
+                  </span>
+                  <select
+                    className={inputClass}
+                    value={addForm.planId}
+                    onChange={(e) => setAddForm((f) => ({ ...f, planId: e.target.value }))}
+                    disabled={addSaving}
+                  >
+                    <option value="">No plan yet</option>
+                    {assignablePlans.map((plan) => {
+                      const id = plan.id || plan._id;
+                      return (
+                        <option key={id} value={id}>
+                          {plan.name}
+                          {!plan.priceCustom
+                            ? ` · ${formatMoney(plan.priceAmount || 0)}`
+                            : ' · Custom'}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            {addForm.category === SHOP_CATEGORIES.CUSTOM ? (
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Plan (optional)
+                </span>
+                <select
+                  className={inputClass}
+                  value={addForm.planId}
+                  onChange={(e) => setAddForm((f) => ({ ...f, planId: e.target.value }))}
+                  disabled={addSaving}
+                >
+                  <option value="">No plan yet</option>
+                  {assignablePlans.map((plan) => {
+                    const id = plan.id || plan._id;
+                    return (
+                      <option key={id} value={id}>
+                        {plan.name}
+                        {!plan.priceCustom
+                          ? ` · ${formatMoney(plan.priceAmount || 0)}`
+                          : ' · Custom'}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            <div>
+              <p className="mb-2 text-[13px] font-semibold text-[#344054]">Billing address *</p>
+              <BillingAddressFields
+                idPrefix="add-client-"
+                values={{
+                  street: addForm.street,
+                  city: addForm.city,
+                  state: addForm.state,
+                  stateCode: addForm.stateCode,
+                  pin: addForm.pin,
+                }}
+                onChange={(next) =>
+                  setAddForm((f) => ({
+                    ...f,
+                    street: next.street ?? f.street,
+                    city: next.city ?? f.city,
+                    state: next.state ?? f.state,
+                    stateCode: next.stateCode ?? f.stateCode,
+                    pin: next.pin ?? f.pin,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  GSTIN (optional)
+                </span>
+                <input
+                  className={inputClass}
+                  value={addForm.gstin}
+                  onChange={(e) => setAddForm((f) => ({ ...f, gstin: e.target.value }))}
+                  disabled={addSaving}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  PAN (optional)
+                </span>
+                <input
+                  className={inputClass}
+                  value={addForm.pan}
+                  onChange={(e) => setAddForm((f) => ({ ...f, pan: e.target.value }))}
+                  disabled={addSaving}
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                Temporary password (optional)
+              </span>
+              <input
+                type="text"
+                className={inputClass}
+                value={addForm.password}
+                onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Auto-generated if left blank"
+                disabled={addSaving}
+              />
+            </label>
+          </div>
+        </ModalShell>
+      ) : null}
+
+      {issuedCredentials ? (
+        <ModalShell
+          title="Client login credentials"
+          onClose={() => setIssuedCredentials(null)}
+          footer={
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIssuedCredentials(null)}
+                className="h-10 rounded-lg px-4 text-sm font-semibold text-white"
+                style={{ backgroundColor: ACCENT }}
+              >
+                Done
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm text-[#344054]">
+            <p>
+              Account created for <strong>{issuedCredentials.shopName}</strong>. Login details
+              were emailed when SMTP is configured — copy them below too.
+            </p>
+            <DetailRow label="Owner" value={issuedCredentials.name} />
+            <DetailRow label="Email" value={issuedCredentials.email} />
+            <DetailRow label="Password" value={issuedCredentials.password} />
+            {issuedCredentials.loginUrl ? (
+              <DetailRow label="Login URL" value={issuedCredentials.loginUrl} />
+            ) : null}
           </div>
         </ModalShell>
       ) : null}

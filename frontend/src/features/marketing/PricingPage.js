@@ -442,11 +442,6 @@ function OneTimeOfferStrip({ offers }) {
                     <Copy size={13} />
                     Copy code
                   </button>
-                  {offer.remainingUses != null ? (
-                    <span className="text-[11px] font-medium" style={{ color: COLORS.muted }}>
-                      {offer.remainingUses} left
-                    </span>
-                  ) : null}
                 </div>
               </li>
             ))}

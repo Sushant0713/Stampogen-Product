@@ -4,3 +4,10 @@
 *.log
 .DS_Store
 deploy/.ecosystem.runtime.cjs
+
+# SSH / deploy keys — never commit
+stampogen_gha
+stampogen_gha.pub
+*.pem
+id_rsa
+id_ed25519

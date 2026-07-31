@@ -12,6 +12,10 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const superAdminLoginSchema = loginSchema.extend({
+  secretCode: z.string().min(1, 'Secret code is required'),
+});
+
 export const forgotPasswordSchema = z.object({
   email: z.string().email('Valid email is required'),
 });

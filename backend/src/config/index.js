@@ -37,6 +37,8 @@ const config = {
     expiresMinutes: parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 10,
     maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS, 10) || 5,
   },
+  /** Required on Super Admin login (password + Google). Set in env — never commit the real value. */
+  superAdminSecretCode: String(process.env.SUPER_ADMIN_SECRET_CODE || '').trim(),
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID || '',
     keySecret: process.env.RAZORPAY_KEY_SECRET || '',

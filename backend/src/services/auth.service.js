@@ -27,6 +27,30 @@ const { getSubscriptionView, applyDuePendingPlan } = require('@helpers/billing.h
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
+function assertSuperAdminSecretCode(secretCode, roleSlug) {
+  if (roleSlug !== ROLES.SUPER_ADMIN) return;
+
+  const expected = String(config.superAdminSecretCode || '');
+  if (!expected) {
+    throw new AppError(
+      'Super Admin secret code is not configured on the server',
+      HTTP_STATUS.SERVICE_UNAVAILABLE
+    );
+  }
+
+  const provided = String(secretCode || '');
+  const expectedBuf = Buffer.from(expected);
+  const providedBuf = Buffer.from(provided);
+
+  const matches =
+    expectedBuf.length === providedBuf.length &&
+    crypto.timingSafeEqual(expectedBuf, providedBuf);
+
+  if (!matches) {
+    throw new AppError('Invalid secret code', HTTP_STATUS.UNAUTHORIZED);
+  }
+}
+
 function parseBirthDate(value) {
   const raw = String(value || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
@@ -684,7 +708,7 @@ class AuthService {
     return this.issueTokens(user);
   }
 
-  async login({ email, password, expectedRole }) {
+  async login({ email, password, expectedRole, secretCode }) {
     const user = await UserRepository.findByEmailWithPassword(email);
 
     if (!user) {
@@ -698,6 +722,8 @@ class AuthService {
     if (expectedRole && user.role.slug !== expectedRole) {
       throw new AppError('Access denied for this portal', HTTP_STATUS.FORBIDDEN);
     }
+
+    assertSuperAdminSecretCode(secretCode, expectedRole || user.role?.slug);
 
     if (user.role.slug === ROLES.USER) {
       throw new AppError('User role authentication is not available', HTTP_STATUS.FORBIDDEN);
@@ -1305,6 +1331,7 @@ class AuthService {
     accessToken,
     role,
     allowCreate = false,
+    secretCode = '',
     tenantName = '',
     loyaltyStampMode = '',
     category = '',
@@ -1334,6 +1361,8 @@ class AuthService {
     if (!config.google.clientId) {
       throw new AppError('Google sign-in is not configured', HTTP_STATUS.SERVICE_UNAVAILABLE);
     }
+
+    assertSuperAdminSecretCode(secretCode, role);
 
     const profile = await this.resolveGoogleProfile({ idToken, accessToken });
     const user = await this.findOrCreateGoogleUser({

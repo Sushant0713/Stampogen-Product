@@ -137,6 +137,7 @@ class AuthController {
         email: req.body.email,
         password: req.body.password,
         expectedRole,
+        secretCode: req.body.secretCode,
       });
 
       setAuthCookies(res, result.accessToken, result.refreshToken);
@@ -231,6 +232,7 @@ class AuthController {
         accessToken: req.body.accessToken,
         role,
         allowCreate: Boolean(req.body.allowCreate),
+        secretCode: req.body.secretCode,
         tenantName: req.body.tenantName,
         loyaltyStampMode: req.body.loyaltyStampMode,
         category: req.body.category,

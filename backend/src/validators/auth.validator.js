@@ -211,6 +211,11 @@ async function assertTermsAccepted(req, role) {
 const loginValidator = [
   body('email').trim().isEmail().withMessage('Valid email is required').normalizeEmail(),
   body('password').notEmpty().withMessage('Password is required'),
+  body('secretCode')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Secret code is too long'),
 ];
 
 const loginOtpRequestValidator = [

@@ -15,7 +15,7 @@ import { useClientMounted } from '@/hooks/useClientMounted';
 import { GoogleSignInButton } from '@/components/buttons/GoogleSignInButton';
 import { PasswordField } from '@/components/forms/PasswordField';
 import { AuthInput, AuthButton } from '@/components/forms/AuthNativeFields';
-import { loginSchema } from '@/lib/validations/auth';
+import { loginSchema, superAdminLoginSchema } from '@/lib/validations/auth';
 import { ROLE_LABELS, ROLES } from '@/constants';
 import { toastAdminWelcome } from '@/features/auth/adminPlanToast';
 
@@ -40,7 +40,7 @@ const LOGIN_COPY = {
   },
   [ROLES.SUPER_ADMIN]: {
     title: 'Super Admin Login',
-    subtitle: 'Welcome back! Sign in with your password to access the control panel.',
+    subtitle: 'Sign in with email, password, and your secret access code.',
     Icon: () => <ShieldCheck size={26} strokeWidth={1.7} className="text-[#021A54]" />,
   },
   [ROLES.AFFILIATE]: {
@@ -66,18 +66,30 @@ function PortalLoginFormInner({ role }) {
   const [submitting, setSubmitting] = useState(false);
   const copy = LOGIN_COPY[role] || LOGIN_COPY[ROLES.ADMIN];
   const Icon = copy.Icon;
+  const isSuperAdmin = role === ROLES.SUPER_ADMIN;
   // Admin, Super Admin, and Affiliate use email + password
   const usePasswordLogin =
     role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN || role === ROLES.AFFILIATE;
 
+  const schema = isSuperAdmin
+    ? superAdminLoginSchema
+    : usePasswordLogin
+      ? loginSchema
+      : emailOnlySchema;
+
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm({
-    resolver: zodResolver(usePasswordLogin ? loginSchema : emailOnlySchema),
-    defaultValues: usePasswordLogin ? { email: '', password: '' } : { email: '' },
+    resolver: zodResolver(schema),
+    defaultValues: usePasswordLogin
+      ? { email: '', password: '', ...(isSuperAdmin ? { secretCode: '' } : {}) }
+      : { email: '' },
   });
+
+  const secretCodeValue = isSuperAdmin ? watch('secretCode') || '' : '';
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -108,6 +120,7 @@ function PortalLoginFormInner({ role }) {
         const loggedInUser = await login(role, {
           email: values.email,
           password: values.password,
+          ...(isSuperAdmin ? { secretCode: values.secretCode } : {}),
         });
         if (role === ROLES.ADMIN) {
           toastAdminWelcome(loggedInUser);
@@ -168,6 +181,9 @@ function PortalLoginFormInner({ role }) {
         <div className="space-y-3" aria-busy="true">
           <div className="h-[48px] w-full animate-pulse rounded-[10px] bg-[#F2F4F7] sm:h-[52px]" />
           <div className="h-[48px] w-full animate-pulse rounded-[10px] bg-[#F2F4F7] sm:h-[52px]" />
+          {isSuperAdmin ? (
+            <div className="h-[48px] w-full animate-pulse rounded-[10px] bg-[#F2F4F7] sm:h-[52px]" />
+          ) : null}
         </div>
       ) : (
         <>
@@ -225,6 +241,25 @@ function PortalLoginFormInner({ role }) {
               </div>
             )}
 
+            {isSuperAdmin ? (
+              <div className="mb-4">
+                <label
+                  htmlFor={`${role}-secret-code`}
+                  className="mb-1.5 block text-[15px] font-semibold text-[#101828] sm:text-[16px]"
+                >
+                  Secret code
+                </label>
+                <PasswordField
+                  id={`${role}-secret-code`}
+                  label={null}
+                  autoComplete="off"
+                  placeholder="Enter secret access code"
+                  error={errors.secretCode?.message}
+                  {...register('secretCode')}
+                />
+              </div>
+            ) : null}
+
             <AuthButton
               type="submit"
               disabled={submitting}
@@ -254,6 +289,7 @@ function PortalLoginFormInner({ role }) {
 
           <GoogleSignInButton
             role={role}
+            extraPayload={isSuperAdmin ? { secretCode: secretCodeValue } : undefined}
             className="flex h-[48px] w-full items-center justify-center gap-3 rounded-[10px] border border-[#D0D5DD] bg-white text-[15px] font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[52px] sm:text-[17px]"
           />
 

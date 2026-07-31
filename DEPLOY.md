@@ -190,6 +190,9 @@ SMTP_FROM=Stampogen <noreply@YOUR_DOMAIN.com>
 OTP_EXPIRES_MINUTES=10
 OTP_MAX_ATTEMPTS=5
 
+# Required for Super Admin login (password + Google)
+SUPER_ADMIN_SECRET_CODE=change-me-super-admin-secret
+
 FRONTEND_URL=https://YOUR_DOMAIN.com
 CORS_ORIGIN=https://YOUR_DOMAIN.com
 

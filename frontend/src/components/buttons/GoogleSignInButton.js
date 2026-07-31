@@ -52,6 +52,8 @@ export function GoogleSignInButton({
   label = 'Continue with Google',
   redirectTo,
   allowCreate = false,
+  /** Extra fields merged into google login payload (e.g. super-admin secretCode). */
+  extraPayload,
   /** If provided, parent handles the access token (e.g. register preview/complete flow). */
   onAccessToken,
 }) {
@@ -60,10 +62,15 @@ export function GoogleSignInButton({
   const [loading, setLoading] = useState(false);
   const tokenClientRef = useRef(null);
   const onAccessTokenRef = useRef(onAccessToken);
+  const extraPayloadRef = useRef(extraPayload);
 
   useEffect(() => {
     onAccessTokenRef.current = onAccessToken;
   }, [onAccessToken]);
+
+  useEffect(() => {
+    extraPayloadRef.current = extraPayload;
+  }, [extraPayload]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return undefined;
@@ -90,7 +97,10 @@ export function GoogleSignInButton({
                 return;
               }
 
-              const payload = { accessToken: response.access_token };
+              const payload = {
+                accessToken: response.access_token,
+                ...(extraPayloadRef.current || {}),
+              };
               if (allowCreate) payload.allowCreate = true;
 
               const { data } = await authService.googleLogin(role, payload);
@@ -169,9 +179,17 @@ export function GoogleSignInButton({
       return;
     }
 
+    if (
+      role === ROLES.SUPER_ADMIN &&
+      !String(extraPayloadRef.current?.secretCode || '').trim()
+    ) {
+      toast.error('Enter the secret code before continuing with Google');
+      return;
+    }
+
     setLoading(true);
     tokenClientRef.current.requestAccessToken({ prompt: 'select_account' });
-  }, []);
+  }, [role]);
 
   return (
     <button

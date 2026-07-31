@@ -930,7 +930,7 @@ export function PlanList() {
       description: values.description.trim(),
       ctaText: values.ctaText.trim() || 'Get early access',
       featuredOnWebsite: Boolean(values.featuredOnWebsite),
-      badgeText: values.badgeText.trim() || 'MOST STAMPED',
+      badgeText: String(values.badgeText || '').trim() || 'MOST STAMPED',
     };
 
     try {
@@ -992,6 +992,9 @@ export function PlanList() {
     if (key === 'enabled') {
       payload.status = nextValue ? 'Active' : 'Inactive';
     }
+    if (key === 'featuredOnWebsite' && nextValue) {
+      payload.badgeText = row.badgeText || 'MOST STAMPED';
+    }
     try {
       const { data } = await planService.update(id, payload);
       const updated = data.data.plan;
@@ -1010,14 +1013,28 @@ export function PlanList() {
 
       setRows((prev) => prev.map((item) => (item.id === id ? updated : item)));
       if (viewPlan?.id === id) setViewPlan(updated);
+      if (editingId === id) {
+        setForm((prev) => ({
+          ...prev,
+          featuredOnWebsite: Boolean(updated.featuredOnWebsite),
+          badgeText: updated.badgeText || prev.badgeText || 'MOST STAMPED',
+        }));
+      }
 
-      if (key === 'visibleWebsite' || key === 'enabled') {
+      if (key === 'visibleWebsite' || key === 'enabled' || key === 'featuredOnWebsite') {
         notifyPricingPlansChanged();
       }
 
       if (key === 'visibleWebsite') {
         toast.success(
           nextValue ? 'Plan visible on website' : 'Plan hidden from website pricing'
+        );
+      }
+      if (key === 'featuredOnWebsite') {
+        toast.success(
+          nextValue
+            ? `Pricing badge on (${updated.badgeText || 'MOST STAMPED'})`
+            : 'Pricing badge off'
         );
       }
     } catch (error) {
@@ -1232,6 +1249,14 @@ export function PlanList() {
                               checked={Boolean(row.visibleWebsite)}
                               label={`${row.name} website visibility`}
                               onChange={() => handleToggle(row.id, 'visibleWebsite')}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[13px] text-[#344054]">Badge</span>
+                            <Toggle
+                              checked={Boolean(row.featuredOnWebsite)}
+                              label={`${row.name} pricing badge`}
+                              onChange={() => handleToggle(row.id, 'featuredOnWebsite')}
                             />
                           </div>
                           <div className="flex items-center justify-between gap-3">

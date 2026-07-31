@@ -456,8 +456,8 @@ export function PricingPage() {
       }
     };
 
-    // Paint cached plans instantly; refresh quietly in the background
-    loadPlans({ showLoader: false });
+    // Always fetch fresh plans so badge / enabled flags are not stuck from session cache
+    loadPlans({ force: true, showLoader: plans.length === 0 });
 
     const unsubscribe = subscribePricingPlansChanged(() =>
       loadPlans({ force: true, showLoader: false })

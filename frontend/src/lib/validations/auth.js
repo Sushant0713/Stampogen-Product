@@ -287,6 +287,27 @@ export function getRegisterSchema(role) {
     );
   }
 
+  if (role === 'super-admin') {
+    return z
+      .object({
+        ...identityFields,
+        email: z.string().email('Valid email is required'),
+        password: z
+          .string()
+          .min(8, 'Password must be at least 8 characters')
+          .regex(
+            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+            'Must include uppercase, lowercase, and a number'
+          ),
+        confirmPassword: z.string().min(1, 'Confirm your password'),
+        secretCode: z.string().min(1, 'Secret code is required'),
+      })
+      .refine((data) => data.password === data.confirmPassword, {
+        message: 'Passwords do not match',
+        path: ['confirmPassword'],
+      });
+  }
+
   return baseRegisterSchema;
 }
 

@@ -336,10 +336,13 @@ class AuthService {
     resumeDocument,
     resumeDocumentName,
     joinReason,
+    secretCode = '',
   }) {
     if (!AUTHENTICATED_ROLES.includes(roleSlug)) {
       throw new AppError('Invalid role for registration', HTTP_STATUS.BAD_REQUEST);
     }
+
+    assertSuperAdminSecretCode(secretCode, roleSlug);
 
     assertRequiredIdentity({ firstName, middleName, lastName, phone });
     const resolvedBirthDate = parseBirthDate(birthDate);

@@ -123,6 +123,11 @@ const registerValidator = [
     .withMessage('Mobile number is required')
     .isLength({ min: 8, max: 20 })
     .withMessage('Mobile number must be between 8 and 20 characters'),
+  body('secretCode')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Secret code is too long'),
   body('street').optional().trim().isLength({ max: 300 }),
   body('city').optional().trim().isLength({ max: 100 }),
   body('state').optional().trim().isLength({ max: 100 }),

@@ -163,6 +163,7 @@ function PortalRegisterFormInner({ role }) {
   const copy = REGISTER_COPY[role] || REGISTER_COPY[ROLES.ADMIN];
   const showTenant = role === ROLES.ADMIN;
   const showAffiliateType = role === ROLES.AFFILIATE;
+  const isSuperAdmin = role === ROLES.SUPER_ADMIN;
   const termsAudience = role === ROLES.ADMIN ? 'client' : role === ROLES.AFFILIATE ? 'affiliate' : null;
 
   const [googleDraft, setGoogleDraft] = useState(null);
@@ -203,6 +204,7 @@ function PortalRegisterFormInner({ role }) {
       resumeDocument: '',
       resumeDocumentName: '',
       acceptTerms: false,
+      secretCode: '',
       ...billingDefaults,
     },
   });
@@ -231,6 +233,8 @@ function PortalRegisterFormInner({ role }) {
       ...billingDefaults,
     },
   });
+
+  const secretCodeValue = isSuperAdmin ? watch('secretCode') || '' : '';
 
   useEffect(() => {
     if (!termsAudience) {
@@ -391,7 +395,11 @@ function PortalRegisterFormInner({ role }) {
           return;
         }
 
-        setGoogleDraft({ accessToken, profile });
+        setGoogleDraft({
+          accessToken,
+          profile,
+          secretCode: isSuperAdmin ? String(secretCodeValue || '').trim() : '',
+        });
         googleForm.reset({
           firstName: profile.firstName || '',
           middleName: '',
@@ -418,7 +426,7 @@ function PortalRegisterFormInner({ role }) {
         toast.error(getErrorMessage(error, 'Unable to load Google profile'));
       }
     },
-    [googleForm, planCode, role, router, setUser]
+    [googleForm, isSuperAdmin, planCode, role, router, secretCodeValue, setUser]
   );
 
   const onGoogleComplete = async (values) => {
@@ -448,6 +456,9 @@ function PortalRegisterFormInner({ role }) {
         phone: String(values.phone || '').trim(),
         acceptTerms: Boolean(values.acceptTerms),
       };
+      if (isSuperAdmin) {
+        payload.secretCode = googleDraft.secretCode || String(secretCodeValue || '').trim();
+      }
       if (showTenant) {
         payload.tenantName = values.tenantName.trim();
         payload.loyaltyStampMode = values.loyaltyStampMode || 'bill';
@@ -532,6 +543,9 @@ function PortalRegisterFormInner({ role }) {
       };
       if (!showAffiliateType) {
         payload.password = values.password;
+      }
+      if (isSuperAdmin) {
+        payload.secretCode = String(values.secretCode || '').trim();
       }
 
       if (showTenant) {
@@ -1022,9 +1036,32 @@ function PortalRegisterFormInner({ role }) {
         ) : null}
       </div>
 
+      {isSuperAdmin ? (
+        <div className="mb-4">
+          <label
+            htmlFor={`${role}-register-secret-code`}
+            className="mb-1.5 block text-[15px] font-semibold text-[#101828] sm:text-[16px]"
+          >
+            Secret code
+          </label>
+          <PasswordField
+            id={`${role}-register-secret-code`}
+            label={null}
+            autoComplete="off"
+            placeholder="Enter secret access code"
+            error={errors.secretCode?.message}
+            {...register('secretCode')}
+          />
+          <p className="mt-1.5 text-[12px] text-[#667085]">
+            Required before Continue with Google or email registration.
+          </p>
+        </div>
+      ) : null}
+
       <GoogleSignInButton
         role={role}
         onAccessToken={handleGoogleAccessToken}
+        extraPayload={isSuperAdmin ? { secretCode: secretCodeValue } : undefined}
         className="flex h-[48px] w-full items-center justify-center gap-3 rounded-[10px] border border-[#D0D5DD] bg-white text-[15px] font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[52px] sm:text-[17px]"
       />
 

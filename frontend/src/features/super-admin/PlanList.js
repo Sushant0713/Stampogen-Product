@@ -666,7 +666,8 @@ function PlanForm({ form, setForm, mode, onClose, onSave, availableFeatures = []
                 maxLength={60}
               />
               <p className="mt-1 text-[11px] text-[#98A2B3]">
-                Shown on the /pricing plan card button
+                Button label on /pricing. If the plan is disabled, this same text is shown as a
+                toast when the button is clicked (no checkout).
               </p>
             </div>
           </div>
@@ -695,7 +696,12 @@ function PlanForm({ form, setForm, mode, onClose, onSave, availableFeatures = []
               />
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium text-[#344054]">Enabled</span>
+              <div>
+                <span className="text-sm font-medium text-[#344054]">Enabled</span>
+                <p className="mt-0.5 text-[11px] text-[#98A2B3]">
+                  Off = still on /pricing if visible; button shows toast only
+                </p>
+              </div>
               <Toggle
                 checked={form.enabled}
                 label="Plan enabled"

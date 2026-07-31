@@ -5,6 +5,8 @@ export { DiscountList } from '@/features/super-admin/DiscountList';
 export { FeatureList } from '@/features/super-admin/FeatureList';
 export { InvoiceSettings } from '@/features/super-admin/InvoiceSettings';
 export { AffiliateRedeemList } from '@/features/super-admin/AffiliateRedeemList';
+export { SuperAdminRevenue } from '@/features/super-admin/SuperAdminRevenue';
+export { SuperAdminReports } from '@/features/super-admin/SuperAdminReports';
 export {
   InvoicePreview,
   TAX_MODES,

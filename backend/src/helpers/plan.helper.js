@@ -91,6 +91,7 @@ function toPublicPlanView(doc) {
     period: billingPeriodLabel(view.billing),
     description: view.description,
     ctaText: view.ctaText,
+    enabled: Boolean(view.enabled),
     features: (view.features || []).map((f) => ({
       id: f.id,
       name: f.name,

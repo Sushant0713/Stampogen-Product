@@ -167,11 +167,11 @@ class PlanService {
   }
 
   async getPublic() {
+    // Website visibility alone controls listing. Disabled plans still appear;
+    // the pricing CTA shows a toast instead of starting checkout.
     const result = await PlanRepository.findAll(
       {
         visibleWebsite: true,
-        enabled: true,
-        status: 'Active',
       },
       {
         page: 1,

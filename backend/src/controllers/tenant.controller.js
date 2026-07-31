@@ -1,6 +1,8 @@
 const TenantService = require('@services/tenant.service');
+const AppError = require('@utils/AppError');
 const { sendSuccess } = require('@utils/response');
 const { HTTP_STATUS } = require('@constants');
+const { ROLES } = require('@constants/roles');
 
 class TenantController {
   async create(req, res, next) {
@@ -50,6 +52,14 @@ class TenantController {
 
   async getById(req, res, next) {
     try {
+      // Super admins may read any tenant; a shop admin is scoped to their own.
+      if (req.user?.role?.slug !== ROLES.SUPER_ADMIN) {
+        const ownTenantId = req.user?.tenant?._id || req.user?.tenant;
+        if (!ownTenantId || String(ownTenantId) !== String(req.params.id)) {
+          throw new AppError('Access denied', HTTP_STATUS.FORBIDDEN);
+        }
+      }
+
       const tenant = await TenantService.getById(req.params.id);
       return sendSuccess(res, {
         message: 'Tenant retrieved',

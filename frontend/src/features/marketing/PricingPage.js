@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { MARKETING_LINKS } from '@/constants/marketing';
 import { planService } from '@/services/plan.service';
 import { getErrorMessage, getRoleSlug } from '@/utils';
@@ -63,6 +64,7 @@ function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
   const customCta = String(plan.ctaText || '').trim();
   let cta = customCta || 'Get early access';
   const planQuery = encodeURIComponent(plan.code || plan.id);
+  const enabled = plan.enabled !== false;
   // Not registered → create account with this plan; already registered admin → pay
   let href = canCheckout
     ? `/checkout?plan=${planQuery}`
@@ -89,9 +91,17 @@ function mapPlanToCard(plan, index, plans, { canCheckout = false } = {}) {
     price: formatCardPrice(plan),
     period: isCustom ? '' : plan.period || '/month',
     blurb: plan.description || '',
-    features: (plan.features || []).map((f) => f.name).filter(Boolean),
+    features: (plan.features || [])
+      .map((f) => ({
+        id: f.id || f.name,
+        name: f.name,
+        description: String(f.description || '').trim(),
+      }))
+      .filter((f) => f.name),
     cta,
-    href,
+    href: enabled ? href : null,
+    enabled,
+    toastMessage: cta,
     variant,
     featured,
     badge: featured ? 'MOST STAMPED' : null,
@@ -213,9 +223,90 @@ function MarketingNav() {
   );
 }
 
+const FEATURE_PREVIEW_COUNT = 5;
+
+function FeatureRow({ feature }) {
+  const [open, setOpen] = useState(false);
+  const hasDescription = Boolean(feature.description);
+
+  return (
+    <li className="flex gap-2 text-[14.5px] leading-snug" style={{ color: COLORS.ink }}>
+      <span className="shrink-0" style={{ color: COLORS.muted }}>
+        –
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-1.5">
+          <span>{feature.name}</span>
+          {hasDescription ? (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={`${open ? 'Hide' : 'Show'} details for ${feature.name}`}
+              onClick={() => setOpen((prev) => !prev)}
+              className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none transition hover:opacity-80"
+              style={{
+                color: open ? '#fff' : COLORS.navy,
+                backgroundColor: open ? COLORS.navy : 'transparent',
+                border: `1px solid ${COLORS.navy}`,
+              }}
+            >
+              i
+            </button>
+          ) : null}
+        </div>
+        {open && hasDescription ? (
+          <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: COLORS.muted }}>
+            {feature.description}
+          </p>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 function PlanCard({ plan }) {
-  const CtaTag = plan.href.startsWith('mailto:') || plan.href.startsWith('http') ? 'a' : Link;
-  const ctaProps = { href: plan.href };
+  const [showAllFeatures, setShowAllFeatures] = useState(false);
+  const disabledCta = plan.enabled === false;
+  const hasMoreFeatures = plan.features.length > FEATURE_PREVIEW_COUNT;
+  const visibleFeatures = showAllFeatures
+    ? plan.features
+    : plan.features.slice(0, FEATURE_PREVIEW_COUNT);
+
+  const ctaClassName =
+    'mt-8 inline-flex h-12 w-full items-center justify-center rounded-lg text-[15px] font-semibold transition hover:opacity-90';
+  const ctaStyle =
+    plan.variant === 'solid'
+      ? {
+          backgroundColor: COLORS.red,
+          color: '#fff',
+          boxShadow: '0 4px 0 #7A2A1F',
+        }
+      : {
+          backgroundColor: 'transparent',
+          color: COLORS.ink,
+          border: `1.5px solid ${COLORS.ink}`,
+        };
+
+  const handleDisabledCta = (event) => {
+    event.preventDefault();
+    toast(plan.toastMessage || plan.cta || 'This plan is not available yet');
+  };
+
+  let ctaControl;
+  if (disabledCta) {
+    ctaControl = (
+      <button type="button" onClick={handleDisabledCta} className={ctaClassName} style={ctaStyle}>
+        {plan.cta}
+      </button>
+    );
+  } else {
+    const CtaTag = plan.href.startsWith('mailto:') || plan.href.startsWith('http') ? 'a' : Link;
+    ctaControl = (
+      <CtaTag href={plan.href} className={ctaClassName} style={ctaStyle}>
+        {plan.cta}
+      </CtaTag>
+    );
+  }
 
   return (
     <article
@@ -286,40 +377,24 @@ function PlanCard({ plan }) {
             Features coming soon
           </li>
         ) : (
-          plan.features.map((feature) => (
-            <li
-              key={feature}
-              className="flex gap-2 text-[14.5px] leading-snug"
-              style={{ color: COLORS.ink }}
-            >
-              <span className="shrink-0" style={{ color: COLORS.muted }}>
-                –
-              </span>
-              <span>{feature}</span>
-            </li>
-          ))
+          visibleFeatures.map((feature) => <FeatureRow key={feature.id} feature={feature} />)
         )}
       </ul>
 
-      <CtaTag
-        {...ctaProps}
-        className="mt-8 inline-flex h-12 w-full items-center justify-center rounded-lg text-[15px] font-semibold transition hover:opacity-90"
-        style={
-          plan.variant === 'solid'
-            ? {
-                backgroundColor: COLORS.red,
-                color: '#fff',
-                boxShadow: '0 4px 0 #7A2A1F',
-              }
-            : {
-                backgroundColor: 'transparent',
-                color: COLORS.ink,
-                border: `1.5px solid ${COLORS.ink}`,
-              }
-        }
-      >
-        {plan.cta}
-      </CtaTag>
+      {hasMoreFeatures ? (
+        <button
+          type="button"
+          onClick={() => setShowAllFeatures((prev) => !prev)}
+          className="mt-3 self-start text-[13px] font-semibold underline underline-offset-2 transition hover:opacity-70"
+          style={{ color: COLORS.navy }}
+        >
+          {showAllFeatures
+            ? 'View less'
+            : `View more (${plan.features.length - FEATURE_PREVIEW_COUNT} more)`}
+        </button>
+      ) : null}
+
+      {ctaControl}
     </article>
   );
 }
@@ -421,7 +496,7 @@ export function PricingPage() {
           className="mt-3 max-w-2xl font-[family-name:var(--font-outfit)] text-[40px] font-bold leading-[1.08] tracking-tight sm:text-[52px]"
           style={{ color: COLORS.ink }}
         >
-          Free to try. Cheap to keep.
+          One plan. Unlimited stamps.
         </h1>
         <p
           className="mt-4 max-w-xl text-[17px] leading-relaxed sm:text-[18px]"

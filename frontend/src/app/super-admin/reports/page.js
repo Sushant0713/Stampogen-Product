@@ -1,9 +1,14 @@
 'use client';
 
-import { PortalPlaceholder } from '@/features/super-admin/PortalPlaceholder';
+import dynamic from 'next/dynamic';
+import { ContentLoader } from '@/components/loaders/Spinner';
+
+const SuperAdminReports = dynamic(
+  () =>
+    import('@/features/super-admin/SuperAdminReports').then((module) => module.SuperAdminReports),
+  { loading: () => <ContentLoader />, ssr: false }
+);
 
 export default function SuperAdminReportsPage() {
-  return (
-    <PortalPlaceholder title="Reports" description="Review platform performance reports." />
-  );
+  return <SuperAdminReports />;
 }

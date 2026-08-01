@@ -17,6 +17,7 @@ const AffiliateRedeem = require('./AffiliateRedeem');
 const LoyaltyMembership = require('./LoyaltyMembership');
 const PendingAdminRegistration = require('./PendingAdminRegistration');
 const PlatformQr = require('./PlatformQr');
+const PlatformQrScan = require('./PlatformQrScan');
 
 module.exports = {
   Role,
@@ -38,4 +39,5 @@ module.exports = {
   LoyaltyMembership,
   PendingAdminRegistration,
   PlatformQr,
+  PlatformQrScan,
 };

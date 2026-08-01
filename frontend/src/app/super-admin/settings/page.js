@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText, QrCode, ScrollText } from 'lucide-react';
+import { BarChart3, FileText, QrCode, ScrollText } from 'lucide-react';
 
 const PRIMARY = '#021A54';
 
@@ -23,6 +23,12 @@ const SETTINGS_ITEMS = [
     description: 'Paste a website link to generate a QR, add more, and manage the list.',
     href: '/super-admin/settings/qr',
     icon: QrCode,
+  },
+  {
+    title: 'QR Reports',
+    description: 'See scan counts per QR code with date and QR filters.',
+    href: '/super-admin/settings/qr/reports',
+    icon: BarChart3,
   },
 ];
 

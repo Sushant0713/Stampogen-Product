@@ -79,7 +79,11 @@ function cleanupPlatformQrPrint() {
   document.documentElement.classList.remove('stampogen-platform-qr-printing');
 }
 
-async function printPlatformQr({ url, title = '', note = '' }) {
+function trackValue(item) {
+  return item?.scanUrl || item?.url || '';
+}
+
+async function printPlatformQr({ url, displayUrl = '', title = '', note = '' }) {
   if (!url || typeof window === 'undefined') return;
 
   cleanupPlatformQrPrint();
@@ -92,6 +96,7 @@ async function printPlatformQr({ url, title = '', note = '' }) {
   const logoUrl = `${window.location.origin}/logo.png`;
   const displayTitle = String(title || 'Scan to visit').trim();
   const displayNote = String(note || '').trim();
+  const urlLabel = String(displayUrl || url).trim();
 
   const html = `<!DOCTYPE html>
 <html>
@@ -286,7 +291,7 @@ async function printPlatformQr({ url, title = '', note = '' }) {
       </div>
       <p class="scan">Point your camera here</p>
       <p class="hint">Open your phone camera and scan this code to visit the page instantly.</p>
-      <div class="url-pill">${escapeHtml(url)}</div>
+      <div class="url-pill">${escapeHtml(urlLabel)}</div>
       ${displayNote ? `<p class="note">${escapeHtml(displayNote)}</p>` : ''}
     </div>
     <div class="bottom">
@@ -508,7 +513,8 @@ export function SuperAdminQrPage() {
                   Create a QR code
                 </h2>
                 <p className="mt-1 text-sm leading-relaxed text-[#667085]">
-                  Paste any website link. The QR updates live — add it to your library when ready.
+                  Paste any website link. Saved QRs use a trackable Stampogen link so scans show up in
+                  QR Reports.
                 </p>
               </div>
             </div>
@@ -573,6 +579,7 @@ export function SuperAdminQrPage() {
                   onClick={() =>
                     printPlatformQr({
                       url: previewUrl,
+                      displayUrl: previewUrl,
                       title: form.title.trim() || 'QR code',
                       note: form.note.trim(),
                     }).catch(() => toast.error('Unable to print QR'))
@@ -639,7 +646,7 @@ export function SuperAdminQrPage() {
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-[#101828]">QR library</h2>
             <p className="mt-1 text-sm text-[#667085]">
-              Print, download, or copy any saved code.
+              Print, download, or copy any saved code. Scan totals update from trackable QR links.
             </p>
           </div>
           <span className="inline-flex h-8 items-center rounded-full bg-[#F2F4F7] px-3 text-[12px] font-semibold text-[#344054]">
@@ -664,21 +671,28 @@ export function SuperAdminQrPage() {
           </div>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {items.map((item) => (
+            {items.map((item) => {
+              const qrValue = trackValue(item);
+              return (
               <li
                 key={item.id}
                 className="group flex flex-col overflow-hidden rounded-2xl border border-[#E4E7EC] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-[#021A54]/25 hover:shadow-[0_12px_28px_rgba(2,26,84,0.08)]"
               >
                 <div className="flex justify-center bg-[linear-gradient(180deg,#F8FAFC_0%,#EEF2F7_100%)] px-5 pb-4 pt-5">
                   <div className="rounded-2xl border border-white bg-white p-3 shadow-sm ring-1 ring-[#E4E7EC]">
-                    <QrPreview value={item.url} size={148} className="rounded-md" />
+                    <QrPreview value={qrValue} size={148} className="rounded-md" />
                   </div>
                 </div>
 
                 <div className="flex flex-1 flex-col px-4 pb-4 pt-3">
-                  <h3 className="truncate text-[15px] font-semibold text-[#101828]">
-                    {item.title}
-                  </h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="truncate text-[15px] font-semibold text-[#101828]">
+                      {item.title}
+                    </h3>
+                    <span className="shrink-0 rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-bold text-[#021A54]">
+                      {Number(item.scanCount) || 0} scans
+                    </span>
+                  </div>
                   <a
                     href={item.url}
                     target="_blank"
@@ -701,7 +715,8 @@ export function SuperAdminQrPage() {
                       title="Print"
                       onClick={() =>
                         printPlatformQr({
-                          url: item.url,
+                          url: qrValue,
+                          displayUrl: item.url,
                           title: item.title,
                           note: item.note,
                         }).catch(() => toast.error('Unable to print QR'))
@@ -713,7 +728,7 @@ export function SuperAdminQrPage() {
                     <ActionButton
                       title="Download PNG"
                       onClick={() =>
-                        downloadQrPng(item.url, slugFilename(item.title)).catch(() =>
+                        downloadQrPng(qrValue, slugFilename(item.title)).catch(() =>
                           toast.error('Unable to download QR')
                         )
                       }
@@ -721,7 +736,7 @@ export function SuperAdminQrPage() {
                       <Download size={14} />
                       PNG
                     </ActionButton>
-                    <ActionButton title="Copy link" onClick={() => copyUrl(item.url)}>
+                    <ActionButton title="Copy trackable link" onClick={() => copyUrl(qrValue)}>
                       <Copy size={14} />
                       Copy
                     </ActionButton>
@@ -740,7 +755,8 @@ export function SuperAdminQrPage() {
                   </div>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

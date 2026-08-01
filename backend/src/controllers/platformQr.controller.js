@@ -63,6 +63,51 @@ class PlatformQrController {
       return next(error);
     }
   }
+
+  async visit(req, res, next) {
+    try {
+      const result = await PlatformQrService.visitByCode(req.params.code, req);
+      return sendSuccess(res, {
+        message: 'QR scan recorded',
+        data: result,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async go(req, res, next) {
+    try {
+      const result = await PlatformQrService.visitByCode(req.params.code, req);
+      return res.redirect(302, result.url);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async reports(req, res, next) {
+    try {
+      const result = await PlatformQrService.getReports(req.query);
+      return sendSuccess(res, {
+        message: 'QR reports retrieved',
+        data: result,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async options(req, res, next) {
+    try {
+      const items = await PlatformQrService.listOptions();
+      return sendSuccess(res, {
+        message: 'QR options retrieved',
+        data: { items },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
 }
 
 module.exports = new PlatformQrController();

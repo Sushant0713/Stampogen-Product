@@ -69,7 +69,14 @@ export const SIDEBAR_CONFIG = {
           { label: 'Terms and conditions', href: 'settings/terms' },
         ],
       },
-      { label: 'QR', href: 'settings/qr', icon: QrCode },
+      {
+        label: 'QR',
+        icon: QrCode,
+        children: [
+          { label: 'QR codes', href: 'settings/qr' },
+          { label: 'QR Reports', href: 'settings/qr/reports' },
+        ],
+      },
       { label: 'Support Ticket', href: 'support-tickets', icon: LifeBuoy },
     ]),
   },

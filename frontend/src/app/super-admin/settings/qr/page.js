@@ -1,6 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { BarChart3 } from 'lucide-react';
 import { ContentLoader } from '@/components/loaders/Spinner';
 
 const SuperAdminQrPage = dynamic(
@@ -20,10 +22,16 @@ export default function SuperAdminSettingsQrPage() {
             QR codes
           </h1>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-[#667085]">
-            Turn any website link into a print-ready QR. Build a reusable library for posters,
-            flyers, and campaigns.
+            Turn any website link into a trackable, print-ready QR. Scan counts appear in QR Reports.
           </p>
         </div>
+        <Link
+          href="/super-admin/settings/qr/reports"
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#E4E7EC] bg-white px-4 text-sm font-semibold text-[#344054] transition hover:border-[#021A54]/25"
+        >
+          <BarChart3 size={15} />
+          QR Reports
+        </Link>
       </div>
       <SuperAdminQrPage />
     </div>

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const AppError = require('@utils/AppError');
 const { HTTP_STATUS } = require('@constants');
 const PlatformQrRepository = require('@repositories/platformQr.repository');
@@ -17,6 +18,20 @@ function normalizeUrl(raw) {
     throw new AppError('URL must start with http:// or https://', HTTP_STATUS.BAD_REQUEST);
   }
   return parsed.toString();
+}
+
+function clientMeta(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip =
+    (typeof forwarded === 'string' && forwarded.split(',')[0].trim()) ||
+    req.ip ||
+    req.socket?.remoteAddress ||
+    '';
+  return {
+    userAgent: req.get('user-agent') || '',
+    referer: req.get('referer') || req.get('referrer') || '',
+    ip,
+  };
 }
 
 class PlatformQrService {
@@ -69,6 +84,36 @@ class PlatformQrService {
     const deleted = await PlatformQrRepository.deleteById(id);
     if (!deleted) throw new AppError('QR entry not found', HTTP_STATUS.NOT_FOUND);
     return true;
+  }
+
+  async visitByCode(code, req) {
+    const doc = await PlatformQrRepository.findByCode(code);
+    if (!doc) throw new AppError('QR link not found', HTTP_STATUS.NOT_FOUND);
+    await PlatformQrRepository.recordScan(doc, clientMeta(req));
+    return { url: doc.url, title: doc.title, code: doc.code };
+  }
+
+  async listOptions() {
+    return PlatformQrRepository.listOptions();
+  }
+
+  async getReports(query = {}) {
+    let qrId = null;
+    if (query.qrId) {
+      if (!mongoose.Types.ObjectId.isValid(query.qrId)) {
+        throw new AppError('Invalid QR id', HTTP_STATUS.BAD_REQUEST);
+      }
+      qrId = new mongoose.Types.ObjectId(query.qrId);
+    }
+
+    return PlatformQrRepository.getReports({
+      from: query.from || query.dateFrom,
+      to: query.to || query.dateTo,
+      qrId,
+      search: query.search,
+      sort: query.sort,
+      minScans: query.minScans,
+    });
   }
 }
 

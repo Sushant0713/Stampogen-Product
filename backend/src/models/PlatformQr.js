@@ -20,6 +20,22 @@ const platformQrSchema = new mongoose.Schema(
       default: '',
       maxlength: 500,
     },
+    code: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+      maxlength: 32,
+    },
+    scanCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    lastScannedAt: {
+      type: Date,
+      default: null,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -30,5 +46,6 @@ const platformQrSchema = new mongoose.Schema(
 );
 
 platformQrSchema.index({ createdAt: -1 });
+platformQrSchema.index({ scanCount: -1 });
 
 module.exports = mongoose.model('PlatformQr', platformQrSchema);

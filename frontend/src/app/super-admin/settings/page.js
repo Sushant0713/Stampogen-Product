@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText, ScrollText } from 'lucide-react';
+import { FileText, QrCode, ScrollText } from 'lucide-react';
 
 const PRIMARY = '#021A54';
 
@@ -17,6 +17,12 @@ const SETTINGS_ITEMS = [
     description: 'Manage Terms and Conditions for Affiliate Partners and Clients.',
     href: '/super-admin/settings/terms',
     icon: ScrollText,
+  },
+  {
+    title: 'QR codes',
+    description: 'Paste a website link to generate a QR, add more, and manage the list.',
+    href: '/super-admin/settings/qr',
+    icon: QrCode,
   },
 ];
 

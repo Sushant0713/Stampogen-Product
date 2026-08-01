@@ -66,6 +66,7 @@ export const SIDEBAR_CONFIG = {
         children: [
           { label: 'Invoice setting', href: 'settings/invoice' },
           { label: 'Terms and conditions', href: 'settings/terms' },
+          { label: 'QR', href: 'settings/qr' },
         ],
       },
       { label: 'Support Ticket', href: 'support-tickets', icon: LifeBuoy },

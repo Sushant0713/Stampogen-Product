@@ -34,6 +34,7 @@ router.use('/affiliate-settings', require('./affiliateSettings.routes'));
 router.use('/affiliate-onboarding', require('./affiliateOnboarding.routes'));
 router.use('/affiliate-earnings', require('./affiliateEarnings.routes'));
 router.use('/payments', paymentRoutes);
+router.use('/platform-qr', require('./platformQr.routes'));
 router.use('/notifications', require('./notification.routes'));
 router.use('/loyalty', require('./loyalty.routes'));
 

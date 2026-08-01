@@ -22,6 +22,19 @@ function copyCode(code) {
     .catch(() => toast.error('Unable to copy code'));
 }
 
+function discountCopyLabel(offer) {
+  if (offer?.amountType === 'flat') {
+    const amount = Number(offer.amountValue || 0).toLocaleString('en-IN');
+    return `Copy code for ₹${amount} discount`;
+  }
+  const pct = Number(offer?.amountValue || 0);
+  if (pct > 0) return `Copy code for ${pct}% discount`;
+  if (offer?.offerLabel) {
+    return `Copy code for ${String(offer.offerLabel).replace(/\s*off$/i, '')} discount`;
+  }
+  return 'Copy code';
+}
+
 /**
  * Collapsible one-time coupon list. Closed by default.
  * @param {object} props
@@ -30,6 +43,7 @@ function copyCode(code) {
  * @param {(code: string) => void} [props.onUseCode] — if set, also fills/uses code on click
  * @param {string} [props.closedHint]
  * @param {string} [props.openHint]
+ * @param {'default'|'compact'} [props.variant] — compact = thin checkout row (copy only)
  */
 export function OneTimeOfferStrip({
   offers,
@@ -37,6 +51,7 @@ export function OneTimeOfferStrip({
   onUseCode,
   closedHint,
   openHint = 'Apply the code below at checkout on your first payment.',
+  variant = 'default',
 }) {
   const [open, setOpen] = useState(false);
 
@@ -48,6 +63,34 @@ export function OneTimeOfferStrip({
       onUseCode(code);
     }
   };
+
+  if (variant === 'compact') {
+    return (
+      <div
+        className={`overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] ${className}`}
+      >
+        <ul className="divide-y divide-[#EAECF0]">
+          {offers.map((offer) => (
+            <li key={offer.id}>
+              <button
+                type="button"
+                onClick={() => handleCopy(offer.code)}
+                className="flex h-9 w-full items-center justify-between gap-2 px-3 text-left transition hover:bg-white"
+              >
+                <span className="truncate text-[12px] font-medium text-[#344054]">
+                  {discountCopyLabel(offer)}
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-[#021A54]">
+                  <Copy size={12} />
+                  Copy
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
 
   return (
     <section

@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageLoader } from '@/components/loaders/Spinner';
 import { APP_NAME, ROLE_LABELS } from '@/constants';
+import { navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { ShieldCheck, Building2, Users } from 'lucide-react';
 
 const ROLE_COPY = {
@@ -39,16 +40,21 @@ const ROLE_COPY = {
 
 export function AuthLayout({ children, role, title, subtitle }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading, initialized, role: userRole } = useAuth();
   const copy = ROLE_COPY[role] || ROLE_COPY.admin;
   const Icon = copy.icon;
+  const redirectParam = searchParams.get('redirect') || '';
 
   useEffect(() => {
     if (!initialized || loading) return;
     if (user && userRole === role) {
-      router.replace(`/${role}/dashboard`);
+      navigateAfterAuth(
+        router,
+        resolvePostAuthPath({ role, user, redirect: redirectParam })
+      );
     }
-  }, [initialized, loading, user, userRole, role, router]);
+  }, [initialized, loading, user, userRole, role, router, redirectParam]);
 
   if (!initialized || loading) {
     return <PageLoader />;

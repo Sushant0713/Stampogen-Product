@@ -62,7 +62,7 @@ function PortalLoginFormInner({ role }) {
   const mounted = useClientMounted();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login } = useAuth();
+  const { login, user, role: userRole, initialized, loading: authLoading } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const copy = LOGIN_COPY[role] || LOGIN_COPY[ROLES.ADMIN];
   const Icon = copy.Icon;
@@ -91,6 +91,24 @@ function PortalLoginFormInner({ role }) {
 
   const secretCodeValue = isSuperAdmin ? watch('secretCode') || '' : '';
   const redirectParam = searchParams.get('redirect') || '';
+
+  // Already signed in (e.g. abandoned checkout, then "already registered" → login)
+  useEffect(() => {
+    if (!initialized || authLoading) return;
+    if (!user || userRole !== role) return;
+    const next = resolvePostAuthPath({
+      role,
+      user,
+      redirect: redirectParam,
+    });
+    if (role === ROLES.ADMIN && next.includes('/plans/browse') && !redirectParam) {
+      toast('Choose a plan to finish payment and activate your shop.', {
+        id: 'admin-finish-payment',
+        duration: 5000,
+      });
+    }
+    navigateAfterAuth(router, next);
+  }, [initialized, authLoading, user, userRole, role, redirectParam, router]);
 
   useEffect(() => {
     const error = searchParams.get('error');

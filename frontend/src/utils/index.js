@@ -57,6 +57,26 @@ export function adminHasActivePlan(user) {
   return Boolean(sub?.planName);
 }
 
+/** Checkout URL for an admin finishing / starting a plan purchase. */
+export function getAdminCheckoutPath({ planCode, discountCode } = {}) {
+  if (!planCode) return null;
+  const params = new URLSearchParams({ plan: String(planCode) });
+  if (discountCode) params.set('discount', String(discountCode));
+  return `/checkout?${params.toString()}`;
+}
+
+/** Unpaid / unfinished admins: checkout if plan known, else browse plans. */
+export function getAdminFinishPaymentPath({ planCode, discountCode } = {}) {
+  return getAdminCheckoutPath({ planCode, discountCode }) || '/admin/plans/browse';
+}
+
+export function getLoginWithRedirectPath(role, redirect) {
+  const base = getLoginPath(role);
+  if (!isSafeAppRedirect(redirect)) return base;
+  const join = base.includes('?') ? '&' : '?';
+  return `${base}${join}redirect=${encodeURIComponent(redirect)}`;
+}
+
 /**
  * Where to send the user after login / Google sign-in.
  * Prefer safe ?redirect=; unpaid admins go to browse plans to finish payment.
@@ -75,7 +95,8 @@ export function navigateAfterAuth(router, path) {
   if (
     next.startsWith('/checkout') ||
     next.startsWith('/pricing') ||
-    next.includes('/verify-email')
+    next.includes('/verify-email') ||
+    next.startsWith('/admin/plans/')
   ) {
     window.location.assign(next);
     return;

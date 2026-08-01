@@ -435,8 +435,8 @@ function CheckoutPageInner() {
 
               <OneTimeOfferStrip
                 offers={oneTimeOffers}
-                className="mb-4"
-                openHint="Copy a code into the field below, then click Apply."
+                variant="compact"
+                className="mb-3"
                 onUseCode={(code) => setDiscountInput(String(code || '').toUpperCase())}
               />
 

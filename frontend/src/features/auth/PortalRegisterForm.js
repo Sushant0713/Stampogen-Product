@@ -19,7 +19,7 @@ import {
   getRequiredVerificationKind,
   getVerificationDocLabel,
 } from '@/constants/affiliateTypes';
-import { getErrorMessage, getLoginPath } from '@/utils';
+import { getErrorMessage, getLoginPath, getAdminFinishPaymentPath, getLoginWithRedirectPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { useClientMounted } from '@/hooks/useClientMounted';
 import { GoogleSignInButton } from '@/components/buttons/GoogleSignInButton';
 import { PasswordField } from '@/components/forms/PasswordField';
@@ -157,9 +157,10 @@ function PortalRegisterFormInner({ role }) {
   const mounted = useClientMounted();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setUser } = useAuth();
+  const { setUser, user, role: userRole, initialized, loading: authLoading } = useAuth();
   const planCode = searchParams.get('plan') || '';
   const discountCode = searchParams.get('discount') || '';
+  const finishPaymentPath = getAdminFinishPaymentPath({ planCode, discountCode });
   const schema = getRegisterSchema(role);
   const copy = REGISTER_COPY[role] || REGISTER_COPY[ROLES.ADMIN];
   const showTenant = role === ROLES.ADMIN;
@@ -236,6 +237,43 @@ function PortalRegisterFormInner({ role }) {
   });
 
   const secretCodeValue = isSuperAdmin ? watch('secretCode') || '' : '';
+
+  // Returning admins who already registered (session still alive) → finish payment
+  useEffect(() => {
+    if (!initialized || authLoading) return;
+    if (!user || userRole !== role) return;
+    if (role === ROLES.ADMIN) {
+      navigateAfterAuth(
+        router,
+        planCode
+          ? finishPaymentPath
+          : resolvePostAuthPath({ role, user })
+      );
+      return;
+    }
+    router.replace(`/${role}/dashboard`);
+  }, [
+    initialized,
+    authLoading,
+    user,
+    userRole,
+    role,
+    planCode,
+    finishPaymentPath,
+    router,
+  ]);
+
+  const sendExistingAccountToLogin = useCallback(
+    (message) => {
+      toast.error(message || 'Account already exists. Sign in to finish payment.');
+      if (role === ROLES.ADMIN) {
+        router.push(getLoginWithRedirectPath(role, finishPaymentPath));
+        return;
+      }
+      router.push(getLoginPath(role));
+    },
+    [finishPaymentPath, role, router]
+  );
 
   useEffect(() => {
     if (!termsAudience) {
@@ -387,15 +425,10 @@ function PortalRegisterFormInner({ role }) {
           }
 
           toast.error('Account already exists. Please sign in instead.');
-          const loginPath = getLoginPath(role);
-          if (role === ROLES.ADMIN && planCode) {
-            const checkoutParams = new URLSearchParams({ plan: planCode });
-            if (discountCode) checkoutParams.set('discount', discountCode);
-            router.push(
-              `${loginPath}?redirect=${encodeURIComponent(`/checkout?${checkoutParams.toString()}`)}`
-            );
+          if (role === ROLES.ADMIN) {
+            router.push(getLoginWithRedirectPath(role, finishPaymentPath));
           } else {
-            router.push(loginPath);
+            router.push(getLoginPath(role));
           }
           return;
         }
@@ -431,7 +464,7 @@ function PortalRegisterFormInner({ role }) {
         toast.error(getErrorMessage(error, 'Unable to load Google profile'));
       }
     },
-    [discountCode, googleForm, isSuperAdmin, planCode, role, router, secretCodeValue, setUser]
+    [finishPaymentPath, googleForm, isSuperAdmin, role, router, secretCodeValue, setUser]
   );
 
   const onGoogleComplete = async (values) => {
@@ -507,23 +540,15 @@ function PortalRegisterFormInner({ role }) {
       finishAdminRedirect();
     } catch (error) {
       const message = getErrorMessage(error, 'Unable to create account with Google');
-      toast.error(message);
       if (
         error?.response?.status === 409 ||
         /already exists|sign in/i.test(message)
       ) {
         setGoogleDraft(null);
-        const loginPath = getLoginPath(role);
-        if (role === ROLES.ADMIN && planCode) {
-          const checkoutParams = new URLSearchParams({ plan: planCode });
-          if (discountCode) checkoutParams.set('discount', discountCode);
-          router.push(
-            `${loginPath}?redirect=${encodeURIComponent(`/checkout?${checkoutParams.toString()}`)}`
-          );
-        } else {
-          router.push(loginPath);
-        }
+        sendExistingAccountToLogin(message);
+        return;
       }
+      toast.error(message);
     } finally {
       setGoogleSubmitting(false);
     }
@@ -598,22 +623,18 @@ function PortalRegisterFormInner({ role }) {
       finishAdminRedirect();
     } catch (error) {
       const message = getErrorMessage(error, 'Registration failed');
-      toast.error(message);
       if (
         role === ROLES.ADMIN &&
         (error?.response?.status === 409 || /already exists|registered/i.test(message))
       ) {
-        const loginPath = getLoginPath(role);
-        if (planCode) {
-          const checkoutParams = new URLSearchParams({ plan: planCode });
-          if (discountCode) checkoutParams.set('discount', discountCode);
-          router.push(
-            `${loginPath}?redirect=${encodeURIComponent(`/checkout?${checkoutParams.toString()}`)}`
-          );
-        } else {
-          router.push(loginPath);
-        }
+        sendExistingAccountToLogin(
+          /google/i.test(message)
+            ? message
+            : 'Account already exists. Sign in to finish payment.'
+        );
+        return;
       }
+      toast.error(message);
     }
   };
 
@@ -1488,13 +1509,8 @@ function PortalRegisterFormInner({ role }) {
         Already have an account?{' '}
         <Link
           href={
-            role === ROLES.ADMIN && planCode
-              ? `${getLoginPath(role)}?redirect=${encodeURIComponent(
-                  `/checkout?${new URLSearchParams({
-                    plan: planCode,
-                    ...(discountCode ? { discount: discountCode } : {}),
-                  }).toString()}`
-                )}`
+            role === ROLES.ADMIN
+              ? getLoginWithRedirectPath(role, finishPaymentPath)
               : getLoginPath(role)
           }
           className="font-semibold text-[#2E90FA] hover:underline"

@@ -597,7 +597,23 @@ function PortalRegisterFormInner({ role }) {
       toast.success('Registration successful');
       finishAdminRedirect();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Registration failed'));
+      const message = getErrorMessage(error, 'Registration failed');
+      toast.error(message);
+      if (
+        role === ROLES.ADMIN &&
+        (error?.response?.status === 409 || /already exists|registered/i.test(message))
+      ) {
+        const loginPath = getLoginPath(role);
+        if (planCode) {
+          const checkoutParams = new URLSearchParams({ plan: planCode });
+          if (discountCode) checkoutParams.set('discount', discountCode);
+          router.push(
+            `${loginPath}?redirect=${encodeURIComponent(`/checkout?${checkoutParams.toString()}`)}`
+          );
+        } else {
+          router.push(loginPath);
+        }
+      }
     }
   };
 
@@ -1470,7 +1486,19 @@ function PortalRegisterFormInner({ role }) {
 
       <p className="mt-5 border-t border-[#EAECF0] pt-5 text-center text-[15px] text-[#667085] sm:text-[16px]">
         Already have an account?{' '}
-        <Link href={getLoginPath(role)} className="font-semibold text-[#2E90FA] hover:underline">
+        <Link
+          href={
+            role === ROLES.ADMIN && planCode
+              ? `${getLoginPath(role)}?redirect=${encodeURIComponent(
+                  `/checkout?${new URLSearchParams({
+                    plan: planCode,
+                    ...(discountCode ? { discount: discountCode } : {}),
+                  }).toString()}`
+                )}`
+              : getLoginPath(role)
+          }
+          className="font-semibold text-[#2E90FA] hover:underline"
+        >
           Sign in
         </Link>
       </p>

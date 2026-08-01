@@ -10,7 +10,7 @@ import { ArrowRight, Handshake, Mail, Shield, ShieldCheck, User } from 'lucide-r
 import { z } from 'zod';
 import { authService } from '@/services/auth.service';
 import { useAuth } from '@/contexts/AuthContext';
-import { getErrorMessage, getForgotPasswordPath, getRegisterPath } from '@/utils';
+import { getErrorMessage, getForgotPasswordPath, getRegisterPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { useClientMounted } from '@/hooks/useClientMounted';
 import { GoogleSignInButton } from '@/components/buttons/GoogleSignInButton';
 import { PasswordField } from '@/components/forms/PasswordField';
@@ -90,6 +90,7 @@ function PortalLoginFormInner({ role }) {
   });
 
   const secretCodeValue = isSuperAdmin ? watch('secretCode') || '' : '';
+  const redirectParam = searchParams.get('redirect') || '';
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -124,18 +125,39 @@ function PortalLoginFormInner({ role }) {
         });
         if (role === ROLES.ADMIN) {
           toastAdminWelcome(loggedInUser);
+          const next = resolvePostAuthPath({
+            role,
+            user: loggedInUser,
+            redirect: redirectParam,
+          });
+          if (next.includes('/plans/browse') && !redirectParam) {
+            toast('Choose a plan to finish payment and activate your shop.', {
+              id: 'admin-finish-payment',
+              duration: 5000,
+            });
+          }
         } else {
           toast.success('Welcome back');
         }
-        router.push(`/${role}/dashboard`);
+        navigateAfterAuth(
+          router,
+          resolvePostAuthPath({
+            role,
+            user: loggedInUser,
+            redirect: redirectParam,
+          })
+        );
         return;
       }
 
       await authService.requestLoginOtp(role, { email: values.email });
       toast.success('Verification code sent to your email');
-      router.push(
-        `/${role}/verify-email?email=${encodeURIComponent(values.email)}&purpose=login`
-      );
+      const verifyParams = new URLSearchParams({
+        email: values.email,
+        purpose: 'login',
+      });
+      if (redirectParam) verifyParams.set('redirect', redirectParam);
+      router.push(`/${role}/verify-email?${verifyParams.toString()}`);
     } catch (error) {
       const code = error?.response?.data?.code;
       const email = error?.response?.data?.email || values.email;
@@ -290,6 +312,7 @@ function PortalLoginFormInner({ role }) {
           <GoogleSignInButton
             role={role}
             extraPayload={isSuperAdmin ? { secretCode: secretCodeValue } : undefined}
+            redirectTo={redirectParam || undefined}
             className="flex h-[48px] w-full items-center justify-center gap-3 rounded-[10px] border border-[#D0D5DD] bg-white text-[15px] font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[52px] sm:text-[17px]"
           />
 

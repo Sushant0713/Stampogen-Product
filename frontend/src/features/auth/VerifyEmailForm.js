@@ -7,8 +7,9 @@ import toast from 'react-hot-toast';
 import { OtpInput } from '@/components/forms/OtpInput';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/services/auth.service';
-import { getErrorMessage, getLoginPath, getRegisterPath } from '@/utils';
+import { getErrorMessage, getLoginPath, getRegisterPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { ROLES } from '@/constants';
+import { toastAdminWelcome } from '@/features/auth/adminPlanToast';
 
 export function VerifyEmailForm(props) {
   return (
@@ -27,6 +28,7 @@ function VerifyEmailFormInner({ role }) {
   const discountCode = searchParams.get('discount') || '';
   const purpose = searchParams.get('purpose') === 'login' ? 'login' : 'email_verification';
   const isLoginOtp = purpose === 'login';
+  const redirectParam = searchParams.get('redirect') || '';
 
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
@@ -73,10 +75,29 @@ function VerifyEmailFormInner({ role }) {
       }
 
       setUser(data.data.user);
-      toast.success(isLoginOtp ? 'Login successful' : 'Email verified successfully');
+      if (isLoginOtp && role === ROLES.ADMIN) {
+        toastAdminWelcome(data.data.user);
+      } else {
+        toast.success(isLoginOtp ? 'Login successful' : 'Email verified successfully');
+      }
 
       if (isLoginOtp) {
-        router.replace(`/${role}/dashboard`);
+        const next = resolvePostAuthPath({
+          role,
+          user: data.data.user,
+          redirect: redirectParam,
+        });
+        if (
+          role === ROLES.ADMIN &&
+          next.includes('/plans/browse') &&
+          !redirectParam
+        ) {
+          toast('Choose a plan to finish payment and activate your shop.', {
+            id: 'admin-finish-payment',
+            duration: 5000,
+          });
+        }
+        navigateAfterAuth(router, next);
         return;
       }
 

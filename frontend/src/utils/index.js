@@ -42,3 +42,43 @@ export function getResetPasswordPath(role, email) {
   if (!email) return base;
   return `${base}?email=${encodeURIComponent(email)}`;
 }
+
+/** Reject open redirects (protocol-relative / absolute URLs). */
+export function isSafeAppRedirect(path) {
+  if (!path || typeof path !== 'string') return false;
+  if (!path.startsWith('/')) return false;
+  if (path.startsWith('//')) return false;
+  if (path.includes('://')) return false;
+  return true;
+}
+
+export function adminHasActivePlan(user) {
+  const sub = user?.subscription || user?.tenant?.subscription;
+  return Boolean(sub?.planName);
+}
+
+/**
+ * Where to send the user after login / Google sign-in.
+ * Prefer safe ?redirect=; unpaid admins go to browse plans to finish payment.
+ */
+export function resolvePostAuthPath({ role, user, redirect } = {}) {
+  if (isSafeAppRedirect(redirect)) return redirect;
+  if (role === ROLES.ADMIN && user && !adminHasActivePlan(user)) {
+    return '/admin/plans/browse';
+  }
+  if (role === ROLES.USER) return '/app';
+  return `/${role}/dashboard`;
+}
+
+export function navigateAfterAuth(router, path) {
+  const next = String(path || '').trim() || '/';
+  if (
+    next.startsWith('/checkout') ||
+    next.startsWith('/pricing') ||
+    next.includes('/verify-email')
+  ) {
+    window.location.assign(next);
+    return;
+  }
+  router.push(next);
+}

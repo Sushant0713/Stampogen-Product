@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { authService } from '@/services/auth.service';
 import { useAuth } from '@/contexts/AuthContext';
-import { getErrorMessage } from '@/utils';
+import { getErrorMessage, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { GoogleIcon } from '@/features/auth/AuthShared';
 import { toastAdminWelcome } from '@/features/auth/adminPlanToast';
-import { ROLES, CUSTOMER_APP_PATH } from '@/constants';
+import { ROLES } from '@/constants';
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -121,18 +121,22 @@ export function GoogleSignInButton({
                 toast.success('Signed in with Google');
               }
 
-              const next =
-                redirectTo ||
-                (role === ROLES.USER ? CUSTOMER_APP_PATH : `/${role}/dashboard`);
+              const next = resolvePostAuthPath({
+                role,
+                user: data.data.user,
+                redirect: redirectTo,
+              });
               if (
-                next.startsWith('/checkout') ||
-                next.startsWith('/pricing') ||
-                next.includes('/verify-email')
+                role === ROLES.ADMIN &&
+                next.includes('/plans/browse') &&
+                !redirectTo
               ) {
-                window.location.assign(next);
-                return;
+                toast('Choose a plan to finish payment and activate your shop.', {
+                  id: 'admin-finish-payment',
+                  duration: 5000,
+                });
               }
-              router.push(next);
+              navigateAfterAuth(router, next);
             } catch (error) {
               const message = getErrorMessage(error, 'Google sign-in failed');
               if (

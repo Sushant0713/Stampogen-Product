@@ -12,7 +12,7 @@ import { Button } from '@/components/buttons/Button';
 import { useAuth } from '@/contexts/AuthContext';
 import { loginSchema } from '@/lib/validations/auth';
 import { ROLE_LABELS } from '@/constants';
-import { getErrorMessage, getForgotPasswordPath } from '@/utils';
+import { getErrorMessage, getForgotPasswordPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { AuthDivider } from '@/features/auth/AuthShared';
 import { GoogleSignInButton } from '@/components/buttons/GoogleSignInButton';
 
@@ -28,6 +28,7 @@ function LoginFormInner({ role }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
+  const redirectParam = searchParams.get('redirect') || '';
 
   const {
     register,
@@ -47,14 +48,16 @@ function LoginFormInner({ role }) {
 
   const onSubmit = async (values) => {
     try {
-      await login(role, values);
+      const loggedInUser = await login(role, values);
       toast.success('Welcome back');
-      const redirect = searchParams.get('redirect');
-      if (redirect && redirect.startsWith('/')) {
-        window.location.assign(redirect);
-        return;
-      }
-      router.push(`/${role}/dashboard`);
+      navigateAfterAuth(
+        router,
+        resolvePostAuthPath({
+          role,
+          user: loggedInUser,
+          redirect: redirectParam,
+        })
+      );
     } catch (error) {
       const code = error?.response?.data?.code;
       const email = error?.response?.data?.email || values.email;
@@ -73,12 +76,7 @@ function LoginFormInner({ role }) {
     <div>
       <GoogleSignInButton
         role={role}
-        redirectTo={
-          (() => {
-            const redirect = searchParams.get('redirect');
-            return redirect && redirect.startsWith('/') ? redirect : undefined;
-          })()
-        }
+        redirectTo={redirectParam || undefined}
         className="btn-secondary flex w-full items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-60"
       />
 

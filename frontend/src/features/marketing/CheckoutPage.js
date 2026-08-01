@@ -73,7 +73,7 @@ function CheckoutPageInner() {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [discountInput, setDiscountInput] = useState(urlDiscount);
+  const [discountInput, setDiscountInput] = useState('');
   const [appliedCode, setAppliedCode] = useState('');
   const [form, setForm] = useState({
     customerName: '',
@@ -163,8 +163,9 @@ function CheckoutPageInner() {
   useEffect(() => {
     if (!initialized || authLoading) return;
     if (!user || roleSlug !== ROLES.ADMIN || !user.isEmailVerified) return;
-    loadQuote(urlDiscount || '');
-  }, [loadQuote, initialized, authLoading, user, roleSlug, urlDiscount]);
+    // Quote full selling price; customer applies coupon manually at checkout
+    loadQuote('');
+  }, [loadQuote, initialized, authLoading, user, roleSlug]);
 
   const applyDiscount = async () => {
     const code = discountInput.trim();

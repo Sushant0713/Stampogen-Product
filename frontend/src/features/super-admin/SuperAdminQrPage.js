@@ -3,13 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
-import { Copy, Download, Loader2, Plus, Printer, QrCode, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  Link2,
+  Loader2,
+  Plus,
+  Printer,
+  QrCode,
+  Trash2,
+} from 'lucide-react';
 import { platformQrService } from '@/services/platformQr.service';
 import { getErrorMessage } from '@/utils';
 
 const PRIMARY = '#021A54';
 const fieldClass =
-  'h-11 w-full rounded-lg border border-[#D0D5DD] bg-white px-3 text-sm text-[#101828] outline-none placeholder:text-[#98A2B3] focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54]';
+  'h-11 w-full rounded-xl border border-[#E4E7EC] bg-white px-3.5 text-sm text-[#101828] outline-none placeholder:text-[#98A2B3] transition focus:border-[#021A54] focus:ring-2 focus:ring-[#021A54]/15';
 const PRINT_SHELL_ID = 'stampogen-platform-qr-print';
 
 function escapeHtml(text) {
@@ -18,6 +28,14 @@ function escapeHtml(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function slugFilename(title) {
+  return `${String(title || 'qr')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40) || 'qr'}.png`;
 }
 
 function QrPreview({ value, size = 160, className = '' }) {
@@ -221,6 +239,28 @@ function emptyForm() {
   return { title: '', url: '', note: '' };
 }
 
+function ActionButton({ onClick, disabled, tone = 'default', children, title }) {
+  const tones = {
+    default:
+      'border-[#E4E7EC] bg-white text-[#344054] hover:border-[#021A54]/30 hover:bg-[#F8FAFC] hover:text-[#021A54]',
+    danger:
+      'border-[#FEE4E2] bg-[#FEF3F2] text-[#B42318] hover:bg-[#FEE4E2]',
+    primary:
+      'border-transparent bg-[#021A54] text-white hover:bg-[#01133F]',
+  };
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${tones[tone]}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function SuperAdminQrPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -315,194 +355,253 @@ export function SuperAdminQrPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-[#EAECF0] bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <span
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white"
-            style={{ backgroundColor: PRIMARY }}
+    <div className="space-y-8">
+      {/* Composer */}
+      <section className="overflow-hidden rounded-2xl border border-[#E4E7EC] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="grid lg:grid-cols-[minmax(0,1.05fr)_minmax(280px,0.95fr)]">
+          <form onSubmit={handleCreate} className="space-y-5 p-5 sm:p-7">
+            <div className="flex items-start gap-3">
+              <span
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+                style={{ backgroundColor: PRIMARY }}
+              >
+                <QrCode size={20} />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight text-[#101828]">
+                  Create a QR code
+                </h2>
+                <p className="mt-1 text-sm leading-relaxed text-[#667085]">
+                  Paste any website link. The QR updates live — add it to your library when ready.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5">
+              <div>
+                <label className="mb-1.5 block text-[12px] font-semibold text-[#344054]">
+                  Title
+                </label>
+                <input
+                  className={fieldClass}
+                  value={form.title}
+                  onChange={(e) => updateField('title', e.target.value)}
+                  placeholder="e.g. Pricing page"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[12px] font-semibold text-[#344054]">
+                  Website link
+                </label>
+                <div className="relative">
+                  <Link2
+                    size={16}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]"
+                  />
+                  <input
+                    className={`${fieldClass} pl-10`}
+                    value={form.url}
+                    onChange={(e) => updateField('url', e.target.value)}
+                    placeholder="https://stampogen.com/pricing"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[12px] font-semibold text-[#344054]">
+                  Note <span className="font-normal text-[#98A2B3]">(optional)</span>
+                </label>
+                <input
+                  className={fieldClass}
+                  value={form.note}
+                  onChange={(e) => updateField('note', e.target.value)}
+                  placeholder="Poster at shop entrance, flyer, Instagram bio…"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={saving || !form.title.trim() || !form.url.trim()}
+                className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-55"
+                style={{ backgroundColor: PRIMARY }}
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                Add to library
+              </button>
+              {previewUrl ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    printPlatformQr({
+                      url: previewUrl,
+                      title: form.title.trim() || 'QR code',
+                      note: form.note.trim(),
+                    }).catch(() => toast.error('Unable to print QR'))
+                  }
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E4E7EC] bg-white px-4 text-sm font-semibold text-[#344054] transition hover:border-[#021A54]/25 hover:bg-[#F8FAFC]"
+                >
+                  <Printer size={16} />
+                  Print
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          {/* Live stage */}
+          <div
+            className="relative flex min-h-[320px] flex-col items-center justify-center px-6 py-8"
+            style={{
+              background:
+                'linear-gradient(165deg, #021A54 0%, #0A2F6B 48%, #123A7A 100%)',
+            }}
           >
-            <QrCode size={18} />
-          </span>
-          <div>
-            <h2 className="text-base font-semibold text-[#101828]">Create QR</h2>
-            <p className="text-sm text-[#667085]">
-              Paste a website link — a QR code is generated automatically. Add as many as you need.
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.12]"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 20% 20%, #fff 0, transparent 42%), radial-gradient(circle at 80% 80%, #fff 0, transparent 36%)',
+              }}
+            />
+            <p className="relative mb-4 text-[11px] font-bold uppercase tracking-[0.16em] text-white/70">
+              Live preview
             </p>
+            <div className="relative w-full max-w-[240px] rounded-2xl bg-white p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)]">
+              {previewUrl ? (
+                <>
+                  <div className="flex justify-center rounded-xl bg-[#F8FAFC] p-3">
+                    <QrPreview value={previewUrl} size={180} className="rounded-md" />
+                  </div>
+                  <p className="mt-3 truncate text-center text-[13px] font-semibold text-[#101828]">
+                    {form.title.trim() || 'Untitled QR'}
+                  </p>
+                  <p className="mt-1 truncate text-center text-[11px] text-[#667085]">
+                    {previewUrl}
+                  </p>
+                </>
+              ) : (
+                <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-2 text-center">
+                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#021A54]">
+                    <QrCode size={22} />
+                  </span>
+                  <p className="text-sm font-medium text-[#344054]">Waiting for a link</p>
+                  <p className="text-[12px] leading-snug text-[#98A2B3]">
+                    Your QR appears here as soon as the URL is valid.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-
-        <form onSubmit={handleCreate} className="grid gap-5 lg:grid-cols-[1fr_200px]">
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1.5 block text-[12px] font-semibold text-[#344054]">Title</label>
-              <input
-                className={fieldClass}
-                value={form.title}
-                onChange={(e) => updateField('title', e.target.value)}
-                placeholder="e.g. Pricing page"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[12px] font-semibold text-[#344054]">
-                Website link
-              </label>
-              <input
-                className={fieldClass}
-                value={form.url}
-                onChange={(e) => updateField('url', e.target.value)}
-                placeholder="https://stampogen.com/pricing"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[12px] font-semibold text-[#344054]">
-                Note <span className="font-normal text-[#98A2B3]">(optional)</span>
-              </label>
-              <input
-                className={fieldClass}
-                value={form.note}
-                onChange={(e) => updateField('note', e.target.value)}
-                placeholder="Where this QR will be used"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={saving || !form.title.trim() || !form.url.trim()}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ backgroundColor: PRIMARY }}
-            >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-              Add to list
-            </button>
-            {previewUrl ? (
-              <button
-                type="button"
-                onClick={() =>
-                  printPlatformQr({
-                    url: previewUrl,
-                    title: form.title.trim() || 'QR code',
-                    note: form.note.trim(),
-                  }).catch(() => toast.error('Unable to print QR'))
-                }
-                className="ml-2 inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#D0D5DD] bg-white px-4 text-sm font-semibold text-[#344054] hover:bg-[#F9FAFB]"
-              >
-                <Printer size={16} />
-                Print preview
-              </button>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#D0D5DD] bg-[#F9FAFB] p-4">
-            {previewUrl ? (
-              <>
-                <QrPreview value={previewUrl} size={160} className="rounded-lg bg-white p-2" />
-                <p className="mt-3 max-w-[180px] truncate text-center text-[11px] text-[#667085]">
-                  {previewUrl}
-                </p>
-              </>
-            ) : (
-              <p className="px-3 text-center text-sm text-[#98A2B3]">QR preview appears here</p>
-            )}
-          </div>
-        </form>
       </section>
 
-      <section className="space-y-3">
-        <div className="flex items-end justify-between gap-3">
+      {/* Library */}
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-[#101828]">Saved QR codes</h2>
-            <p className="text-sm text-[#667085]">Download or copy any link from the list.</p>
+            <h2 className="text-lg font-semibold tracking-tight text-[#101828]">QR library</h2>
+            <p className="mt-1 text-sm text-[#667085]">
+              Print, download, or copy any saved code.
+            </p>
           </div>
-          <p className="text-sm font-medium text-[#667085]">{items.length} total</p>
+          <span className="inline-flex h-8 items-center rounded-full bg-[#F2F4F7] px-3 text-[12px] font-semibold text-[#344054]">
+            {items.length} saved
+          </span>
         </div>
 
         {loading ? (
-          <div className="flex items-center gap-2 rounded-2xl border border-[#EAECF0] bg-white px-4 py-10 text-sm text-[#667085]">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-[#E4E7EC] bg-white py-16 text-sm text-[#667085]">
             <Loader2 size={16} className="animate-spin" />
-            Loading QR list…
+            Loading library…
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[#D0D5DD] bg-white px-4 py-12 text-center text-sm text-[#667085]">
-            No QR codes yet. Add a website link above.
+          <div className="rounded-2xl border border-dashed border-[#D0D5DD] bg-[#FCFCFD] px-6 py-16 text-center">
+            <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#021A54]">
+              <QrCode size={22} />
+            </span>
+            <p className="mt-4 text-sm font-semibold text-[#344054]">No QR codes yet</p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-[#667085]">
+              Create your first one above — it will show up here for printing and reuse.
+            </p>
           </div>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {items.map((item) => (
               <li
                 key={item.id}
-                className="flex flex-col rounded-2xl border border-[#EAECF0] bg-white p-4 shadow-sm"
+                className="group flex flex-col overflow-hidden rounded-2xl border border-[#E4E7EC] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-[#021A54]/25 hover:shadow-[0_12px_28px_rgba(2,26,84,0.08)]"
               >
-                <div className="flex justify-center rounded-xl bg-[#F9FAFB] p-3">
-                  <QrPreview value={item.url} size={140} className="rounded-md bg-white p-1.5" />
+                <div className="flex justify-center bg-[linear-gradient(180deg,#F8FAFC_0%,#EEF2F7_100%)] px-5 pb-4 pt-5">
+                  <div className="rounded-2xl border border-white bg-white p-3 shadow-sm ring-1 ring-[#E4E7EC]">
+                    <QrPreview value={item.url} size={148} className="rounded-md" />
+                  </div>
                 </div>
-                <h3 className="mt-3 truncate text-[15px] font-semibold text-[#101828]">
-                  {item.title}
-                </h3>
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 truncate text-[12px] font-medium text-[#2E90FA] hover:underline"
-                >
-                  {item.url}
-                </a>
-                {item.note ? (
-                  <p className="mt-1 line-clamp-2 text-[12px] text-[#667085]">{item.note}</p>
-                ) : null}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      printPlatformQr({
-                        url: item.url,
-                        title: item.title,
-                        note: item.note,
-                      }).catch(() => toast.error('Unable to print QR'))
-                    }
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#D0D5DD] bg-white px-3 text-[12px] font-semibold text-[#344054] hover:bg-[#F9FAFB]"
+
+                <div className="flex flex-1 flex-col px-4 pb-4 pt-3">
+                  <h3 className="truncate text-[15px] font-semibold text-[#101828]">
+                    {item.title}
+                  </h3>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex max-w-full items-center gap-1 truncate text-[12px] font-medium text-[#2E90FA] hover:underline"
                   >
-                    <Printer size={14} />
-                    Print
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      downloadQrPng(
-                        item.url,
-                        `${String(item.title || 'qr')
-                          .toLowerCase()
-                          .replace(/[^a-z0-9]+/g, '-')
-                          .slice(0, 40)}.png`
-                      ).catch(() => toast.error('Unable to download QR'))
-                    }
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#D0D5DD] bg-white px-3 text-[12px] font-semibold text-[#344054] hover:bg-[#F9FAFB]"
-                  >
-                    <Download size={14} />
-                    Download
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copyUrl(item.url)}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#D0D5DD] bg-white px-3 text-[12px] font-semibold text-[#344054] hover:bg-[#F9FAFB]"
-                  >
-                    <Copy size={14} />
-                    Copy link
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(item.id)}
-                    disabled={deletingId === item.id}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#FEE4E2] bg-[#FEF3F2] px-3 text-[12px] font-semibold text-[#B42318] hover:bg-[#FEE4E2] disabled:opacity-60"
-                  >
-                    {deletingId === item.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={14} />
-                    )}
-                    Delete
-                  </button>
+                    <span className="truncate">{item.url}</span>
+                    <ExternalLink size={11} className="shrink-0 opacity-70" />
+                  </a>
+                  {item.note ? (
+                    <p className="mt-2 line-clamp-2 text-[12px] leading-snug text-[#667085]">
+                      {item.note}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[12px] text-[#D0D5DD]">No note</p>
+                  )}
+
+                  <div className="mt-auto flex flex-wrap gap-2 border-t border-[#F2F4F7] pt-3">
+                    <ActionButton
+                      title="Print"
+                      onClick={() =>
+                        printPlatformQr({
+                          url: item.url,
+                          title: item.title,
+                          note: item.note,
+                        }).catch(() => toast.error('Unable to print QR'))
+                      }
+                    >
+                      <Printer size={14} />
+                      Print
+                    </ActionButton>
+                    <ActionButton
+                      title="Download PNG"
+                      onClick={() =>
+                        downloadQrPng(item.url, slugFilename(item.title)).catch(() =>
+                          toast.error('Unable to download QR')
+                        )
+                      }
+                    >
+                      <Download size={14} />
+                      PNG
+                    </ActionButton>
+                    <ActionButton title="Copy link" onClick={() => copyUrl(item.url)}>
+                      <Copy size={14} />
+                      Copy
+                    </ActionButton>
+                    <ActionButton
+                      tone="danger"
+                      title="Delete"
+                      disabled={deletingId === item.id}
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      {deletingId === item.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </ActionButton>
+                  </div>
                 </div>
               </li>
             ))}

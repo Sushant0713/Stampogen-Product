@@ -13,6 +13,7 @@ import {
   Trophy,
   UserCircle,
   QrCode,
+  ScanLine,
 } from 'lucide-react';
 import { ROLES } from '@/constants';
 
@@ -69,14 +70,8 @@ export const SIDEBAR_CONFIG = {
           { label: 'Terms and conditions', href: 'settings/terms' },
         ],
       },
-      {
-        label: 'QR',
-        icon: QrCode,
-        children: [
-          { label: 'QR codes', href: 'settings/qr' },
-          { label: 'QR Reports', href: 'settings/qr/reports' },
-        ],
-      },
+      { label: 'QR', href: 'settings/qr', icon: QrCode },
+      { label: 'QR Reports', href: 'settings/qr/reports', icon: ScanLine },
       { label: 'Support Ticket', href: 'support-tickets', icon: LifeBuoy },
     ]),
   },

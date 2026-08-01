@@ -30,9 +30,19 @@ function Badge({ count, active = false }) {
   );
 }
 
-function NavLink({ item, collapsed, pathname, badgeCount = 0 }) {
+function NavLink({ item, collapsed, pathname, badgeCount = 0, siblingHrefs = [] }) {
   const Icon = item.icon;
-  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const exact = pathname === item.href;
+  const prefixMatch = pathname.startsWith(`${item.href}/`);
+  const stolenByLongerSibling =
+    prefixMatch &&
+    siblingHrefs.some(
+      (href) =>
+        href !== item.href &&
+        href.startsWith(`${item.href}/`) &&
+        (pathname === href || pathname.startsWith(`${href}/`))
+    );
+  const isActive = exact || (prefixMatch && !stolenByLongerSibling);
   const badge = formatBadgeCount(badgeCount);
 
   if (item.disabled) {
@@ -108,6 +118,7 @@ function NavGroup({ item, collapsed, pathname, badges = {} }) {
             collapsed
             pathname={pathname}
             badgeCount={child.badgeKey ? badges[child.badgeKey] : 0}
+            siblingHrefs={(item.children || []).map((row) => row.href)}
           />
         ))}
       </div>
@@ -144,6 +155,7 @@ function NavGroup({ item, collapsed, pathname, badges = {} }) {
               collapsed={false}
               pathname={pathname}
               badgeCount={child.badgeKey ? badges[child.badgeKey] : 0}
+              siblingHrefs={(item.children || []).map((row) => row.href)}
             />
           ))}
         </div>
@@ -205,25 +217,34 @@ export function Sidebar({ role, collapsed, onToggle }) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {config.items.map((item) =>
-          item.children?.length ? (
-            <NavGroup
-              key={item.label}
-              item={item}
-              collapsed={collapsed}
-              pathname={pathname}
-              badges={badges}
-            />
-          ) : (
+        {config.items.map((item) => {
+          const siblingHrefs = config.items
+            .filter((row) => row.href)
+            .map((row) => row.href);
+
+          if (item.children?.length) {
+            return (
+              <NavGroup
+                key={item.label}
+                item={item}
+                collapsed={collapsed}
+                pathname={pathname}
+                badges={badges}
+              />
+            );
+          }
+
+          return (
             <NavLink
               key={item.label}
               item={item}
               collapsed={collapsed}
               pathname={pathname}
               badgeCount={item.badgeKey ? badges[item.badgeKey] : 0}
+              siblingHrefs={siblingHrefs}
             />
-          )
-        )}
+          );
+        })}
       </nav>
     </aside>
   );

@@ -22,7 +22,10 @@ class PaymentController {
 
   async createOrder(req, res, next) {
     try {
-      const order = await PaymentService.createOrder(req.body, req.user);
+      const order = await PaymentService.createOrder(req.body, {
+        user: req.user || null,
+        pendingRegistration: req.pendingRegistration || null,
+      });
       return sendSuccess(res, { message: 'Order created', data: { order } });
     } catch (error) {
       return next(error);
@@ -31,7 +34,10 @@ class PaymentController {
 
   async verify(req, res, next) {
     try {
-      const payment = await PaymentService.verify(req.body, req.user);
+      const payment = await PaymentService.verify(req.body, {
+        user: req.user || null,
+        pendingRegistration: req.pendingRegistration || null,
+      });
       return sendSuccess(res, { message: 'Payment verified', data: { payment } });
     } catch (error) {
       return next(error);

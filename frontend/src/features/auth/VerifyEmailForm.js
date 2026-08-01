@@ -10,6 +10,10 @@ import { authService } from '@/services/auth.service';
 import { getErrorMessage, getLoginPath, getRegisterPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { ROLES } from '@/constants';
 import { toastAdminWelcome } from '@/features/auth/adminPlanToast';
+import {
+  buildCheckoutPath,
+  saveRegistrationSession,
+} from '@/utils/registrationSession';
 
 export function VerifyEmailForm(props) {
   return (
@@ -74,6 +78,21 @@ function VerifyEmailFormInner({ role }) {
         return;
       }
 
+      // Admin payment-gated signup: no User until checkout succeeds
+      if (data.data?.requiresPayment && data.data?.registrationToken) {
+        saveRegistrationSession({
+          registrationToken: data.data.registrationToken,
+          profile: data.data.profile,
+        });
+        toast.success('Email verified — complete payment to finish registration');
+        const checkoutPlan = planCode || data.data.profile?.planCode || '';
+        const checkoutDiscount = discountCode || data.data.profile?.discountCode || '';
+        window.location.assign(
+          buildCheckoutPath({ planCode: checkoutPlan, discountCode: checkoutDiscount })
+        );
+        return;
+      }
+
       setUser(data.data.user);
       if (isLoginOtp && role === ROLES.ADMIN) {
         toastAdminWelcome(data.data.user);
@@ -87,21 +106,11 @@ function VerifyEmailFormInner({ role }) {
           user: data.data.user,
           redirect: redirectParam,
         });
-        if (
-          role === ROLES.ADMIN &&
-          next.includes('/plans/browse') &&
-          !redirectParam
-        ) {
-          toast('Choose a plan to finish payment and activate your shop.', {
-            id: 'admin-finish-payment',
-            duration: 5000,
-          });
-        }
         navigateAfterAuth(router, next);
         return;
       }
 
-      // Admin onboarding: plan selected → pay; otherwise choose a plan on pricing
+      // Non-admin (or legacy) after email verification
       if (role === ROLES.ADMIN) {
         if (planCode) {
           const params = new URLSearchParams({ plan: planCode });

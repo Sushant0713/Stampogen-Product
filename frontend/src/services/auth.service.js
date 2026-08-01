@@ -23,6 +23,10 @@ export const authService = {
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   refresh: () => api.post('/auth/refresh'),
+  getRegistrationDraft: (registrationToken) =>
+    api.get('/auth/registration-draft', {
+      headers: { 'X-Registration-Token': registrationToken },
+    }),
   getGoogleAuthUrl: (role) => resolveApiUrl(`/auth/google/${role}`),
   googleLogin: (role, payload) => api.post(`/auth/google/${role}`, payload),
   googleProfile: (payload) => api.post('/auth/google/profile', payload),

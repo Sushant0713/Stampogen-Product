@@ -8,7 +8,12 @@ class AuthController {
   async register(req, res, next) {
     try {
       const role = req.params.role || req.body.role;
-      const result = await AuthService.register({ ...req.body, role });
+      const result = await AuthService.register({
+        ...req.body,
+        role,
+        planCode: req.body.planCode || req.query?.plan || '',
+        discountCode: req.body.discountCode || req.query?.discount || '',
+      });
 
       if (result.requiresVerification) {
         return sendSuccess(res, {
@@ -19,6 +24,18 @@ class AuthController {
             email: result.email,
             expiresInMinutes: result.expiresInMinutes,
             preview: result.preview,
+          },
+        });
+      }
+
+      if (result.requiresPayment) {
+        return sendSuccess(res, {
+          statusCode: HTTP_STATUS.CREATED,
+          message: result.message || 'Continue to checkout to complete registration',
+          data: {
+            requiresPayment: true,
+            registrationToken: result.registrationToken,
+            profile: result.profile,
           },
         });
       }
@@ -51,6 +68,17 @@ class AuthController {
             requiresApproval: true,
             email: result.email,
             user: result.user,
+          },
+        });
+      }
+
+      if (result.requiresPayment) {
+        return sendSuccess(res, {
+          message: result.message || 'Email verified. Complete payment to finish registration.',
+          data: {
+            requiresPayment: true,
+            registrationToken: result.registrationToken,
+            profile: result.profile,
           },
         });
       }
@@ -194,6 +222,23 @@ class AuthController {
     }
   }
 
+  async getRegistrationDraft(req, res, next) {
+    try {
+      const token =
+        req.headers['x-registration-token'] ||
+        req.query.registrationToken ||
+        req.query.token ||
+        '';
+      const profile = await AuthService.getRegistrationDraftByToken(token);
+      return sendSuccess(res, {
+        message: 'Registration draft loaded',
+        data: { profile },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   async googleCallback(req, res, next) {
     try {
       const result = await AuthService.handleGoogleAuth(req.user);
@@ -258,6 +303,8 @@ class AuthController {
         resumeDocument: req.body.resumeDocument,
         resumeDocumentName: req.body.resumeDocumentName,
         joinReason: req.body.joinReason,
+        planCode: req.body.planCode,
+        discountCode: req.body.discountCode,
       });
 
       if (result.requiresApproval) {
@@ -267,6 +314,17 @@ class AuthController {
             requiresApproval: true,
             email: result.email,
             user: result.user,
+          },
+        });
+      }
+
+      if (result.requiresPayment) {
+        return sendSuccess(res, {
+          message: result.message || 'Continue to checkout to complete registration',
+          data: {
+            requiresPayment: true,
+            registrationToken: result.registrationToken,
+            profile: result.profile,
           },
         });
       }

@@ -1,8 +1,7 @@
 const express = require('express');
 const PaymentController = require('@controllers/payment.controller');
 const validate = require('@middlewares/validate.middleware');
-const { authenticate } = require('@middlewares/auth.middleware');
-const { isAdmin } = require('@middlewares/authorize.middleware');
+const { resolvePaymentActor } = require('@middlewares/paymentIdentity.middleware');
 const {
   previewPaymentValidator,
   createOrderValidator,
@@ -13,19 +12,17 @@ const router = express.Router();
 
 router.get('/config', PaymentController.config);
 router.post('/preview', previewPaymentValidator, validate, PaymentController.preview);
-// Checkout is bound to the authenticated admin — the purchased plan attaches to their tenant.
+// Renewal: authenticated admin. Signup: registrationToken from pending draft.
 router.post(
   '/create-order',
-  authenticate,
-  isAdmin,
+  resolvePaymentActor,
   createOrderValidator,
   validate,
   PaymentController.createOrder
 );
 router.post(
   '/verify',
-  authenticate,
-  isAdmin,
+  resolvePaymentActor,
   verifyPaymentValidator,
   validate,
   PaymentController.verify

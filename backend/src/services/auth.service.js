@@ -18,7 +18,10 @@ const RefreshTokenRepository = require('@repositories/refreshToken.repository');
 const TenantRepository = require('@repositories/tenant.repository');
 const EmailOtpRepository = require('@repositories/emailOtp.repository');
 const OAuthRepository = require('@repositories/oauth.repository');
+const PendingAdminRegistrationRepository = require('@repositories/pendingAdminRegistration.repository');
 const { sendOtpEmail } = require('@services/email.service');
+const bcrypt = require('bcryptjs');
+const { User } = require('@models');
 const {
   AFFILIATE_APPROVAL_STATUS,
   isAffiliateApproved,
@@ -124,6 +127,45 @@ function withSubscription(user) {
   delete plain.password;
   delete plain.__v;
   return plain;
+}
+
+function adminUserHasPlan(user) {
+  if (!user) return false;
+  const tenant = user.tenant && typeof user.tenant === 'object' ? user.tenant : null;
+  const subscription = getSubscriptionView(tenant);
+  return Boolean(subscription?.planName);
+}
+
+/** Remove legacy unpaid admin User+Tenant so payment-gated signup can proceed. */
+async function removeUnpaidAdminAccount(user) {
+  if (!user || (user.role?.slug || user.role) !== ROLES.ADMIN) return false;
+  if (adminUserHasPlan(user)) return false;
+
+  const tenantId = user.tenant?._id || user.tenant || null;
+  await OAuthRepository.deleteByUser(user._id);
+  await UserRepository.deleteById(user._id);
+  if (tenantId) {
+    await TenantRepository.deleteById(tenantId);
+  }
+  return true;
+}
+
+async function assertAdminEmailAvailableForSignup(email) {
+  const existing = await UserRepository.findByEmail(email);
+  if (!existing) return;
+
+  if ((existing.role?.slug || existing.role) !== ROLES.ADMIN) {
+    throw new AppError(
+      'This email is already registered with a different portal',
+      HTTP_STATUS.CONFLICT
+    );
+  }
+
+  if (adminUserHasPlan(existing)) {
+    throw new AppError('Email already registered. Please sign in instead.', HTTP_STATUS.CONFLICT);
+  }
+
+  await removeUnpaidAdminAccount(existing);
 }
 
 async function uniqueTenantSlug(baseName) {
@@ -290,6 +332,210 @@ class AuthService {
     };
   }
 
+  /**
+   * Admin signup: store draft only (no User). Account is created after payment.
+   */
+  async saveAdminPendingRegistration({
+    firstName,
+    middleName,
+    lastName,
+    email,
+    password = '',
+    googleId = null,
+    avatar = null,
+    phone = '',
+    tenantName,
+    loyaltyStampMode = 'bill',
+    category = '',
+    customCategory = '',
+    billingProfile = null,
+    planCode = '',
+    discountCode = '',
+    emailVerified = false,
+  }) {
+    const normalizedEmail = String(email || '')
+      .trim()
+      .toLowerCase();
+    await assertAdminEmailAvailableForSignup(normalizedEmail);
+
+    const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
+    const {
+      LOYALTY_STAMP_MODES,
+      LOYALTY_STAMP_MODE_VALUES,
+      SHOP_CATEGORIES,
+      SHOP_CATEGORY_VALUES,
+    } = require('@constants');
+
+    const billing = normalizeBillingProfile(billingProfile || { phone });
+    if (!billing.phone) {
+      throw new AppError('Phone number is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!billing.street && !billing.address) {
+      throw new AppError('Street address is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!billing.state) {
+      throw new AppError('State is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!billing.city) {
+      throw new AppError('City is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!/^\d{6}$/.test(billing.pin || '')) {
+      throw new AppError('Valid 6-digit PIN code is required', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const resolvedTenantName = String(tenantName || '').trim();
+    if (resolvedTenantName.length < 2) {
+      throw new AppError('Tenant name is required for admin registration', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const resolvedCategory = String(category || '').trim();
+    if (!SHOP_CATEGORY_VALUES.includes(resolvedCategory)) {
+      throw new AppError('Invalid shop category', HTTP_STATUS.BAD_REQUEST);
+    }
+    const resolvedCustomCategory =
+      resolvedCategory === SHOP_CATEGORIES.CUSTOM
+        ? String(customCategory || '').trim().slice(0, 100)
+        : '';
+    if (resolvedCategory === SHOP_CATEGORIES.CUSTOM && resolvedCustomCategory.length < 2) {
+      throw new AppError('Please enter your custom category', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const stampMode = LOYALTY_STAMP_MODE_VALUES.includes(loyaltyStampMode)
+      ? loyaltyStampMode
+      : LOYALTY_STAMP_MODES.BILL;
+
+    let passwordHash = null;
+    if (password) {
+      passwordHash = await bcrypt.hash(String(password), 12);
+    }
+    if (!passwordHash && !googleId) {
+      throw new AppError('Password is required', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const draft = await PendingAdminRegistrationRepository.upsertByEmail(normalizedEmail, {
+      passwordHash,
+      googleId: googleId || null,
+      avatar: avatar || null,
+      firstName: String(firstName || '').trim(),
+      middleName: String(middleName || '').trim(),
+      lastName: String(lastName || '').trim(),
+      phone: billing.phone,
+      tenantName: resolvedTenantName,
+      loyaltyStampMode: stampMode,
+      category: resolvedCategory,
+      customCategory: resolvedCustomCategory,
+      billingProfile: billing,
+      planCode: String(planCode || '').trim().toLowerCase(),
+      discountCode: String(discountCode || '').trim().toUpperCase(),
+      emailVerifiedAt: null,
+      registrationTokenHash: null,
+      registrationTokenExpiresAt: null,
+    });
+
+    if (emailVerified) {
+      const issued = await PendingAdminRegistrationRepository.issueRegistrationToken(draft._id);
+      return {
+        requiresPayment: true,
+        registrationToken: issued.registrationToken,
+        profile: PendingAdminRegistrationRepository.toPublicView(issued.draft),
+        message: 'Continue to checkout to complete registration',
+      };
+    }
+
+    const otpMeta = await this.createAndSendOtp(normalizedEmail, 'email_verification');
+    return {
+      requiresVerification: true,
+      message: 'Verification code sent to your email',
+      ...otpMeta,
+    };
+  }
+
+  /** Create the real admin User + Tenant from a verified pending draft (after payment). */
+  async createAdminAccountFromPending(pending) {
+    if (!pending?._id || !pending.email) {
+      throw new AppError('Registration draft not found', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    await assertAdminEmailAvailableForSignup(pending.email);
+
+    const role = await RoleRepository.findBySlug(ROLES.ADMIN);
+    if (!role) {
+      throw new AppError('Role not found. Please seed the database.', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const draft =
+      pending.passwordHash !== undefined
+        ? pending
+        : await PendingAdminRegistrationRepository.findById(pending._id, { withSecrets: true });
+
+    let user;
+    try {
+      user = await UserRepository.create({
+        firstName: draft.firstName,
+        middleName: draft.middleName || '',
+        lastName: draft.lastName,
+        email: draft.email,
+        ...(draft.googleId ? { googleId: draft.googleId } : {}),
+        avatar: draft.avatar || null,
+        role: role._id,
+        isEmailVerified: true,
+        isActive: true,
+        phone: draft.phone || draft.billingProfile?.phone || '',
+      });
+    } catch (error) {
+      if (error?.code === 11000) {
+        throw new AppError('Email already registered. Please sign in instead.', HTTP_STATUS.CONFLICT);
+      }
+      throw error;
+    }
+
+    if (draft.passwordHash) {
+      await User.updateOne({ _id: user._id }, { $set: { password: draft.passwordHash } });
+    }
+
+    if (draft.googleId) {
+      try {
+        await OAuthRepository.create({
+          provider: 'google',
+          providerId: draft.googleId,
+          user: user._id,
+        });
+      } catch (error) {
+        if (error?.code !== 11000) {
+          throw new AppError(
+            error.message || 'Unable to link Google account',
+            HTTP_STATUS.BAD_REQUEST
+          );
+        }
+      }
+    }
+
+    user = await UserRepository.findById(user._id);
+    await createTenantForAdmin(
+      user,
+      draft.tenantName,
+      TENANT_STATUS.ACTIVE,
+      draft.billingProfile,
+      draft.loyaltyStampMode,
+      draft.category,
+      draft.customCategory
+    );
+
+    await PendingAdminRegistrationRepository.deleteById(draft._id);
+    return UserRepository.findById(user._id);
+  }
+
+  async getRegistrationDraftByToken(registrationToken) {
+    const draft = await PendingAdminRegistrationRepository.findByValidToken(registrationToken);
+    if (!draft) {
+      throw new AppError(
+        'Registration session expired. Please register again.',
+        HTTP_STATUS.UNAUTHORIZED
+      );
+    }
+    return PendingAdminRegistrationRepository.toPublicView(draft);
+  }
+
   async issueTokens(user) {
     const syncedUser = await syncAdminPendingPlan(user);
     const payload = this.buildTokenPayload(syncedUser);
@@ -337,6 +583,8 @@ class AuthService {
     resumeDocumentName,
     joinReason,
     secretCode = '',
+    planCode = '',
+    discountCode = '',
   }) {
     if (!AUTHENTICATED_ROLES.includes(roleSlug)) {
       throw new AppError('Invalid role for registration', HTTP_STATUS.BAD_REQUEST);
@@ -406,21 +654,22 @@ class AuthService {
     }
 
     if (roleSlug === ROLES.ADMIN) {
-      if (!billingProfile.phone) {
-        throw new AppError('Phone number is required', HTTP_STATUS.BAD_REQUEST);
-      }
-      if (!billingProfile.street && !billingProfile.address) {
-        throw new AppError('Street address is required', HTTP_STATUS.BAD_REQUEST);
-      }
-      if (!billingProfile.state) {
-        throw new AppError('State is required', HTTP_STATUS.BAD_REQUEST);
-      }
-      if (!billingProfile.city) {
-        throw new AppError('City is required', HTTP_STATUS.BAD_REQUEST);
-      }
-      if (!/^\d{6}$/.test(billingProfile.pin || '')) {
-        throw new AppError('Valid 6-digit PIN code is required', HTTP_STATUS.BAD_REQUEST);
-      }
+      return this.saveAdminPendingRegistration({
+        firstName,
+        middleName: resolvedMiddleName,
+        lastName,
+        email,
+        password,
+        phone: resolvedPhone,
+        tenantName,
+        loyaltyStampMode,
+        category,
+        customCategory,
+        billingProfile,
+        planCode,
+        discountCode,
+        emailVerified: false,
+      });
     }
 
     const existing = await UserRepository.findByEmail(email);
@@ -532,6 +781,21 @@ class AuthService {
       throw new AppError('Invalid verification code', HTTP_STATUS.BAD_REQUEST);
     }
 
+    // Payment-gated admin signup: draft exists, no User yet
+    const pending = await PendingAdminRegistrationRepository.findByEmail(email, {
+      withSecrets: true,
+    });
+    if (pending && (!expectedRole || expectedRole === ROLES.ADMIN)) {
+      await EmailOtpRepository.deleteByEmail(email, 'email_verification');
+      const issued = await PendingAdminRegistrationRepository.issueRegistrationToken(pending._id);
+      return {
+        requiresPayment: true,
+        registrationToken: issued.registrationToken,
+        profile: PendingAdminRegistrationRepository.toPublicView(issued.draft),
+        message: 'Email verified. Complete payment to finish registration.',
+      };
+    }
+
     const user = await UserRepository.findByEmail(email);
     if (!user) {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
@@ -604,6 +868,19 @@ class AuthService {
   }
 
   async resendOtp({ email, purpose = 'email_verification', role: expectedRole }) {
+    const pending =
+      purpose === 'email_verification' && (!expectedRole || expectedRole === ROLES.ADMIN)
+        ? await PendingAdminRegistrationRepository.findByEmail(email)
+        : null;
+
+    if (pending) {
+      const otpMeta = await this.createAndSendOtp(email, purpose);
+      return {
+        message: 'Verification code resent',
+        ...otpMeta,
+      };
+    }
+
     const user = await UserRepository.findByEmail(email);
 
     if (!user) {
@@ -751,6 +1028,15 @@ class AuthService {
 
     const fullUser = await UserRepository.findById(user._id);
     assertAccountAccess(fullUser, { forLogin: true });
+
+    if (fullUser.role?.slug === ROLES.ADMIN && !adminUserHasPlan(fullUser)) {
+      await removeUnpaidAdminAccount(fullUser);
+      throw new AppError(
+        'No account found. Please register and complete payment first.',
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
     return this.issueTokens(fullUser);
   }
 
@@ -1202,6 +1488,14 @@ class AuthService {
     // Block suspended shops before any auto-reactivation
     assertAccountAccess(user, { forLogin: true });
 
+    if (roleSlug === ROLES.ADMIN && !adminUserHasPlan(user)) {
+      await removeUnpaidAdminAccount(user);
+      throw new AppError(
+        'No account found. Please register and complete payment first.',
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
     if (!user.isEmailVerified || !user.isActive) {
       // Never auto-reactivate affiliates here — approval/suspend is explicit
       if (roleSlug === ROLES.AFFILIATE) {
@@ -1319,12 +1613,17 @@ class AuthService {
     const existing =
       (await UserRepository.findByGoogleId(googleId)) || (await UserRepository.findByEmail(email));
 
+    let accountExists = Boolean(existing);
+    if (existing && (existing.role?.slug || existing.role) === ROLES.ADMIN) {
+      accountExists = adminUserHasPlan(existing);
+    }
+
     return {
       email,
       firstName: profile.name?.givenName || email.split('@')[0] || 'User',
       lastName: profile.name?.familyName || '',
       avatar: profile.photos?.[0]?.value || null,
-      accountExists: Boolean(existing),
+      accountExists,
       role: existing?.role?.slug || null,
     };
   }
@@ -1360,6 +1659,8 @@ class AuthService {
     resumeDocument = '',
     resumeDocumentName = '',
     joinReason = '',
+    planCode = '',
+    discountCode = '',
   }) {
     if (!config.google.clientId) {
       throw new AppError('Google sign-in is not configured', HTTP_STATUS.SERVICE_UNAVAILABLE);
@@ -1368,6 +1669,58 @@ class AuthService {
     assertSuperAdminSecretCode(secretCode, role);
 
     const profile = await this.resolveGoogleProfile({ idToken, accessToken });
+
+    // New admin Google signup → pending draft + registration token (account after payment)
+    if (Boolean(allowCreate) && role === ROLES.ADMIN) {
+      const email = profile.emails?.[0]?.value?.toLowerCase();
+      const googleId = profile.id;
+      const existing =
+        (await UserRepository.findByGoogleId(googleId)) ||
+        (await UserRepository.findByEmail(email));
+      if (existing) {
+        if ((existing.role?.slug || existing.role) !== ROLES.ADMIN) {
+          throw new AppError(
+            'This Google account belongs to a different portal',
+            HTTP_STATUS.CONFLICT
+          );
+        }
+        if (adminUserHasPlan(existing)) {
+          throw new AppError(
+            'Account already exists. Please sign in instead.',
+            HTTP_STATUS.CONFLICT
+          );
+        }
+        await removeUnpaidAdminAccount(existing);
+      }
+
+      return this.saveAdminPendingRegistration({
+        firstName: firstName || profile.name?.givenName || '',
+        middleName,
+        lastName: lastName || profile.name?.familyName || '',
+        email,
+        googleId,
+        avatar: profile.photos?.[0]?.value || null,
+        phone,
+        tenantName,
+        loyaltyStampMode,
+        category,
+        customCategory,
+        billingProfile: {
+          phone,
+          address,
+          street,
+          city,
+          state,
+          pin,
+          gstin,
+          pan,
+        },
+        planCode,
+        discountCode,
+        emailVerified: true,
+      });
+    }
+
     const user = await this.findOrCreateGoogleUser({
       profile,
       roleSlug: role,

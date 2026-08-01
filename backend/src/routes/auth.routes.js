@@ -115,6 +115,12 @@ router.post('/logout', authenticate, AuthController.logout);
 router.get('/me', authenticate, AuthController.me);
 
 router.get(
+  '/registration-draft',
+  authLimiter,
+  AuthController.getRegistrationDraft
+);
+
+router.get(
   '/google/callback',
   passport.authenticate('google', {
     session: false,

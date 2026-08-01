@@ -19,7 +19,11 @@ import {
   getRequiredVerificationKind,
   getVerificationDocLabel,
 } from '@/constants/affiliateTypes';
-import { getErrorMessage, getLoginPath, getAdminFinishPaymentPath, getLoginWithRedirectPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
+import { getErrorMessage, getLoginPath } from '@/utils';
+import {
+  buildCheckoutPath,
+  saveRegistrationSession,
+} from '@/utils/registrationSession';
 import { useClientMounted } from '@/hooks/useClientMounted';
 import { GoogleSignInButton } from '@/components/buttons/GoogleSignInButton';
 import { PasswordField } from '@/components/forms/PasswordField';
@@ -160,7 +164,6 @@ function PortalRegisterFormInner({ role }) {
   const { setUser, user, role: userRole, initialized, loading: authLoading } = useAuth();
   const planCode = searchParams.get('plan') || '';
   const discountCode = searchParams.get('discount') || '';
-  const finishPaymentPath = getAdminFinishPaymentPath({ planCode, discountCode });
   const schema = getRegisterSchema(role);
   const copy = REGISTER_COPY[role] || REGISTER_COPY[ROLES.ADMIN];
   const showTenant = role === ROLES.ADMIN;
@@ -238,41 +241,23 @@ function PortalRegisterFormInner({ role }) {
 
   const secretCodeValue = isSuperAdmin ? watch('secretCode') || '' : '';
 
-  // Returning admins who already registered (session still alive) → finish payment
+  // Paid admins already have an account — send them to the dashboard
   useEffect(() => {
     if (!initialized || authLoading) return;
     if (!user || userRole !== role) return;
     if (role === ROLES.ADMIN) {
-      navigateAfterAuth(
-        router,
-        planCode
-          ? finishPaymentPath
-          : resolvePostAuthPath({ role, user })
-      );
+      router.replace('/admin/dashboard');
       return;
     }
     router.replace(`/${role}/dashboard`);
-  }, [
-    initialized,
-    authLoading,
-    user,
-    userRole,
-    role,
-    planCode,
-    finishPaymentPath,
-    router,
-  ]);
+  }, [initialized, authLoading, user, userRole, role, router]);
 
   const sendExistingAccountToLogin = useCallback(
     (message) => {
-      toast.error(message || 'Account already exists. Sign in to finish payment.');
-      if (role === ROLES.ADMIN) {
-        router.push(getLoginWithRedirectPath(role, finishPaymentPath));
-        return;
-      }
+      toast.error(message || 'Account already exists. Please sign in instead.');
       router.push(getLoginPath(role));
     },
-    [finishPaymentPath, role, router]
+    [role, router]
   );
 
   useEffect(() => {
@@ -425,11 +410,7 @@ function PortalRegisterFormInner({ role }) {
           }
 
           toast.error('Account already exists. Please sign in instead.');
-          if (role === ROLES.ADMIN) {
-            router.push(getLoginWithRedirectPath(role, finishPaymentPath));
-          } else {
-            router.push(getLoginPath(role));
-          }
+          router.push(getLoginPath(role));
           return;
         }
 
@@ -464,7 +445,7 @@ function PortalRegisterFormInner({ role }) {
         toast.error(getErrorMessage(error, 'Unable to load Google profile'));
       }
     },
-    [finishPaymentPath, googleForm, isSuperAdmin, role, router, secretCodeValue, setUser]
+    [googleForm, isSuperAdmin, role, router, secretCodeValue]
   );
 
   const onGoogleComplete = async (values) => {
@@ -507,6 +488,10 @@ function PortalRegisterFormInner({ role }) {
             : '';
         Object.assign(payload, buildBillingPayload(values));
       }
+      if (role === ROLES.ADMIN) {
+        if (planCode) payload.planCode = planCode;
+        if (discountCode) payload.discountCode = discountCode;
+      }
       if (showAffiliateType) {
         payload.affiliateType = values.affiliateType;
         payload.verificationDocument = values.verificationDocument;
@@ -533,6 +518,21 @@ function PortalRegisterFormInner({ role }) {
         );
         setGoogleDraft(null);
         router.push(`/${role}/login`);
+        return;
+      }
+      if (data.data?.requiresPayment && data.data?.registrationToken) {
+        saveRegistrationSession({
+          registrationToken: data.data.registrationToken,
+          profile: data.data.profile,
+        });
+        setGoogleDraft(null);
+        toast.success('Continue to payment to finish registration');
+        window.location.assign(
+          buildCheckoutPath({
+            planCode: planCode || data.data.profile?.planCode,
+            discountCode: discountCode || data.data.profile?.discountCode,
+          })
+        );
         return;
       }
       setUser(data.data.user);
@@ -608,6 +608,11 @@ function PortalRegisterFormInner({ role }) {
         }
       }
 
+      if (role === ROLES.ADMIN) {
+        if (planCode) payload.planCode = planCode;
+        if (discountCode) payload.discountCode = discountCode;
+      }
+
       const { data } = await authService.register(role, payload);
 
       if (data.data?.requiresVerification) {
@@ -630,7 +635,7 @@ function PortalRegisterFormInner({ role }) {
         sendExistingAccountToLogin(
           /google/i.test(message)
             ? message
-            : 'Account already exists. Sign in to finish payment.'
+            : 'Account already exists. Please sign in instead.'
         );
         return;
       }
@@ -1507,14 +1512,7 @@ function PortalRegisterFormInner({ role }) {
 
       <p className="mt-5 border-t border-[#EAECF0] pt-5 text-center text-[15px] text-[#667085] sm:text-[16px]">
         Already have an account?{' '}
-        <Link
-          href={
-            role === ROLES.ADMIN
-              ? getLoginWithRedirectPath(role, finishPaymentPath)
-              : getLoginPath(role)
-          }
-          className="font-semibold text-[#2E90FA] hover:underline"
-        >
+        <Link href={getLoginPath(role)} className="font-semibold text-[#2E90FA] hover:underline">
           Sign in
         </Link>
       </p>

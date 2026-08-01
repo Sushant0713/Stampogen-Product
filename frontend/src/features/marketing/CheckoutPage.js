@@ -14,6 +14,12 @@ import { MARKETING_LINKS } from '@/constants/marketing';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
 import { OneTimeOfferStrip } from '@/features/marketing/OneTimeOfferStrip';
+import {
+  clearRegistrationSession,
+  getRegistrationProfile,
+  getRegistrationToken,
+} from '@/utils/registrationSession';
+import { authService } from '@/services/auth.service';
 
 const COLORS = {
   bg: '#F7F3EB',
@@ -78,6 +84,9 @@ function CheckoutPageInner() {
   const [discountInput, setDiscountInput] = useState('');
   const [appliedCode, setAppliedCode] = useState('');
   const [oneTimeOffers, setOneTimeOffers] = useState([]);
+  const [registrationToken, setRegistrationToken] = useState('');
+  const [signupProfile, setSignupProfile] = useState(null);
+  const [signupReady, setSignupReady] = useState(false);
   const [form, setForm] = useState({
     customerName: '',
     customerEmail: '',
@@ -86,12 +95,46 @@ function CheckoutPageInner() {
 
   const planKey = useMemo(() => planId || planCode, [planId, planCode]);
   const roleSlug = user ? getRoleSlug(user) : null;
+  const isSignupCheckout = Boolean(registrationToken && signupProfile);
+  const isRenewalCheckout =
+    Boolean(user) && roleSlug === ROLES.ADMIN && Boolean(user.isEmailVerified) && !isSignupCheckout;
+  const canCheckout = isSignupCheckout || isRenewalCheckout;
 
-  // Must be a registered, verified admin before paying for a plan
+  // Signup: registrationToken from verify/Google. Renewal: logged-in verified admin.
   useEffect(() => {
-    // Wait until /auth/me has finished — never treat "initialized without user" as logged out mid-fetch
     if (!initialized || authLoading) return;
     if (!planKey) return;
+
+    const token = getRegistrationToken();
+    if (token) {
+      const cached = getRegistrationProfile();
+      setRegistrationToken(token);
+      if (cached?.email) {
+        setSignupProfile(cached);
+        setSignupReady(true);
+        return;
+      }
+      authService
+        .getRegistrationDraft(token)
+        .then(({ data }) => {
+          setSignupProfile(data.data.profile);
+          setSignupReady(true);
+        })
+        .catch(() => {
+          clearRegistrationSession();
+          setRegistrationToken('');
+          setSignupProfile(null);
+          setSignupReady(true);
+          toast.error('Registration session expired. Please register again.');
+          const params = new URLSearchParams();
+          if (planCode || planId) params.set('plan', planCode || planId);
+          if (urlDiscount) params.set('discount', urlDiscount);
+          router.replace(`/admin/register?${params.toString()}`);
+        });
+      return;
+    }
+
+    setSignupReady(true);
 
     if (!user) {
       const plan = planCode || planId;
@@ -118,6 +161,20 @@ function CheckoutPageInner() {
   }, [initialized, authLoading, user, roleSlug, planKey, planCode, planId, urlDiscount, router]);
 
   useEffect(() => {
+    if (isSignupCheckout && signupProfile) {
+      const fullName = [signupProfile.firstName, signupProfile.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      const billing = signupProfile.billingProfile || {};
+      setForm((prev) => ({
+        ...prev,
+        customerName: prev.customerName || signupProfile.tenantName || fullName,
+        customerEmail: prev.customerEmail || signupProfile.email || '',
+        customerPhone: prev.customerPhone || billing.phone || signupProfile.phone || '',
+      }));
+      return;
+    }
     if (!user) return;
     const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
     const tenant = user.tenant && typeof user.tenant === 'object' ? user.tenant : null;
@@ -128,7 +185,7 @@ function CheckoutPageInner() {
       customerEmail: prev.customerEmail || user.email || '',
       customerPhone: prev.customerPhone || billing.phone || user.phone || '',
     }));
-  }, [user]);
+  }, [user, isSignupCheckout, signupProfile]);
 
   const loadQuote = useCallback(
     async (code = '') => {
@@ -138,14 +195,18 @@ function CheckoutPageInner() {
       }
       try {
         setLoading(true);
-        const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
-        const billing = tenant?.billingProfile || {};
+        const billing = isSignupCheckout
+          ? signupProfile?.billingProfile || {}
+          : (user?.tenant && typeof user.tenant === 'object' ? user.tenant.billingProfile : null) ||
+            {};
         const payload = {
           ...(planId ? { planId } : { planCode }),
           ...(code ? { discountCode: code } : {}),
-          customerEmail: user?.email || '',
+          customerEmail: isSignupCheckout
+            ? signupProfile?.email || ''
+            : user?.email || '',
           customerGstin: billing.gstin || '',
-          customerState: billing.state || billing.address || '',
+          customerState: billing.state || '',
         };
         const { data } = await paymentService.preview(payload);
         setQuote(data.data.quote);
@@ -160,15 +221,14 @@ function CheckoutPageInner() {
         setLoading(false);
       }
     },
-    [planCode, planId, planKey, user]
+    [planCode, planId, planKey, user, isSignupCheckout, signupProfile]
   );
 
   useEffect(() => {
-    if (!initialized || authLoading) return;
-    if (!user || roleSlug !== ROLES.ADMIN || !user.isEmailVerified) return;
-    // Quote full selling price; customer applies coupon manually at checkout
+    if (!initialized || authLoading || !signupReady) return;
+    if (!canCheckout) return;
     loadQuote('');
-  }, [loadQuote, initialized, authLoading, user, roleSlug]);
+  }, [loadQuote, initialized, authLoading, signupReady, canCheckout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -194,14 +254,19 @@ function CheckoutPageInner() {
     if (!planKey) return;
     try {
       setApplying(true);
-      const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
-      const billing = tenant?.billingProfile || {};
+      const billing = isSignupCheckout
+        ? signupProfile?.billingProfile || {}
+        : (user?.tenant && typeof user.tenant === 'object' ? user.tenant.billingProfile : null) ||
+          {};
       const payload = {
         ...(planId ? { planId } : { planCode }),
         discountCode: code,
-        customerEmail: form.customerEmail || user?.email || '',
+        customerEmail:
+          form.customerEmail ||
+          (isSignupCheckout ? signupProfile?.email : user?.email) ||
+          '',
         customerGstin: billing.gstin || '',
-        customerState: billing.state || billing.address || '',
+        customerState: billing.state || '',
       };
       const { data } = await paymentService.preview(payload);
       setQuote(data.data.quote);
@@ -223,15 +288,24 @@ function CheckoutPageInner() {
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const finishSuccess = async (payment) => {
-    // Login page shows a single "payment complete" toast via ?paid=1
+  const finishSuccess = async () => {
+    clearRegistrationSession();
     notifyClientsChanged();
     try {
-      await logout();
+      if (user) await logout();
     } catch {
       // ignore logout errors
     }
     window.location.assign(`${getLoginPath(ROLES.ADMIN)}?paid=1`);
+  };
+
+  const withRegistrationToken = (payload) =>
+    registrationToken ? { ...payload, registrationToken } : payload;
+
+  const billingFromActor = () => {
+    if (isSignupCheckout) return signupProfile?.billingProfile || {};
+    const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
+    return tenant?.billingProfile || {};
   };
 
   const handlePay = async (event) => {
@@ -245,28 +319,24 @@ function CheckoutPageInner() {
 
     try {
       setPaying(true);
-      const { data } = await paymentService.createOrder({
-        ...(planId ? { planId } : { planCode: quote.plan.code }),
-        discountCode: appliedCode || undefined,
-        customerName: form.customerName.trim(),
-        customerEmail: form.customerEmail.trim(),
-        customerPhone: form.customerPhone.trim(),
-        customerGstin: (() => {
-          const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
-          return tenant?.billingProfile?.gstin || '';
-        })(),
-        customerState: (() => {
-          const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
-          const billing = tenant?.billingProfile || {};
-          return billing.state || billing.address || '';
-        })(),
-      });
+      const billing = billingFromActor();
+      const { data } = await paymentService.createOrder(
+        withRegistrationToken({
+          ...(planId ? { planId } : { planCode: quote.plan.code }),
+          discountCode: appliedCode || undefined,
+          customerName: form.customerName.trim(),
+          customerEmail: form.customerEmail.trim(),
+          customerPhone: form.customerPhone.trim(),
+          customerGstin: billing.gstin || '',
+          customerState: billing.state || '',
+        })
+      );
 
       const order = data.data.order;
 
       if (order.freeCheckout) {
-        const verifyRes = await paymentService.verify({ paymentId: order.paymentId });
-        await finishSuccess(verifyRes.data.data.payment);
+        await paymentService.verify(withRegistrationToken({ paymentId: order.paymentId }));
+        await finishSuccess();
         return;
       }
 
@@ -275,8 +345,7 @@ function CheckoutPageInner() {
         throw new Error('Unable to load Razorpay checkout');
       }
 
-      const key =
-        order.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '';
+      const key = order.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '';
 
       await new Promise((resolve, reject) => {
         const rzp = new window.Razorpay({
@@ -294,13 +363,15 @@ function CheckoutPageInner() {
           theme: { color: COLORS.navy },
           handler: async (response) => {
             try {
-              const verifyRes = await paymentService.verify({
-                paymentId: order.paymentId,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              });
-              await finishSuccess(verifyRes.data.data.payment);
+              await paymentService.verify(
+                withRegistrationToken({
+                  paymentId: order.paymentId,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                })
+              );
+              await finishSuccess();
               resolve();
             } catch (err) {
               reject(err);
@@ -346,7 +417,7 @@ function CheckoutPageInner() {
     );
   }
 
-  if (!initialized || authLoading || !user || roleSlug !== ROLES.ADMIN || !user.isEmailVerified) {
+  if (!initialized || authLoading || !signupReady || !canCheckout) {
     return (
       <main className="min-h-screen" style={{ backgroundColor: COLORS.bg }}>
         <header className="border-b px-5 py-4 sm:px-8" style={{ borderColor: COLORS.line }}>
@@ -412,12 +483,18 @@ function CheckoutPageInner() {
                     className={`${fieldClass} cursor-not-allowed bg-[#F9FAFB] text-[#667085]`}
                     value={form.customerEmail}
                     readOnly
-                    title="The plan is activated on your signed-in account"
+                    title={
+                      isSignupCheckout
+                        ? 'Account will be created for this email after payment'
+                        : 'The plan is activated on your signed-in account'
+                    }
                     placeholder="you@business.com"
                     required
                   />
                   <p className="mt-1 text-[12px] text-[#98A2B3]">
-                    Billed to your signed-in account
+                    {isSignupCheckout
+                      ? 'Your account is created only after payment succeeds'
+                      : 'Billed to your signed-in account'}
                   </p>
                 </div>
                 <div>

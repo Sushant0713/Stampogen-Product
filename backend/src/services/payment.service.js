@@ -242,6 +242,28 @@ async function activateTenantPlanFromPayment(payment) {
     .toLowerCase();
   if (!email || !payment.planName) return null;
 
+  // Signup mode: create User + Tenant from pending draft, then attach plan
+  if (payment.pendingRegistration) {
+    const AuthService = require('@services/auth.service');
+    const PendingAdminRegistrationRepository = require('@repositories/pendingAdminRegistration.repository');
+    const pendingId = payment.pendingRegistration._id || payment.pendingRegistration;
+    let pending = await PendingAdminRegistrationRepository.findById(pendingId, {
+      withSecrets: true,
+    });
+    if (!pending) {
+      // Draft may already have been consumed on a prior verify retry
+      const existingUser = await UserRepository.findByEmail(email);
+      if (!existingUser) {
+        throw new AppError(
+          'Registration draft expired. Please register again.',
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+    } else {
+      await AuthService.createAdminAccountFromPending(pending);
+    }
+  }
+
   const user = await UserRepository.findByEmail(email);
   const tenantId = user?.tenant?._id || user?.tenant;
   if (!tenantId) return null;
@@ -346,28 +368,54 @@ class PaymentService {
     });
   }
 
-  async createOrder(body = {}, user = null) {
-    // Bind the purchase to the authenticated account — never trust a client-supplied email,
-    // otherwise a payer could attach the plan to someone else's tenant.
-    const customerEmail = String(user?.email || '')
-      .trim()
-      .toLowerCase();
+  async createOrder(body = {}, actorOrUser = {}) {
+    // Accept `{ user, pendingRegistration }` or a legacy user doc as the 2nd arg
+    const user =
+      actorOrUser?.user ||
+      (actorOrUser?.email && !actorOrUser?.pendingRegistration ? actorOrUser : null);
+    const pendingRegistration = actorOrUser?.pendingRegistration || null;
+
+    // Bind purchase to authenticated admin OR verified registration draft — never trust client email.
+    let customerEmail = '';
+    let pendingRegistrationId = null;
+    let fallbackName = '';
+
+    if (pendingRegistration) {
+      customerEmail = String(pendingRegistration.email || '')
+        .trim()
+        .toLowerCase();
+      pendingRegistrationId = pendingRegistration._id;
+      fallbackName = [pendingRegistration.firstName, pendingRegistration.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+    } else {
+      customerEmail = String(user?.email || '')
+        .trim()
+        .toLowerCase();
+      fallbackName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+    }
+
     if (!customerEmail) {
       throw new AppError('Authentication required for checkout', HTTP_STATUS.UNAUTHORIZED);
     }
 
     const plan = await resolvePlan(body.planId || body.planCode);
 
-    const fallbackName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
     const customerName = String(body.customerName || '').trim() || fallbackName;
-    const customerPhone = String(body.customerPhone || '').trim();
+    const customerPhone =
+      String(body.customerPhone || '').trim() ||
+      String(pendingRegistration?.phone || pendingRegistration?.billingProfile?.phone || '').trim() ||
+      String(user?.phone || '').trim();
 
     if (!customerName) throw new AppError('Name is required', HTTP_STATUS.BAD_REQUEST);
 
     const quote = await quotePlan(plan, body.discountCode, {
       customerEmail,
-      customerGstin: body.customerGstin,
-      customerState: body.customerState,
+      customerGstin:
+        body.customerGstin || pendingRegistration?.billingProfile?.gstin || undefined,
+      customerState:
+        body.customerState || pendingRegistration?.billingProfile?.state || undefined,
     });
 
     const payment = await PaymentRepository.create({
@@ -392,6 +440,7 @@ class PaymentService {
       payableAmount: quote.payableAmount,
       status: quote.payableAmount <= 0 ? 'free' : 'created',
       paidAt: quote.payableAmount <= 0 ? new Date() : null,
+      pendingRegistration: pendingRegistrationId,
     });
 
     if (quote.payableAmount <= 0) {
@@ -407,6 +456,7 @@ class PaymentService {
         quote,
         customer: { name: customerName, email: customerEmail, phone: customerPhone },
         invoice,
+        signupCompleted: Boolean(pendingRegistrationId),
       };
     }
 
@@ -441,23 +491,46 @@ class PaymentService {
       currency: order.currency,
       quote,
       customer: { name: customerName, email: customerEmail, phone: customerPhone },
+      signupCompleted: false,
     };
   }
 
-  async verify(body = {}, user = null) {
+  async verify(body = {}, actorOrUser = {}) {
+    const user =
+      actorOrUser?.user ||
+      (actorOrUser?.email && !actorOrUser?.pendingRegistration ? actorOrUser : null);
+    const pendingRegistration = actorOrUser?.pendingRegistration || null;
+
     const paymentId = body.paymentId;
     const payment = await PaymentRepository.findById(paymentId);
     if (!payment) throw new AppError('Payment not found', HTTP_STATUS.NOT_FOUND);
 
-    // Only the account that created the payment may verify/activate it.
-    const authedEmail = String(user?.email || '')
+    const actorEmail = String(
+      pendingRegistration?.email || user?.email || ''
+    )
       .trim()
       .toLowerCase();
     const paymentEmail = String(payment.customerEmail || '')
       .trim()
       .toLowerCase();
-    if (!authedEmail || paymentEmail !== authedEmail) {
+    if (!actorEmail || paymentEmail !== actorEmail) {
       throw new AppError('This payment does not belong to your account', HTTP_STATUS.FORBIDDEN);
+    }
+
+    // Signup payments must keep the pendingRegistration link
+    if (payment.pendingRegistration && !pendingRegistration) {
+      throw new AppError(
+        'Registration session required to complete this payment',
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+    if (
+      payment.pendingRegistration &&
+      pendingRegistration &&
+      String(payment.pendingRegistration._id || payment.pendingRegistration) !==
+        String(pendingRegistration._id)
+    ) {
+      throw new AppError('This payment does not belong to your registration', HTTP_STATUS.FORBIDDEN);
     }
 
     if (payment.status === 'paid' || payment.status === 'free') {
@@ -471,6 +544,7 @@ class PaymentService {
         payableAmount: payment.payableAmount,
         discountCode: payment.discountCode,
         invoice,
+        signupCompleted: Boolean(payment.pendingRegistration),
       };
     }
 
@@ -489,6 +563,7 @@ class PaymentService {
         payableAmount: updated.payableAmount,
         discountCode: updated.discountCode,
         invoice,
+        signupCompleted: Boolean(updated.pendingRegistration),
       };
     }
 
@@ -535,8 +610,8 @@ class PaymentService {
       planName: updated.planName,
       payableAmount: updated.payableAmount,
       discountCode: updated.discountCode,
-      razorpayPaymentId,
       invoice,
+      signupCompleted: Boolean(updated.pendingRegistration),
     };
   }
 

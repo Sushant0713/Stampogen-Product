@@ -50,6 +50,13 @@ const paymentSchema = new mongoose.Schema(
     invoiceEmailed: { type: Boolean, default: false },
     invoiceRecipient: { type: String, default: null },
     invoicedAt: { type: Date, default: null },
+    /** Set for payment-gated admin signup (no User until paid). */
+    pendingRegistration: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PendingAdminRegistration',
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );

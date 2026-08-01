@@ -85,78 +85,213 @@ async function printPlatformQr({ url, title = '', note = '' }) {
   cleanupPlatformQrPrint();
 
   const dataUrl = await QRCode.toDataURL(url, {
-    width: 640,
+    width: 720,
     margin: 2,
     color: { dark: PRIMARY, light: '#FFFFFF' },
   });
   const logoUrl = `${window.location.origin}/logo.png`;
+  const displayTitle = String(title || 'Scan to visit').trim();
+  const displayNote = String(note || '').trim();
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(title || 'QR code')}</title>
+  <title>${escapeHtml(displayTitle)}</title>
   <style>
     * { box-sizing: border-box; }
-    body {
+    html, body {
       margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      color: #101828;
-      background: #fff;
+      min-height: 100%;
+      background: #EEF2F7;
+      color: #021A54;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
     }
-    .sheet {
-      min-height: 100vh;
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    .poster {
+      width: min(420px, 100%);
+      min-height: min(640px, calc(100vh - 36px));
+      margin: 0 auto;
+      padding: 28px 24px 22px;
+      border-radius: 22px;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(46,144,250,0.12), transparent 36%),
+        radial-gradient(circle at 88% 92%, rgba(2,26,84,0.08), transparent 40%),
+        #FFFFFF;
+      border: 1px solid #D9E2F2;
+      box-shadow: 0 18px 40px rgba(2, 26, 84, 0.12);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 24px;
+      justify-content: space-between;
+      gap: 18px;
       text-align: center;
     }
-    .logo { height: 40px; width: auto; margin-bottom: 20px; object-fit: contain; }
-    .title { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+    .top { width: 100%; }
+    .logo {
+      display: block;
+      width: 150px;
+      max-width: 55%;
+      height: auto;
+      margin: 0 auto 14px;
+      object-fit: contain;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #EEF2FF;
+      color: #021A54;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .title {
+      margin: 14px 0 0;
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      color: #021A54;
+    }
+    .mid { width: 100%; }
+    .qr-frame {
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 14px;
+      border-radius: 20px;
+      background: linear-gradient(165deg, #021A54 0%, #0B3A7A 100%);
+      box-shadow: 0 14px 28px rgba(2, 26, 84, 0.22);
+    }
     .qr-card {
-      margin: 24px 0 16px;
-      padding: 16px;
-      border: 1px solid #EAECF0;
-      border-radius: 16px;
+      padding: 14px;
+      border-radius: 14px;
       background: #fff;
     }
-    .qr { width: 280px; height: 280px; display: block; }
-    .url {
-      max-width: 420px;
-      margin: 0 auto;
+    .qr {
+      display: block;
+      width: min(240px, 62vw);
+      height: auto;
+      aspect-ratio: 1 / 1;
+    }
+    .scan {
+      margin: 16px 0 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #021A54;
+    }
+    .hint {
+      margin: 6px auto 0;
+      max-width: 300px;
       font-size: 13px;
-      color: #667085;
+      line-height: 1.45;
+      font-weight: 600;
+      color: #64748B;
+    }
+    .url-pill {
+      display: inline-block;
+      margin-top: 14px;
+      max-width: 100%;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: #F8FAFC;
+      border: 1px solid #E4E7EC;
+      color: #344054;
+      font-size: 12px;
+      font-weight: 600;
       word-break: break-all;
     }
     .note {
-      max-width: 420px;
       margin: 10px auto 0;
-      font-size: 14px;
-      color: #344054;
+      max-width: 320px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: #475467;
+    }
+    .bottom {
+      width: 100%;
+      padding-top: 8px;
+      border-top: 1px solid #E4E7EC;
     }
     .brand {
-      margin-top: 28px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
       color: #98A2B3;
     }
     @media print {
-      @page { margin: 12mm; }
-      .sheet { min-height: auto; padding: 0; }
+      @page { size: A4 portrait; margin: 0; }
+      html, body {
+        width: 210mm;
+        height: 297mm;
+        background: #fff !important;
+        overflow: hidden !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10mm;
+      }
+      .poster {
+        width: 100%;
+        max-width: none;
+        min-height: 277mm;
+        margin: 0;
+        padding: 16mm 14mm 12mm;
+        border-radius: 14px;
+        box-shadow: none;
+        gap: 8mm;
+        justify-content: space-between;
+      }
+      .logo { width: 52mm; margin-bottom: 4mm; }
+      .eyebrow { font-size: 9pt; padding: 2mm 4mm; }
+      .title { font-size: 22pt; margin-top: 4mm; }
+      .qr-frame { padding: 3.5mm; border-radius: 12px; }
+      .qr-card { padding: 3.5mm; border-radius: 9px; }
+      .qr { width: 92mm; height: 92mm; }
+      .scan { font-size: 16pt; margin-top: 5mm; }
+      .hint { max-width: 130mm; font-size: 10pt; }
+      .url-pill { margin-top: 4mm; font-size: 9pt; padding: 2mm 3mm; }
+      .note { max-width: 130mm; font-size: 10pt; }
+      .bottom { padding-top: 4mm; }
+      .brand { font-size: 8pt; }
     }
   </style>
 </head>
 <body>
-  <div class="sheet">
-    <img class="logo" src="${logoUrl}" alt="" />
-    ${title ? `<h1 class="title">${escapeHtml(title)}</h1>` : ''}
-    <div class="qr-card"><img class="qr" src="${dataUrl}" alt="QR code" /></div>
-    <p class="url">${escapeHtml(url)}</p>
-    ${note ? `<p class="note">${escapeHtml(note)}</p>` : ''}
-    <div class="brand">POWERED BY STAMPOGEN</div>
+  <div class="poster">
+    <div class="top">
+      <img class="logo" src="${logoUrl}" alt="Stampogen" />
+      <div class="eyebrow">Scan to open</div>
+      <h1 class="title">${escapeHtml(displayTitle)}</h1>
+    </div>
+    <div class="mid">
+      <div class="qr-frame">
+        <div class="qr-card">
+          <img class="qr" src="${dataUrl}" alt="QR code" />
+        </div>
+      </div>
+      <p class="scan">Point your camera here</p>
+      <p class="hint">Open your phone camera and scan this code to visit the page instantly.</p>
+      <div class="url-pill">${escapeHtml(url)}</div>
+      ${displayNote ? `<p class="note">${escapeHtml(displayNote)}</p>` : ''}
+    </div>
+    <div class="bottom">
+      <div class="brand">POWERED BY STAMPOGEN</div>
+    </div>
   </div>
 </body>
 </html>`;
@@ -167,15 +302,15 @@ async function printPlatformQr({ url, title = '', note = '' }) {
     html.stampogen-platform-qr-printing body { overflow: hidden !important; }
     #${PRINT_SHELL_ID} {
       position: fixed; inset: 0; z-index: 2147483646;
-      display: flex; flex-direction: column; background: #0f172a;
+      display: flex; flex-direction: column; background: #0B1220;
     }
     #${PRINT_SHELL_ID} iframe {
-      flex: 1 1 auto; width: 100%; min-height: 0; border: 0; background: #fff;
+      flex: 1 1 auto; width: 100%; min-height: 0; border: 0; background: #EEF2F7;
     }
     #${PRINT_SHELL_ID} .actions {
       flex: 0 0 auto; display: flex; gap: 10px;
       padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-      background: #0f172a;
+      background: #0B1220;
     }
     #${PRINT_SHELL_ID} .actions button {
       flex: 1; border: 0; border-radius: 12px; padding: 14px 12px;
@@ -184,6 +319,7 @@ async function printPlatformQr({ url, title = '', note = '' }) {
     #${PRINT_SHELL_ID} .btn-print { background: #fff; color: #021A54; }
     #${PRINT_SHELL_ID} .btn-close { background: #334155; color: #fff; }
     @media print {
+      @page { margin: 0; }
       body * { visibility: hidden !important; }
       #${PRINT_SHELL_ID}, #${PRINT_SHELL_ID} * { visibility: visible !important; }
       #${PRINT_SHELL_ID} { position: fixed !important; inset: 0 !important; background: #fff !important; }
@@ -231,7 +367,7 @@ async function printPlatformQr({ url, title = '', note = '' }) {
   shell.querySelector('[data-action="close"]')?.addEventListener('click', close);
   shell.querySelector('[data-action="print"]')?.addEventListener('click', runPrint);
 
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 250));
   runPrint();
 }
 

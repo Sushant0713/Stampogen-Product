@@ -20,7 +20,6 @@ import { getErrorMessage, getLoginPath } from '@/utils';
 import { ROLES } from '@/constants';
 import { adminCardClass } from '@/features/admin/adminTheme';
 import { LoyaltyQrImage, buildJoinUrl, printLoyaltyQr } from '@/features/customer/LoyaltyQrImage';
-import { AdminSetupGuide, markAdminSetupQrShared } from '@/features/admin/AdminSetupGuide';
 import { loyaltyService } from '@/services/loyalty.service';
 
 function QrScanTooltip({ active, payload, label }) {
@@ -65,8 +64,6 @@ export function AdminHome() {
   const sub = user?.subscription || user?.tenant?.subscription || null;
   const shopName = user?.tenant?.name || 'your shop';
   const tenantSlug = user?.tenant?.slug || '';
-  const tenantId = user?.tenant?._id || user?.tenant?.id || user?.tenantId || '';
-  const stampMode = user?.tenant?.loyaltyStampMode || 'bill';
   const joinUrl = useMemo(
     () => (tenantSlug ? buildJoinUrl(tenantSlug) : ''),
     [tenantSlug]
@@ -75,7 +72,6 @@ export function AdminHome() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [setupTick, setSetupTick] = useState(0);
   const [stats, setStats] = useState({
     totalCustomers: 0,
     pendingRewards: 0,
@@ -155,18 +151,10 @@ export function AdminHome() {
       return;
     }
     try {
-      markAdminSetupQrShared(tenantId);
-      setSetupTick((n) => n + 1);
       await printLoyaltyQr({ value: joinUrl, shopName });
     } catch (error) {
       toast.error(getErrorMessage(error, 'Could not print QR'));
     }
-  };
-
-  const handlePreviewQr = () => {
-    markAdminSetupQrShared(tenantId);
-    setSetupTick((n) => n + 1);
-    setPreviewOpen(true);
   };
 
   const handleLogout = async () => {
@@ -200,6 +188,7 @@ export function AdminHome() {
                   setNotifOpen((v) => !v);
                   setProfileOpen(false);
                 }}
+                data-tour="admin-notifications"
                 className="relative flex h-11 w-11 items-center justify-center rounded-[14px] bg-white shadow-[0_6px_16px_rgba(2,26,84,0.08)] active:scale-95"
                 aria-label="Notifications"
               >
@@ -298,18 +287,8 @@ export function AdminHome() {
         </p>
       </div>
 
-      <AdminSetupGuide
-        tenantId={tenantId}
-        shopName={shopName}
-        stampMode={stampMode}
-        hasCustomers={Number(stats.totalCustomers) > 0}
-        refreshKey={setupTick}
-        onPrintQr={handlePrintQr}
-        onPreviewQr={handlePreviewQr}
-      />
-
       {/* QR card */}
-      <div className={adminCardClass('flex items-center gap-4 p-[18px]')}>
+      <div data-tour="admin-qr" className={adminCardClass('flex items-center gap-4 p-[18px]')}>
         {tenantSlug && joinUrl ? (
           <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-white p-1 shadow-[0_4px_10px_rgba(2,26,84,0.15)]">
             <LoyaltyQrImage value={joinUrl} size={72} className="rounded-[10px]" />
@@ -345,7 +324,7 @@ export function AdminHome() {
             </button>
             <button
               type="button"
-              onClick={handlePreviewQr}
+              onClick={() => setPreviewOpen(true)}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[#E2E8F0] bg-[#F8FAFC] py-2 text-[11.5px] font-bold text-[#021A54] active:scale-95"
             >
               <Eye size={13} />

@@ -64,6 +64,7 @@ function NavLink({ item, collapsed, pathname, badgeCount = 0, siblingHrefs = [] 
     <Link
       href={item.href}
       prefetch={false}
+      data-tour={item.tourId || undefined}
       title={collapsed ? `${item.label}${badge ? ` (${badge})` : ''}` : undefined}
       className={cn(
         'relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',

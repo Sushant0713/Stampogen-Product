@@ -49,6 +49,7 @@ export function AdminBottomNav() {
             key={item.id}
             href={item.href}
             prefetch={false}
+            data-tour={`admin-${item.id === 'home' ? 'home' : item.id}`}
             className={cn(
               'relative flex min-w-[52px] flex-col items-center gap-0.5 rounded-[18px] px-3 py-2 transition active:scale-95',
               active ? 'bg-[rgba(59,130,246,0.14)]' : 'bg-transparent'

@@ -9,6 +9,7 @@ import { AdminBottomNav } from '@/features/admin/layout/AdminBottomNav';
 import { AdminStampRequestNotifier } from '@/features/admin/AdminStampRequestNotifier';
 import { AdminBillStampNotifier } from '@/features/admin/AdminBillStampNotifier';
 import { AdminSoundUnlock } from '@/features/admin/AdminSoundUnlock';
+import { AdminOnboardingTour } from '@/features/admin/AdminOnboardingTour';
 import { ADMIN_BG } from '@/features/admin/adminTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
@@ -81,6 +82,7 @@ export function AdminDashboardLayout({ children }) {
         {authReady ? <AdminSoundUnlock enabled /> : null}
         {authReady ? <AdminStampRequestNotifier enabled /> : null}
         {authReady ? <AdminBillStampNotifier enabled /> : null}
+        {authReady ? <AdminOnboardingTour enabled /> : null}
       </div>
     </div>
   );

@@ -79,10 +79,10 @@ export const SIDEBAR_CONFIG = {
     title: 'Admin',
     basePath: '/admin',
     items: withBasePath('/admin', [
-      { label: 'Home', href: 'dashboard', icon: Home },
-      { label: 'Offers', href: 'offers', icon: Gift },
-      { label: 'Rewards', href: 'rewards', icon: Trophy },
-      { label: 'Customers', href: 'customers', icon: Users },
+      { label: 'Home', href: 'dashboard', icon: Home, tourId: 'admin-home' },
+      { label: 'Offers', href: 'offers', icon: Gift, tourId: 'admin-offers' },
+      { label: 'Rewards', href: 'rewards', icon: Trophy, tourId: 'admin-rewards' },
+      { label: 'Customers', href: 'customers', icon: Users, tourId: 'admin-customers' },
       {
         label: 'Plans',
         icon: Package,
@@ -91,7 +91,7 @@ export const SIDEBAR_CONFIG = {
           { label: 'Browse plans', href: 'plans/browse' },
         ],
       },
-      { label: 'Profile', href: 'profile', icon: UserCircle },
+      { label: 'Profile', href: 'profile', icon: UserCircle, tourId: 'admin-profile' },
     ]),
   },
   [ROLES.AFFILIATE]: {

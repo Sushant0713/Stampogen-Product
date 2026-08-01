@@ -985,6 +985,14 @@ class AuthService {
     assertAccountAccess(user, { forLogin: true });
     await EmailOtpRepository.deleteByEmail(email, 'login');
 
+    if (user.role?.slug === ROLES.ADMIN && !adminUserHasPlan(user)) {
+      await removeUnpaidAdminAccount(user);
+      throw new AppError(
+        'No account found. Please register and complete payment first.',
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
     return this.issueTokens(user);
   }
 
@@ -1083,6 +1091,16 @@ class AuthService {
     }
     assertAccountAccess(user);
     user = await syncAdminPendingPlan(user);
+
+    // Only paid admins may keep a session — unpaid orphans cannot use /me
+    if ((user.role?.slug || user.role) === ROLES.ADMIN && !adminUserHasPlan(user)) {
+      await removeUnpaidAdminAccount(user);
+      throw new AppError(
+        'No active plan. Please register and complete payment first.',
+        HTTP_STATUS.UNAUTHORIZED
+      );
+    }
+
     return withSubscription(user);
   }
 

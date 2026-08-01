@@ -84,12 +84,17 @@ function VerifyEmailFormInner({ role }) {
           registrationToken: data.data.registrationToken,
           profile: data.data.profile,
         });
-        toast.success('Email verified — complete payment to finish registration');
         const checkoutPlan = planCode || data.data.profile?.planCode || '';
         const checkoutDiscount = discountCode || data.data.profile?.discountCode || '';
-        window.location.assign(
-          buildCheckoutPath({ planCode: checkoutPlan, discountCode: checkoutDiscount })
-        );
+        if (checkoutPlan) {
+          toast.success('Email verified — complete payment to finish registration');
+          window.location.assign(
+            buildCheckoutPath({ planCode: checkoutPlan, discountCode: checkoutDiscount })
+          );
+          return;
+        }
+        toast.success('Email verified — choose a plan to finish registration');
+        window.location.assign('/pricing');
         return;
       }
 

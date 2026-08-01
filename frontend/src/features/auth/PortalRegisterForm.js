@@ -526,13 +526,20 @@ function PortalRegisterFormInner({ role }) {
           profile: data.data.profile,
         });
         setGoogleDraft(null);
-        toast.success('Continue to payment to finish registration');
-        window.location.assign(
-          buildCheckoutPath({
-            planCode: planCode || data.data.profile?.planCode,
-            discountCode: discountCode || data.data.profile?.discountCode,
-          })
-        );
+        const nextPlan = planCode || data.data.profile?.planCode || '';
+        const nextDiscount = discountCode || data.data.profile?.discountCode || '';
+        if (nextPlan) {
+          toast.success('Continue to payment to finish registration');
+          window.location.assign(
+            buildCheckoutPath({
+              planCode: nextPlan,
+              discountCode: nextDiscount,
+            })
+          );
+          return;
+        }
+        toast.success('Choose a plan to finish registration');
+        window.location.assign('/pricing');
         return;
       }
       setUser(data.data.user);

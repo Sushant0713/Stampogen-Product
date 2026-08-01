@@ -7,8 +7,9 @@ import toast from 'react-hot-toast';
 import { MARKETING_LINKS } from '@/constants/marketing';
 import { planService } from '@/services/plan.service';
 import { discountService } from '@/services/discount.service';
-import { getErrorMessage, getRoleSlug } from '@/utils';
+import { getErrorMessage, getRoleSlug, adminHasActivePlan } from '@/utils';
 import { subscribePricingPlansChanged } from '@/utils/pricingSync';
+import { getRegistrationToken } from '@/utils/registrationSession';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
 import { OneTimeOfferStrip } from '@/features/marketing/OneTimeOfferStrip';
@@ -63,7 +64,7 @@ function mapPlanToCard(plan, index, _plans, { canCheckout = false } = {}) {
   let cta = customCta || 'Get early access';
   const planQuery = encodeURIComponent(plan.code || plan.id);
   const enabled = plan.enabled !== false;
-  // Not registered → create account with this plan; already registered admin → pay
+  // Paid admin OR pending signup token → checkout; otherwise register with this plan
   let href = canCheckout
     ? `/checkout?plan=${planQuery}`
     : `/admin/register?plan=${planQuery}`;
@@ -420,12 +421,20 @@ export function PricingPage() {
     }
   });
   const [error, setError] = useState('');
+  const [hasPendingSignup, setHasPendingSignup] = useState(false);
 
+  useEffect(() => {
+    setHasPendingSignup(Boolean(getRegistrationToken()));
+  }, []);
+
+  // Resume checkout if: paid logged-in admin (renew) OR pending signup after OTP/Google
   const canCheckout =
-    initialized &&
-    Boolean(user) &&
-    getRoleSlug(user) === ROLES.ADMIN &&
-    Boolean(user.isEmailVerified);
+    hasPendingSignup ||
+    (initialized &&
+      Boolean(user) &&
+      getRoleSlug(user) === ROLES.ADMIN &&
+      Boolean(user.isEmailVerified) &&
+      adminHasActivePlan(user));
 
   useEffect(() => {
     let cancelled = false;

@@ -101,8 +101,8 @@ function PortalLoginFormInner({ role }) {
       user,
       redirect: redirectParam,
     });
-    if (role === ROLES.ADMIN && next.includes('/plans/browse') && !redirectParam) {
-      toast('Choose a plan to finish payment and activate your shop.', {
+    if (role === ROLES.ADMIN && next.includes('/pricing') && !redirectParam) {
+      toast('Complete payment on a plan to activate your shop.', {
         id: 'admin-finish-payment',
         duration: 5000,
       });
@@ -148,8 +148,8 @@ function PortalLoginFormInner({ role }) {
             user: loggedInUser,
             redirect: redirectParam,
           });
-          if (next.includes('/plans/browse') && !redirectParam) {
-            toast('Choose a plan to finish payment and activate your shop.', {
+          if (next.includes('/pricing') && !redirectParam) {
+            toast('Complete payment on a plan to activate your shop.', {
               id: 'admin-finish-payment',
               duration: 5000,
             });

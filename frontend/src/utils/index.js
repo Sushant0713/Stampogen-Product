@@ -79,12 +79,12 @@ export function getLoginWithRedirectPath(role, redirect) {
 
 /**
  * Where to send the user after login / Google sign-in.
- * Prefer safe ?redirect=; unpaid admins go to browse plans to finish payment.
+ * Prefer safe ?redirect=; unpaid admins cannot log in (blocked server-side).
  */
 export function resolvePostAuthPath({ role, user, redirect } = {}) {
   if (isSafeAppRedirect(redirect)) return redirect;
   if (role === ROLES.ADMIN && user && !adminHasActivePlan(user)) {
-    return '/admin/plans/browse';
+    return '/pricing';
   }
   if (role === ROLES.USER) return '/app';
   return `/${role}/dashboard`;

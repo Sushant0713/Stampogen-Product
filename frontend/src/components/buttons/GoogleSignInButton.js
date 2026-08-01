@@ -128,10 +128,10 @@ export function GoogleSignInButton({
               });
               if (
                 role === ROLES.ADMIN &&
-                next.includes('/plans/browse') &&
+                next.includes('/pricing') &&
                 !redirectTo
               ) {
-                toast('Choose a plan to finish payment and activate your shop.', {
+                toast('Complete payment on a plan to activate your shop.', {
                   id: 'admin-finish-payment',
                   duration: 5000,
                 });

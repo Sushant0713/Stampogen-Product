@@ -7,11 +7,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { ArrowLeft, BadgePercent, Loader2, Tag } from 'lucide-react';
 import { paymentService } from '@/services/payment.service';
+import { discountService } from '@/services/discount.service';
 import { getErrorMessage, getLoginPath, getRoleSlug } from '@/utils';
 import { notifyClientsChanged } from '@/utils/clientsSync';
 import { MARKETING_LINKS } from '@/constants/marketing';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
+import { OneTimeOfferStrip } from '@/features/marketing/OneTimeOfferStrip';
 
 const COLORS = {
   bg: '#F7F3EB',
@@ -75,6 +77,7 @@ function CheckoutPageInner() {
   const [paying, setPaying] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
   const [appliedCode, setAppliedCode] = useState('');
+  const [oneTimeOffers, setOneTimeOffers] = useState([]);
   const [form, setForm] = useState({
     customerName: '',
     customerEmail: '',
@@ -166,6 +169,21 @@ function CheckoutPageInner() {
     // Quote full selling price; customer applies coupon manually at checkout
     loadQuote('');
   }, [loadQuote, initialized, authLoading, user, roleSlug]);
+
+  useEffect(() => {
+    let cancelled = false;
+    discountService
+      .getPublic()
+      .then(({ data }) => {
+        if (!cancelled) setOneTimeOffers(data?.data?.discounts || []);
+      })
+      .catch(() => {
+        if (!cancelled) setOneTimeOffers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const applyDiscount = async () => {
     const code = discountInput.trim();
@@ -415,13 +433,21 @@ function CheckoutPageInner() {
                 </div>
               </div>
 
+              <OneTimeOfferStrip
+                offers={oneTimeOffers}
+                className="mb-4"
+                openHint="Copy a code into the field below, then click Apply."
+                onUseCode={(code) => setDiscountInput(String(code || '').toUpperCase())}
+              />
+
               <div className="rounded-xl border border-[#EAECF0] bg-[#F9FAFB] p-4">
                 <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-[#344054]">
                   <Tag size={15} />
                   Discount code
                 </div>
                 <p className="mb-2 text-[12px] text-[#667085]">
-                  Partner / affiliate codes apply only on your first payment.
+                  One-time and partner codes apply only on your first payment — enter the code and
+                  click Apply.
                 </p>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input

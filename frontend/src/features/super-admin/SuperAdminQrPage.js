@@ -18,6 +18,7 @@ import { platformQrService } from '@/services/platformQr.service';
 import { getErrorMessage } from '@/utils';
 
 const PRIMARY = '#021A54';
+const QR_CENTER_LOGO = '/icon.png';
 const fieldClass =
   'h-11 w-full rounded-xl border border-[#E4E7EC] bg-white px-3.5 text-sm text-[#101828] outline-none placeholder:text-[#98A2B3] transition focus:border-[#021A54] focus:ring-2 focus:ring-[#021A54]/15';
 const PRINT_SHELL_ID = 'stampogen-platform-qr-print';
@@ -38,16 +39,84 @@ function slugFilename(title) {
     .slice(0, 40) || 'qr'}.png`;
 }
 
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Unable to load logo'));
+    img.src = src;
+  });
+}
+
+function drawCenterLogo(ctx, canvasSize, logo) {
+  const logoSize = Math.round(canvasSize * 0.2);
+  const pad = Math.max(4, Math.round(logoSize * 0.14));
+  const box = logoSize + pad * 2;
+  const x = (canvasSize - box) / 2;
+  const y = (canvasSize - box) / 2;
+  const radius = Math.max(6, Math.round(box * 0.16));
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + box, y, x + box, y + box, radius);
+  ctx.arcTo(x + box, y + box, x, y + box, radius);
+  ctx.arcTo(x, y + box, x, y, radius);
+  ctx.arcTo(x, y, x + box, y, radius);
+  ctx.closePath();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.clip();
+  ctx.drawImage(logo, x + pad, y + pad, logoSize, logoSize);
+  ctx.restore();
+}
+
+async function renderQrWithLogo(targetCanvas, value, size, margin = 1) {
+  await QRCode.toCanvas(targetCanvas, value, {
+    width: size,
+    margin,
+    errorCorrectionLevel: 'H',
+    color: { dark: PRIMARY, light: '#FFFFFF' },
+  });
+
+  try {
+    const logo = await loadImage(QR_CENTER_LOGO);
+    const ctx = targetCanvas.getContext('2d');
+    if (ctx) drawCenterLogo(ctx, targetCanvas.width, logo);
+  } catch {
+    // Keep plain QR if logo fails to load
+  }
+
+  return targetCanvas;
+}
+
+async function qrDataUrlWithLogo(value, size = 512, margin = 2) {
+  const canvas = document.createElement('canvas');
+  await renderQrWithLogo(canvas, value, size, margin);
+  return canvas.toDataURL('image/png');
+}
+
 function QrPreview({ value, size = 160, className = '' }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
-    if (!canvasRef.current || !value) return;
-    QRCode.toCanvas(canvasRef.current, value, {
-      width: size,
-      margin: 1,
-      color: { dark: PRIMARY, light: '#FFFFFF' },
-    }).catch(() => {});
+    if (!canvasRef.current || !value) return undefined;
+    let cancelled = false;
+
+    renderQrWithLogo(canvasRef.current, value, size, 1).catch(() => {
+      if (!cancelled && canvasRef.current) {
+        QRCode.toCanvas(canvasRef.current, value, {
+          width: size,
+          margin: 1,
+          errorCorrectionLevel: 'H',
+          color: { dark: PRIMARY, light: '#FFFFFF' },
+        }).catch(() => {});
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [value, size]);
 
   if (!value) return null;
@@ -63,11 +132,7 @@ function QrPreview({ value, size = 160, className = '' }) {
 }
 
 async function downloadQrPng(url, filename) {
-  const dataUrl = await QRCode.toDataURL(url, {
-    width: 512,
-    margin: 2,
-    color: { dark: PRIMARY, light: '#FFFFFF' },
-  });
+  const dataUrl = await qrDataUrlWithLogo(url, 512, 2);
   const link = document.createElement('a');
   link.href = dataUrl;
   link.download = filename || 'stampogen-qr.png';
@@ -88,11 +153,7 @@ async function printPlatformQr({ url, displayUrl = '', title = '', note = '' }) 
 
   cleanupPlatformQrPrint();
 
-  const dataUrl = await QRCode.toDataURL(url, {
-    width: 720,
-    margin: 2,
-    color: { dark: PRIMARY, light: '#FFFFFF' },
-  });
+  const dataUrl = await qrDataUrlWithLogo(url, 720, 2);
   const logoUrl = `${window.location.origin}/logo.png`;
   const displayTitle = String(title || 'Scan to visit').trim();
   const displayNote = String(note || '').trim();

@@ -18,7 +18,7 @@ import { platformQrService } from '@/services/platformQr.service';
 import { getErrorMessage } from '@/utils';
 
 const PRIMARY = '#021A54';
-const QR_CENTER_LOGO = '/icon.png';
+const QR_CENTER_LOGO = '/icon1.png';
 const fieldClass =
   'h-11 w-full rounded-xl border border-[#E4E7EC] bg-white px-3.5 text-sm text-[#101828] outline-none placeholder:text-[#98A2B3] transition focus:border-[#021A54] focus:ring-2 focus:ring-[#021A54]/15';
 const PRINT_SHELL_ID = 'stampogen-platform-qr-print';
@@ -49,25 +49,35 @@ function loadImage(src) {
 }
 
 function drawCenterLogo(ctx, canvasSize, logo) {
-  const logoSize = Math.round(canvasSize * 0.2);
-  const pad = Math.max(4, Math.round(logoSize * 0.14));
-  const box = logoSize + pad * 2;
-  const x = (canvasSize - box) / 2;
-  const y = (canvasSize - box) / 2;
-  const radius = Math.max(6, Math.round(box * 0.16));
+  const maxLogo = Math.round(canvasSize * 0.26);
+  const naturalW = logo.naturalWidth || logo.width || 1;
+  const naturalH = logo.naturalHeight || logo.height || 1;
+  const scale = Math.min(maxLogo / naturalW, maxLogo / naturalH);
+  const logoW = Math.round(naturalW * scale);
+  const logoH = Math.round(naturalH * scale);
+  const pad = Math.max(6, Math.round(maxLogo * 0.12));
+  const boxW = logoW + pad * 2;
+  const boxH = logoH + pad * 2;
+  const x = (canvasSize - boxW) / 2;
+  const y = (canvasSize - boxH) / 2;
+  const radius = Math.max(8, Math.round(Math.min(boxW, boxH) * 0.18));
 
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + box, y, x + box, y + box, radius);
-  ctx.arcTo(x + box, y + box, x, y + box, radius);
-  ctx.arcTo(x, y + box, x, y, radius);
-  ctx.arcTo(x, y, x + box, y, radius);
+  ctx.arcTo(x + boxW, y, x + boxW, y + boxH, radius);
+  ctx.arcTo(x + boxW, y + boxH, x, y + boxH, radius);
+  ctx.arcTo(x, y + boxH, x, y, radius);
+  ctx.arcTo(x, y, x + boxW, y, radius);
   ctx.closePath();
   ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(2, 26, 84, 0.14)';
+  ctx.shadowBlur = Math.max(4, Math.round(canvasSize * 0.012));
+  ctx.shadowOffsetY = 1;
   ctx.fill();
+  ctx.shadowColor = 'transparent';
   ctx.clip();
-  ctx.drawImage(logo, x + pad, y + pad, logoSize, logoSize);
+  ctx.drawImage(logo, x + pad, y + pad, logoW, logoH);
   ctx.restore();
 }
 

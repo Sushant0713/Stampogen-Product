@@ -41,6 +41,43 @@ function greeting() {
   return 'Good Evening 🌙';
 }
 
+const WELCOME_SEEN_PREFIX = 'stampogen:admin-welcome-seen:v1:';
+
+function hasSeenWelcome(userId) {
+  if (typeof window === 'undefined' || !userId) return true;
+  try {
+    return window.localStorage.getItem(`${WELCOME_SEEN_PREFIX}${userId}`) === '1';
+  } catch {
+    return true;
+  }
+}
+
+function markWelcomeSeen(userId) {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    window.localStorage.setItem(`${WELCOME_SEEN_PREFIX}${userId}`, '1');
+  } catch {
+    // ignore
+  }
+}
+
+function trialBannerText(sub) {
+  if (!sub?.planName) return null;
+  const isTrial =
+    sub.isTrial ||
+    sub.source === 'trial' ||
+    ['trial_active', 'trial_expiring_soon', 'trial_expired'].includes(sub.status);
+  if (!isTrial) return null;
+
+  const days = sub.daysRemaining;
+  if (days == null) return `${sub.planName} free trial`;
+  if (days < 0) {
+    return `Free trial ended ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago`;
+  }
+  if (days === 0) return `${sub.planName} free trial ends today`;
+  return `${days} day${days === 1 ? '' : 's'} free trial remaining`;
+}
+
 function firstName(fullName) {
   const n = String(fullName || '').trim();
   if (!n) return 'there';
@@ -96,6 +133,16 @@ export function AdminHome() {
   }, [loadStats]);
 
   const displayName = useMemo(() => firstName(fullName), [fullName]);
+  const userId = user?._id || user?.id || '';
+  const [isReturningUser, setIsReturningUser] = useState(true);
+  const trialLabel = useMemo(() => trialBannerText(sub), [sub]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const seen = hasSeenWelcome(userId);
+    setIsReturningUser(seen);
+    if (!seen) markWelcomeSeen(userId);
+  }, [userId]);
 
   const statCards = useMemo(
     () => [
@@ -175,9 +222,18 @@ export function AdminHome() {
           <div>
             <p className="text-[13px] font-semibold text-[#F59E0B]">{greeting()}</p>
             <h1 className="mt-1.5 text-[26px] font-extrabold leading-tight text-[#021A54] lg:text-3xl">
-              Welcome back,
+              {isReturningUser ? 'Welcome back,' : 'Welcome,'}
               <br />
-              {displayName} 👋
+              <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span>
+                  {displayName} 👋
+                </span>
+                {trialLabel ? (
+                  <span className="text-[14px] font-bold leading-snug text-[#D92D20] lg:text-[16px]">
+                    {trialLabel}
+                  </span>
+                ) : null}
+              </span>
             </h1>
           </div>
           <div className="relative flex shrink-0 gap-2.5">

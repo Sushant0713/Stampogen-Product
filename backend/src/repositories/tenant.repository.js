@@ -131,6 +131,25 @@ class TenantRepository {
   async deleteById(id) {
     return Tenant.findByIdAndDelete(id);
   }
+
+  /** Tenants that have (or had) free-trial metadata for Super Admin reports. */
+  async findTrialReportCandidates() {
+    return Tenant.find({
+      $or: [
+        { subscriptionSource: 'trial' },
+        { 'trial.active': true },
+        { 'trial.startedAt': { $ne: null } },
+        { 'trial.convertedAt': { $ne: null } },
+        { 'trial.planName': { $nin: [null, ''] } },
+        { 'billingHistory.kind': 'trial' },
+      ],
+    })
+      .populate('owner', 'firstName lastName email fullName')
+      .select(
+        'name slug status subscriptionSource currentPlan trial billingHistory createdAt owner'
+      )
+      .lean();
+  }
 }
 
 module.exports = new TenantRepository();

@@ -206,6 +206,10 @@ export function ClientManagement() {
   const [planClient, setPlanClient] = useState(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [planSaving, setPlanSaving] = useState(false);
+  const [trialModal, setTrialModal] = useState(null);
+  const [trialPlanId, setTrialPlanId] = useState('');
+  const [trialDays, setTrialDays] = useState('14');
+  const [trialSaving, setTrialSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
   const [addSaving, setAddSaving] = useState(false);
@@ -346,6 +350,78 @@ export function ClientManagement() {
     if (planSaving) return;
     setPlanClient(null);
     setSelectedPlanId('');
+  };
+
+  const openTrialModal = (client, mode) => {
+    const currentName = String(
+      client.trial?.planName || client.currentPlan?.name || client.billing?.planName || ''
+    ).toLowerCase();
+    const matched = assignablePlans.find(
+      (plan) => String(plan.name || '').toLowerCase() === currentName
+    );
+    setTrialModal({ client, mode });
+    setTrialPlanId(matched ? String(matched.id || matched._id) : '');
+    setTrialDays(mode === 'extend' ? '7' : '14');
+  };
+
+  const closeTrialModal = () => {
+    if (trialSaving) return;
+    setTrialModal(null);
+    setTrialPlanId('');
+    setTrialDays('14');
+  };
+
+  const handleTrialSubmit = async () => {
+    if (!trialModal?.client) return;
+    const days = Number(trialDays);
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      toast.error('Days must be between 1 and 3650');
+      return;
+    }
+
+    if (trialModal.mode !== 'extend') {
+      if (!trialPlanId) {
+        toast.error('Select a plan first');
+        return;
+      }
+    }
+
+    try {
+      setTrialSaving(true);
+      setActionId(trialModal.client._id);
+      if (trialModal.mode === 'extend') {
+        await tenantService.extendTrial(trialModal.client._id, { days });
+        toast.success(`Trial extended by ${days} day${days === 1 ? '' : 's'}`);
+      } else {
+        const selected = assignablePlans.find(
+          (plan) => String(plan.id || plan._id) === String(trialPlanId)
+        );
+        if (!selected) {
+          toast.error('Selected plan is unavailable');
+          return;
+        }
+        await tenantService.grantTrial(trialModal.client._id, {
+          planId: selected.id || selected._id,
+          planName: selected.name,
+          planCode: selected.code,
+          days,
+        });
+        toast.success(
+          trialModal.mode === 'change'
+            ? `Trial changed to ${selected.name} (${days} days)`
+            : `Trial granted: ${selected.name} for ${days} days`
+        );
+      }
+      setTrialModal(null);
+      setTrialPlanId('');
+      setTrialDays('14');
+      await Promise.all([loadClients(pagination.page), loadStats()]);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to update trial'));
+    } finally {
+      setTrialSaving(false);
+      setActionId(null);
+    }
   };
 
   const handleChangePlan = async () => {
@@ -695,6 +771,8 @@ export function ClientManagement() {
                     cycles: 0,
                     revenue: 0,
                   };
+                  const onTrial =
+                    client.subscriptionSource === 'trial' || Boolean(client.trial?.active);
 
                   return (
                     <tr key={client._id} className="border-t border-[#F2F4F7]">
@@ -712,6 +790,11 @@ export function ClientManagement() {
                             ? billing.planName
                             : 'No plan'}
                         </p>
+                        {onTrial ? (
+                          <span className="mt-1 inline-flex rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
+                            Trial
+                          </span>
+                        ) : null}
                         {billing.planName &&
                         billing.planName !== 'No plan' &&
                         Number(billing.pricePerCycle) >= 0 ? (
@@ -826,6 +909,26 @@ export function ClientManagement() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => openTrialModal(client, onTrial ? 'change' : 'grant')}
+                            disabled={busy || assignablePlans.length === 0}
+                            className={actionBtnClass}
+                            style={{ borderColor: ACCENT, color: ACCENT }}
+                          >
+                            {onTrial ? 'Change trial' : 'Grant trial'}
+                          </button>
+                          {onTrial ? (
+                            <button
+                              type="button"
+                              onClick={() => openTrialModal(client, 'extend')}
+                              disabled={busy}
+                              className={actionBtnClass}
+                              style={{ borderColor: ACCENT, color: ACCENT }}
+                            >
+                              Extend trial
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
                             onClick={() => handleSuspend(client)}
                             disabled={busy}
                             className={actionBtnClass}
@@ -914,6 +1017,16 @@ export function ClientManagement() {
                         viewClient.billing.pricePerCycle || 0
                       )} / cycle`
                     : 'No plan'
+                }
+              />
+              <DetailRow
+                label="Trial"
+                value={
+                  viewClient.subscriptionSource === 'trial' || viewClient.trial?.active
+                    ? `Active · ends ${formatDate(viewClient.trial?.endsAt || viewClient.currentPlan?.endsAt)}`
+                    : viewClient.trial?.endsAt
+                      ? `Ended ${formatDate(viewClient.trial.endsAt)}`
+                      : '—'
                 }
               />
               <DetailRow
@@ -1011,6 +1124,98 @@ export function ClientManagement() {
                 </select>
               </label>
             )}
+          </div>
+        </ModalShell>
+      ) : null}
+
+      {trialModal ? (
+        <ModalShell
+          title={
+            trialModal.mode === 'extend'
+              ? 'Extend trial'
+              : trialModal.mode === 'change'
+                ? 'Change trial'
+                : 'Grant trial'
+          }
+          onClose={closeTrialModal}
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeTrialModal}
+                disabled={trialSaving}
+                className="h-10 rounded-lg border border-[#D0D5DD] px-4 text-sm font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleTrialSubmit}
+                disabled={
+                  trialSaving ||
+                  (trialModal.mode !== 'extend' && (!trialPlanId || assignablePlans.length === 0))
+                }
+                className="h-10 rounded-lg px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ backgroundColor: ACCENT }}
+              >
+                {trialSaving
+                  ? 'Saving...'
+                  : trialModal.mode === 'extend'
+                    ? 'Extend'
+                    : trialModal.mode === 'change'
+                      ? 'Update trial'
+                      : 'Grant trial'}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-[#101828]">{trialModal.client.name}</p>
+              <p className="mt-0.5 text-[13px] text-[#667085]">
+                No new registration — trial applies to this shop account.
+              </p>
+            </div>
+
+            {trialModal.mode !== 'extend' ? (
+              <label className="block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Trial plan
+                </span>
+                <select
+                  value={trialPlanId}
+                  onChange={(event) => setTrialPlanId(event.target.value)}
+                  disabled={trialSaving}
+                  className="h-11 w-full rounded-lg border border-[#D0D5DD] bg-white px-3 text-sm text-[#101828] outline-none focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54] disabled:opacity-50"
+                >
+                  <option value="">Select a plan</option>
+                  {assignablePlans.map((plan) => {
+                    const id = plan.id || plan._id;
+                    return (
+                      <option key={id} value={id}>
+                        {plan.name}
+                        {plan.billing ? ` · ${plan.billing}` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+            ) : null}
+
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                {trialModal.mode === 'extend' ? 'Extra days' : 'Trial days'}
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={3650}
+                value={trialDays}
+                onChange={(event) => setTrialDays(event.target.value)}
+                disabled={trialSaving}
+                className="h-11 w-full rounded-lg border border-[#D0D5DD] bg-white px-3 text-sm text-[#101828] outline-none focus:border-[#021A54] focus:ring-1 focus:ring-[#021A54] disabled:opacity-50"
+              />
+            </label>
           </div>
         </ModalShell>
       ) : null}

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BarChart3, FileText, QrCode, ScrollText } from 'lucide-react';
+import { BarChart3, FileText, Gift, QrCode, ScrollText } from 'lucide-react';
 
 const PRIMARY = '#021A54';
 
@@ -17,6 +17,18 @@ const SETTINGS_ITEMS = [
     description: 'Manage Terms and Conditions for Affiliate Partners and Clients.',
     href: '/super-admin/settings/terms',
     icon: ScrollText,
+  },
+  {
+    title: 'Free trial',
+    description: 'Enable free trials, pick the default plan and days, and apply on public signup.',
+    href: '/super-admin/settings/trial',
+    icon: Gift,
+  },
+  {
+    title: 'Free trial reports',
+    description: 'See active, expired, and converted trial clients with filters and charts.',
+    href: '/super-admin/settings/trial/reports',
+    icon: BarChart3,
   },
   {
     title: 'QR codes',

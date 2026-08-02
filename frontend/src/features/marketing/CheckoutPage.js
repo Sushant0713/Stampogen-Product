@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, BadgePercent, Loader2, Tag } from 'lucide-react';
 import { paymentService } from '@/services/payment.service';
 import { discountService } from '@/services/discount.service';
+import { platformTrialSettingsService } from '@/services/platformTrialSettings.service';
 import { getErrorMessage, getLoginPath, getRoleSlug } from '@/utils';
 import { notifyClientsChanged } from '@/utils/clientsSync';
 import { MARKETING_LINKS } from '@/constants/marketing';
@@ -76,6 +77,7 @@ function CheckoutPageInner() {
   const planCode = searchParams.get('plan') || '';
   const planId = searchParams.get('planId') || '';
   const urlDiscount = searchParams.get('discount') || '';
+  const skipTrialFromUrl = searchParams.get('pay') === '1';
 
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -87,23 +89,39 @@ function CheckoutPageInner() {
   const [registrationToken, setRegistrationToken] = useState('');
   const [signupProfile, setSignupProfile] = useState(null);
   const [signupReady, setSignupReady] = useState(false);
+  const [publicTrial, setPublicTrial] = useState(null);
+  const [trialDiscountCode, setTrialDiscountCode] = useState('');
+  const [skipFreeTrial, setSkipFreeTrial] = useState(skipTrialFromUrl);
   const [form, setForm] = useState({
     customerName: '',
     customerEmail: '',
     customerPhone: '',
   });
+  const userClearedReservedRef = useRef(false);
 
   const planKey = useMemo(() => planId || planCode, [planId, planCode]);
   const roleSlug = user ? getRoleSlug(user) : null;
   const isSignupCheckout = Boolean(registrationToken && signupProfile);
+  const trialAvailable = Boolean(
+    isSignupCheckout &&
+      publicTrial?.available &&
+      publicTrial?.plan &&
+      !skipFreeTrial &&
+      !skipTrialFromUrl
+  );
   const isRenewalCheckout =
     Boolean(user) && roleSlug === ROLES.ADMIN && Boolean(user.isEmailVerified) && !isSignupCheckout;
   const canCheckout = isSignupCheckout || isRenewalCheckout;
+  const reservedDiscountCode = useMemo(() => {
+    const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
+    return String(tenant?.reservedDiscountCode || '')
+      .trim()
+      .toUpperCase();
+  }, [user]);
 
   // Signup: registrationToken from verify/Google. Renewal: logged-in verified admin.
   useEffect(() => {
     if (!initialized || authLoading) return;
-    if (!planKey) return;
 
     const token = getRegistrationToken();
     if (token) {
@@ -136,6 +154,8 @@ function CheckoutPageInner() {
 
     setSignupReady(true);
 
+    if (!planKey) return;
+
     if (!user) {
       const plan = planCode || planId;
       const params = new URLSearchParams();
@@ -160,6 +180,24 @@ function CheckoutPageInner() {
     }
   }, [initialized, authLoading, user, roleSlug, planKey, planCode, planId, urlDiscount, router]);
 
+  useEffect(() => {
+    if (!isSignupCheckout) {
+      setPublicTrial(null);
+      return;
+    }
+    let cancelled = false;
+    platformTrialSettingsService
+      .getPublic()
+      .then(({ data }) => {
+        if (!cancelled) setPublicTrial(data?.data?.settings || null);
+      })
+      .catch(() => {
+        if (!cancelled) setPublicTrial(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignupCheckout]);
   useEffect(() => {
     if (isSignupCheckout && signupProfile) {
       const fullName = [signupProfile.firstName, signupProfile.lastName]
@@ -188,7 +226,7 @@ function CheckoutPageInner() {
   }, [user, isSignupCheckout, signupProfile]);
 
   const loadQuote = useCallback(
-    async (code = '') => {
+    async (code = '', { allowFallback = false } = {}) => {
       if (!planKey) {
         setLoading(false);
         return;
@@ -215,8 +253,39 @@ function CheckoutPageInner() {
           setDiscountInput(data.data.quote.discountCode);
         }
       } catch (error) {
-        setQuote(null);
-        toast.error(getErrorMessage(error, 'Unable to load plan for checkout'));
+        if (allowFallback && code) {
+          toast.error(
+            getErrorMessage(
+              error,
+              'Saved partner code could not be applied. Continuing without it.'
+            )
+          );
+          setDiscountInput('');
+          setAppliedCode('');
+          try {
+            const billing = isSignupCheckout
+              ? signupProfile?.billingProfile || {}
+              : (user?.tenant && typeof user.tenant === 'object'
+                  ? user.tenant.billingProfile
+                  : null) || {};
+            const { data } = await paymentService.preview({
+              ...(planId ? { planId } : { planCode }),
+              customerEmail: isSignupCheckout
+                ? signupProfile?.email || ''
+                : user?.email || '',
+              customerGstin: billing.gstin || '',
+              customerState: billing.state || '',
+            });
+            setQuote(data.data.quote);
+            setAppliedCode('');
+          } catch (inner) {
+            setQuote(null);
+            toast.error(getErrorMessage(inner, 'Unable to load plan for checkout'));
+          }
+        } else {
+          setQuote(null);
+          toast.error(getErrorMessage(error, 'Unable to load plan for checkout'));
+        }
       } finally {
         setLoading(false);
       }
@@ -227,9 +296,49 @@ function CheckoutPageInner() {
   useEffect(() => {
     if (!initialized || authLoading || !signupReady) return;
     if (!canCheckout) return;
-    loadQuote('');
-  }, [loadQuote, initialized, authLoading, signupReady, canCheckout]);
+    if (trialAvailable) {
+      setLoading(false);
+      return;
+    }
+    if (!planKey) {
+      setLoading(false);
+      return;
+    }
 
+    let initialCode = '';
+    let allowFallback = false;
+    if (
+      isRenewalCheckout &&
+      reservedDiscountCode &&
+      !userClearedReservedRef.current
+    ) {
+      initialCode = reservedDiscountCode;
+      setDiscountInput(reservedDiscountCode);
+      allowFallback = true;
+    } else if (urlDiscount) {
+      initialCode = String(urlDiscount).trim().toUpperCase();
+      setDiscountInput(initialCode);
+    }
+    loadQuote(initialCode, { allowFallback });
+  }, [
+    loadQuote,
+    initialized,
+    authLoading,
+    signupReady,
+    canCheckout,
+    trialAvailable,
+    planKey,
+    isRenewalCheckout,
+    reservedDiscountCode,
+    urlDiscount,
+  ]);  // Prefill affiliate coupon on trial start from URL or registration draft
+  useEffect(() => {
+    if (!trialAvailable) return;
+    const fromProfile = String(signupProfile?.discountCode || '').trim().toUpperCase();
+    const fromUrl = String(urlDiscount || '').trim().toUpperCase();
+    const next = fromUrl || fromProfile;
+    if (next) setTrialDiscountCode(next);
+  }, [trialAvailable, signupProfile, urlDiscount]);
   useEffect(() => {
     let cancelled = false;
     discountService
@@ -281,6 +390,7 @@ function CheckoutPageInner() {
   };
 
   const clearDiscount = async () => {
+    userClearedReservedRef.current = true;
     setDiscountInput('');
     setAppliedCode('');
     await loadQuote('');
@@ -288,7 +398,7 @@ function CheckoutPageInner() {
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const finishSuccess = async () => {
+  const finishSuccess = async ({ trial = false } = {}) => {
     clearRegistrationSession();
     notifyClientsChanged();
     try {
@@ -296,7 +406,8 @@ function CheckoutPageInner() {
     } catch {
       // ignore logout errors
     }
-    window.location.assign(`${getLoginPath(ROLES.ADMIN)}?paid=1`);
+    const query = trial ? 'trial=1' : 'paid=1';
+    window.location.assign(`${getLoginPath(ROLES.ADMIN)}?${query}`);
   };
 
   const withRegistrationToken = (payload) =>
@@ -306,6 +417,38 @@ function CheckoutPageInner() {
     if (isSignupCheckout) return signupProfile?.billingProfile || {};
     const tenant = user?.tenant && typeof user.tenant === 'object' ? user.tenant : null;
     return tenant?.billingProfile || {};
+  };
+
+  const handleStartTrial = async (event) => {
+    event.preventDefault();
+    if (!trialAvailable || paying || !registrationToken) return;
+
+    try {
+      setPaying(true);
+      const code = String(trialDiscountCode || '').trim().toUpperCase();
+      await paymentService.startTrial({
+        registrationToken,
+        ...(code ? { discountCode: code } : {}),
+      });
+      await finishSuccess({ trial: true });
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to start free trial'));
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleSkipFreeTrial = () => {
+    const discount =
+      String(urlDiscount || trialDiscountCode || '').trim().toUpperCase() || '';
+    const params = new URLSearchParams();
+    const nextPlan =
+      planCode || planId || publicTrial?.plan?.code || publicTrial?.plan?.id || '';
+    if (nextPlan) params.set('plan', nextPlan);
+    if (discount) params.set('discount', discount);
+    params.set('pay', '1');
+    setSkipFreeTrial(true);
+    router.replace(`/checkout?${params.toString()}`);
   };
 
   const handlePay = async (event) => {
@@ -399,7 +542,30 @@ function CheckoutPageInner() {
     }
   };
 
-  if (!planKey) {
+  if (!planKey && !trialAvailable) {
+    // Signup: wait for public trial settings before deciding there's no plan
+    if (isSignupCheckout && publicTrial === null) {
+      return (
+        <main className="min-h-screen" style={{ backgroundColor: COLORS.bg }}>
+          <header className="border-b px-5 py-4 sm:px-8" style={{ borderColor: COLORS.line }}>
+            <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
+              <Link href="/pricing" className="inline-flex items-center gap-2 text-sm font-medium text-[#344054]">
+                <ArrowLeft size={16} />
+                Back to pricing
+              </Link>
+              <Image src="/logo.png" alt="Stampogen" width={140} height={36} className="h-8 w-auto object-contain" />
+            </div>
+          </header>
+          <div className="flex items-center justify-center px-5 py-24">
+            <div className="inline-flex items-center gap-2 text-sm text-[#667085]">
+              <Loader2 className="animate-spin" size={16} />
+              Preparing checkout...
+            </div>
+          </div>
+        </main>
+      );
+    }
+
     return (
       <main className="min-h-screen px-5 py-16" style={{ backgroundColor: COLORS.bg }}>
         <div className="mx-auto max-w-lg rounded-2xl bg-white p-8 text-center shadow-sm">
@@ -453,10 +619,70 @@ function CheckoutPageInner() {
 
       <div className="mx-auto grid max-w-5xl gap-6 px-5 py-10 lg:grid-cols-[1.1fr_0.9fr] sm:px-8">
         <section className="rounded-2xl border bg-white p-6 shadow-sm sm:p-8" style={{ borderColor: COLORS.line }}>
-          <h1 className="text-2xl font-bold tracking-tight text-[#101828]">Checkout</h1>
-          <p className="mt-1 text-sm text-[#667085]">Complete payment to unlock your plan.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-[#101828]">
+            {trialAvailable ? 'Start free trial' : 'Checkout'}
+          </h1>
+          <p className="mt-1 text-sm text-[#667085]">
+            {trialAvailable
+              ? `Activate your shop with a ${publicTrial.trialDays}-day free trial — no payment required.`
+              : 'Complete payment to unlock your plan.'}
+          </p>
 
-          {loading ? (
+          {trialAvailable ? (
+            <form onSubmit={handleStartTrial} className="mt-8 space-y-5">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                Free trial on <strong>{publicTrial.plan.name}</strong> for{' '}
+                <strong>{publicTrial.trialDays} days</strong>. You can upgrade anytime from My plan.
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#344054]">Email</label>
+                <input
+                  type="email"
+                  className={`${fieldClass} cursor-not-allowed bg-[#F9FAFB] text-[#667085]`}
+                  value={form.customerEmail || signupProfile?.email || ''}
+                  readOnly
+                />
+                <p className="mt-1 text-[12px] text-[#98A2B3]">
+                  Your admin account is created when the trial starts
+                </p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                  Affiliate coupon{' '}
+                  <span className="font-normal text-[#98A2B3]">(optional)</span>
+                </label>
+                <input
+                  className={fieldClass}
+                  value={trialDiscountCode}
+                  onChange={(e) => setTrialDiscountCode(e.target.value.toUpperCase())}
+                  placeholder="Partner code"
+                  maxLength={40}
+                />
+                <p className="mt-1 text-[12px] text-[#98A2B3]">
+                  Have an affiliate partner code? We&apos;ll save it and apply it automatically when
+                  you upgrade after the trial.
+                </p>
+              </div>
+              <button
+                type="submit"
+                disabled={paying}
+                className="inline-flex h-12 w-full items-center justify-center rounded-lg text-[15px] font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ backgroundColor: COLORS.navy }}
+              >
+                {paying
+                  ? 'Starting trial...'
+                  : `Start ${publicTrial.trialDays}-day free trial on ${publicTrial.plan.name}`}
+              </button>
+              <button
+                type="button"
+                onClick={handleSkipFreeTrial}
+                disabled={paying}
+                className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-[#D0D5DD] bg-white text-[15px] font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:opacity-60"
+              >
+                Skip free trial — pay now
+              </button>
+            </form>
+          ) : loading ? (
             <div className="mt-10 flex items-center gap-2 text-sm text-[#667085]">
               <Loader2 className="animate-spin" size={16} />
               Loading plan...
@@ -572,8 +798,29 @@ function CheckoutPageInner() {
         </section>
 
         <aside className="rounded-2xl border bg-white p-6 shadow-sm sm:p-8" style={{ borderColor: COLORS.line }}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#98A2B3]">Order summary</p>
-          {quote ? (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#98A2B3]">
+            {trialAvailable ? 'Trial summary' : 'Order summary'}
+          </p>
+          {trialAvailable ? (
+            <div className="mt-4 space-y-4">
+              <div>
+                <h2 className="text-xl font-bold text-[#101828]">{publicTrial.plan.name}</h2>
+                <p className="mt-1 text-sm text-[#667085]">
+                  {publicTrial.trialDays}-day free trial · {publicTrial.plan.billing || 'Monthly'} catalog
+                </p>
+              </div>
+              <div className="space-y-2 border-t border-[#F2F4F7] pt-4 text-sm">
+                <div className="flex justify-between text-[#344054]">
+                  <span>Due today</span>
+                  <span className="font-semibold text-emerald-700">₹0</span>
+                </div>
+              </div>
+              <p className="text-[12px] leading-relaxed text-[#98A2B3]">
+                After the trial ends you can upgrade from My plan. Your shop stays accessible with a
+                soft reminder — no hard lock in this version.
+              </p>
+            </div>
+          ) : quote ? (
             <div className="mt-4 space-y-4">
               <div>
                 <h2 className="text-xl font-bold text-[#101828]">{quote.plan.name}</h2>

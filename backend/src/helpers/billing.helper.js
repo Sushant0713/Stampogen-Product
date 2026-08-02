@@ -192,6 +192,9 @@ function clearPendingPlan() {
 function getSubscriptionView(tenant) {
   const plan = tenant?.currentPlan || {};
   const pending = tenant?.pendingPlan?.name ? tenant.pendingPlan : null;
+  const trial = tenant?.trial || {};
+  const source = tenant?.subscriptionSource || null;
+  const isTrial = source === 'trial' || Boolean(trial.active);
 
   if (!plan.name) {
     return {
@@ -203,6 +206,10 @@ function getSubscriptionView(tenant) {
       pricePerCycle: 0,
       status: 'none',
       pendingPlan: null,
+      isTrial: false,
+      source: null,
+      trialEndsAt: null,
+      catalogPricePerCycle: 0,
     };
   }
 
@@ -212,8 +219,19 @@ function getSubscriptionView(tenant) {
   const daysRemaining = calendarDaysRemaining(endsAt);
 
   let status = 'active';
-  if (daysRemaining != null && daysRemaining < 0) status = 'expired';
-  else if (daysRemaining != null && daysRemaining <= 7) status = 'expiring_soon';
+  if (daysRemaining != null && daysRemaining < 0) {
+    status = isTrial ? 'trial_expired' : 'expired';
+  } else if (isTrial) {
+    status = daysRemaining != null && daysRemaining <= 7 ? 'trial_expiring_soon' : 'trial_active';
+  } else if (daysRemaining != null && daysRemaining <= 7) {
+    status = 'expiring_soon';
+  }
+
+  const trialEndsAt = trial.endsAt
+    ? new Date(trial.endsAt)
+    : isTrial && endsAt
+      ? endsAt
+      : null;
 
   return {
     planName: plan.name,
@@ -222,7 +240,12 @@ function getSubscriptionView(tenant) {
     endsAt,
     daysRemaining,
     pricePerCycle: Number(plan.pricePerCycle) || 0,
+    catalogPricePerCycle: Number(trial.catalogPricePerCycle) || Number(plan.pricePerCycle) || 0,
     status,
+    isTrial: Boolean(isTrial),
+    source,
+    trialEndsAt,
+    trialActive: Boolean(trial.active) && (daysRemaining == null || daysRemaining >= 0),
     pendingPlan: pending
       ? {
           planName: pending.name,
@@ -234,6 +257,217 @@ function getSubscriptionView(tenant) {
         }
       : null,
   };
+}
+
+function clearTrialState() {
+  return {
+    active: false,
+    planCode: '',
+    planName: '',
+    startedAt: null,
+    endsAt: null,
+    grantedBy: null,
+    grantedAt: null,
+    extendedCount: 0,
+    catalogPricePerCycle: 0,
+    convertedAt: null,
+  };
+}
+
+function addCalendarDays(fromDate, days) {
+  const d = new Date(fromDate);
+  d.setUTCDate(d.getUTCDate() + Number(days));
+  return d;
+}
+
+/**
+ * Grant or replace a free trial on a tenant (no payment / invoice).
+ */
+function applyTrialPlan(
+  tenantDoc,
+  {
+    planName,
+    planCode = '',
+    catalogPricePerCycle = 0,
+    billing = 'Monthly',
+    days = 14,
+    grantedBy = null,
+    grantedAt = new Date(),
+  } = {}
+) {
+  const trialDays = Math.min(3650, Math.max(1, Number(days) || 14));
+  if (!planName) throw new Error('Invalid trial plan');
+
+  const cycle = normalizeBillingCycle(billing);
+  const tenant = tenantDoc.toObject ? tenantDoc.toObject() : { ...tenantDoc };
+  const history = Array.isArray(tenant.billingHistory) ? [...tenant.billingHistory] : [];
+  const changeDate = new Date(grantedAt);
+  const endsAt = addCalendarDays(changeDate, trialDays);
+
+  const openIndex = history.findIndex((item) => !item.endDate);
+  if (openIndex >= 0) {
+    const open = { ...history[openIndex] };
+    open.endDate = changeDate;
+    const closed = buildSegment({
+      planName: open.planName,
+      pricePerCycle: open.pricePerCycle,
+      startDate: open.startDate,
+      endDate: changeDate,
+    });
+    history[openIndex] = { ...closed, kind: open.kind || null };
+  }
+
+  history.push({
+    planName,
+    pricePerCycle: 0,
+    startDate: changeDate,
+    endDate: null,
+    cycles: 1,
+    amount: 0,
+    kind: 'trial',
+  });
+
+  tenant.billingHistory = history;
+  tenant.currentPlan = {
+    name: planName,
+    pricePerCycle: 0,
+    startedAt: changeDate,
+    billing: cycle,
+    endsAt,
+  };
+  tenant.pendingPlan = clearPendingPlan();
+  tenant.subscriptionSource = 'trial';
+  tenant.trial = {
+    active: true,
+    planCode: String(planCode || '').trim().toLowerCase(),
+    planName,
+    startedAt: changeDate,
+    endsAt,
+    grantedBy: grantedBy || null,
+    grantedAt: changeDate,
+    extendedCount: 0,
+    catalogPricePerCycle: Number(catalogPricePerCycle) || 0,
+    convertedAt: null,
+  };
+  tenant.status = tenant.status === 'suspended' ? tenant.status : 'active';
+
+  return {
+    tenant,
+    billing: summarizeBilling(tenant),
+  };
+}
+
+/**
+ * Extend current plan/trial endsAt by extra calendar days (same registration).
+ */
+function extendTrialOrPlan(tenantDoc, { extraDays = 1, asOf = new Date() } = {}) {
+  const days = Math.min(3650, Math.max(1, Number(extraDays) || 1));
+  const tenant = tenantDoc.toObject ? tenantDoc.toObject() : { ...tenantDoc };
+  const current = tenant.currentPlan || {};
+  if (!current.name) {
+    throw new Error('Client has no plan to extend');
+  }
+
+  const now = new Date(asOf);
+  const currentEnds = getEffectiveEndsAt(current);
+  const base = currentEnds && currentEnds.getTime() > now.getTime() ? currentEnds : now;
+  const newEndsAt = addCalendarDays(base, days);
+
+  tenant.currentPlan = {
+    ...current,
+    endsAt: newEndsAt,
+  };
+
+  if (tenant.subscriptionSource === 'trial' || tenant.trial?.active) {
+    tenant.trial = {
+      ...(tenant.trial || clearTrialState()),
+      active: true,
+      planName: current.name,
+      endsAt: newEndsAt,
+      extendedCount: (Number(tenant.trial?.extendedCount) || 0) + 1,
+    };
+    tenant.subscriptionSource = 'trial';
+  }
+
+  if (tenant.pendingPlan?.name) {
+    const pendingCycle = normalizeBillingCycle(tenant.pendingPlan.billing || 'Monthly');
+    tenant.pendingPlan = {
+      ...tenant.pendingPlan,
+      startsAt: newEndsAt,
+      endsAt: computePlanEndsAt(newEndsAt, pendingCycle),
+    };
+  }
+
+  return {
+    tenant,
+    billing: summarizeBilling(tenant),
+  };
+}
+
+/**
+ * After a paid purchase, mark subscription as paid and clear trial flags.
+ * Keeps a trial snapshot + convertedAt for Super Admin reports.
+ */
+function markSubscriptionPaid(tenantDoc) {
+  const tenant = tenantDoc.toObject ? tenantDoc.toObject() : { ...tenantDoc };
+  const prev = tenant.trial || {};
+  const wasTrial =
+    tenant.subscriptionSource === 'trial' ||
+    Boolean(prev.active) ||
+    Boolean(prev.startedAt) ||
+    Boolean(prev.endsAt);
+
+  tenant.subscriptionSource = 'paid';
+  if (wasTrial) {
+    tenant.trial = {
+      active: false,
+      planCode: prev.planCode || '',
+      planName: prev.planName || tenant.currentPlan?.name || '',
+      startedAt: prev.startedAt || null,
+      endsAt: prev.endsAt || tenant.currentPlan?.endsAt || null,
+      grantedBy: prev.grantedBy || null,
+      grantedAt: prev.grantedAt || null,
+      extendedCount: Number(prev.extendedCount) || 0,
+      catalogPricePerCycle: Number(prev.catalogPricePerCycle) || 0,
+      convertedAt: new Date(),
+    };
+  } else {
+    tenant.trial = clearTrialState();
+  }
+  return tenant;
+}
+
+/**
+ * After SA manual plan assign (non-trial).
+ * If the shop was on a trial, keep a converted snapshot for reports.
+ */
+function markSubscriptionManual(tenantDoc) {
+  const tenant = tenantDoc.toObject ? tenantDoc.toObject() : { ...tenantDoc };
+  const prev = tenant.trial || {};
+  const wasTrial =
+    tenant.subscriptionSource === 'trial' ||
+    Boolean(prev.active) ||
+    Boolean(prev.startedAt) ||
+    Boolean(prev.endsAt);
+
+  tenant.subscriptionSource = 'manual';
+  if (wasTrial) {
+    tenant.trial = {
+      active: false,
+      planCode: prev.planCode || '',
+      planName: prev.planName || tenant.currentPlan?.name || '',
+      startedAt: prev.startedAt || null,
+      endsAt: prev.endsAt || tenant.currentPlan?.endsAt || null,
+      grantedBy: prev.grantedBy || null,
+      grantedAt: prev.grantedAt || null,
+      extendedCount: Number(prev.extendedCount) || 0,
+      catalogPricePerCycle: Number(prev.catalogPricePerCycle) || 0,
+      convertedAt: new Date(),
+    };
+  } else {
+    tenant.trial = clearTrialState();
+  }
+  return tenant;
 }
 
 function applyPlanChange(
@@ -328,6 +562,9 @@ function applyDuePendingPlan(tenantDoc, asOf = new Date()) {
       updated.currentPlan.endsAt = endsAt;
     }
   }
+
+  updated.subscriptionSource = 'paid';
+  updated.trial = markSubscriptionPaid({ ...updated, subscriptionSource: 'trial' }).trial;
 
   return { tenant: updated, applied: true };
 }
@@ -438,4 +675,10 @@ module.exports = {
   getSubscriptionView,
   getEffectiveEndsAt,
   isPlanActive,
+  applyTrialPlan,
+  extendTrialOrPlan,
+  markSubscriptionPaid,
+  markSubscriptionManual,
+  clearTrialState,
+  addCalendarDays,
 };

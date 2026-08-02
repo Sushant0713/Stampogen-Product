@@ -50,21 +50,39 @@ export function AdminMyPlan() {
   }
 
   const days = sub.daysRemaining;
+  const isTrial =
+    sub.isTrial ||
+    sub.source === 'trial' ||
+    ['trial_active', 'trial_expiring_soon', 'trial_expired'].includes(sub.status);
+  const trialExpired = sub.status === 'trial_expired' || (isTrial && days != null && days < 0);
+  const paidExpired = !isTrial && sub.status === 'expired';
+
   const daysLabel =
     days == null
       ? '—'
       : days < 0
-        ? `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago`
+        ? `${isTrial ? 'Trial ended' : 'Expired'} ${Math.abs(days)} day${
+            Math.abs(days) === 1 ? '' : 's'
+          } ago`
         : days === 0
-          ? 'Expires today'
+          ? isTrial
+            ? 'Trial ends today'
+            : 'Expires today'
           : `${days} day${days === 1 ? '' : 's'} remaining`;
 
   const tone =
-    sub.status === 'expired'
+    trialExpired || paidExpired
       ? 'border-red-200 bg-red-50 text-red-800'
-      : sub.status === 'expiring_soon'
+      : sub.status === 'expiring_soon' || sub.status === 'trial_expiring_soon'
         ? 'border-amber-200 bg-amber-50 text-amber-900'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-800';
+        : isTrial
+          ? 'border-sky-200 bg-sky-50 text-sky-900'
+          : 'border-emerald-200 bg-emerald-50 text-emerald-800';
+
+  const displayPrice =
+    isTrial && Number(sub.catalogPricePerCycle) > 0
+      ? sub.catalogPricePerCycle
+      : sub.pricePerCycle;
 
   return (
     <div className="mx-auto w-full max-w-3xl lg:max-w-none">
@@ -73,19 +91,33 @@ export function AdminMyPlan() {
         subtitle={`Subscription for ${user?.tenant?.name || 'your shop'}.`}
       />
 
+      {trialExpired ? (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Your free trial has ended. Browse plans to continue with a paid subscription — your shop
+          stays open meanwhile.
+        </div>
+      ) : null}
+
       <div className={adminCardClass('p-6 sm:p-8')}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 text-[#021A54]">
               <Sparkles size={18} />
               <span className="text-[12px] font-bold uppercase tracking-[0.06em]">
-                Current plan
+                {isTrial ? 'Free trial' : 'Current plan'}
               </span>
             </div>
             <h2 className="mt-2 text-3xl font-extrabold text-[#101828]">{sub.planName}</h2>
             <p className="mt-1 text-sm text-[#667085]">
-              {sub.billing || 'Monthly'} billing · {formatMoney(sub.pricePerCycle)} / cycle
+              {isTrial
+                ? `Trial · catalog ${formatMoney(displayPrice)} / cycle after upgrade`
+                : `${sub.billing || 'Monthly'} billing · ${formatMoney(sub.pricePerCycle)} / cycle`}
             </p>
+            {isTrial && !trialExpired && sub.trialEndsAt ? (
+              <p className="mt-2 text-sm font-medium text-sky-800">
+                Trial ends on {formatDate(sub.trialEndsAt || sub.endsAt)}
+              </p>
+            ) : null}
           </div>
           <span className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold ${tone}`}>
             {daysLabel}
@@ -95,8 +127,16 @@ export function AdminMyPlan() {
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           {[
             { icon: CalendarDays, label: 'Started', value: formatDate(sub.startedAt) },
-            { icon: CalendarDays, label: 'Renews / ends', value: formatDate(sub.endsAt) },
-            { icon: CreditCard, label: 'Price', value: formatMoney(sub.pricePerCycle) },
+            {
+              icon: CalendarDays,
+              label: isTrial ? 'Trial ends' : 'Renews / ends',
+              value: formatDate(sub.endsAt),
+            },
+            {
+              icon: CreditCard,
+              label: isTrial ? 'Catalog price' : 'Price',
+              value: formatMoney(displayPrice),
+            },
           ].map(({ icon: Icon, label, value }) => (
             <div
               key={label}
@@ -117,7 +157,11 @@ export function AdminMyPlan() {
             className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-bold text-white"
             style={{ backgroundColor: ADMIN_ACCENT }}
           >
-            {sub.status === 'expired' ? 'Renew / change plan' : 'Browse other plans'}
+            {trialExpired || paidExpired
+              ? 'Upgrade / renew'
+              : isTrial
+                ? 'Upgrade to paid'
+                : 'Browse other plans'}
           </Link>
           <Link
             href={MARKETING_LINKS.pricing}

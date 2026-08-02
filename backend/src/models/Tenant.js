@@ -89,6 +89,12 @@ const billingSegmentSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    /** Optional tag for trial vs paid ledger rows. */
+    kind: {
+      type: String,
+      enum: ['paid', 'trial', 'manual', null],
+      default: null,
+    },
   },
   { _id: false }
 );
@@ -160,6 +166,36 @@ const tenantSchema = new mongoose.Schema(
     billingHistory: {
       type: [billingSegmentSchema],
       default: [],
+    },
+    /** How the current period was granted: paid checkout, free trial, or SA manual assign. */
+    subscriptionSource: {
+      type: String,
+      enum: ['paid', 'trial', 'manual', null],
+      default: null,
+    },
+    /** Free-trial metadata; currentPlan.endsAt remains the access end date. */
+    trial: {
+      active: { type: Boolean, default: false },
+      planCode: { type: String, trim: true, default: '' },
+      planName: { type: String, trim: true, default: '' },
+      startedAt: { type: Date, default: null },
+      endsAt: { type: Date, default: null },
+      grantedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      grantedAt: { type: Date, default: null },
+      extendedCount: { type: Number, default: 0, min: 0 },
+      catalogPricePerCycle: { type: Number, default: 0, min: 0 },
+      /** Set when shop converts from trial to paid; cleared when a new trial is granted. */
+      convertedAt: { type: Date, default: null },
+    },
+    /**
+     * Affiliate / promo code reserved at free-trial start.
+     * Auto-applied on the shop’s first paid checkout; cleared after successful payment.
+     */
+    reservedDiscountCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: '',
     },
     settings: {
       type: mongoose.Schema.Types.Mixed,

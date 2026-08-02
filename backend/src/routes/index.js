@@ -31,6 +31,7 @@ router.use('/invoice-settings', invoiceSettingsRoutes);
 router.use('/platform-invoices', require('./platformInvoice.routes'));
 router.use('/agreement-settings', require('./agreementSettings.routes'));
 router.use('/affiliate-settings', require('./affiliateSettings.routes'));
+router.use('/platform-trial-settings', require('./platformTrialSettings.routes'));
 router.use('/affiliate-onboarding', require('./affiliateOnboarding.routes'));
 router.use('/affiliate-earnings', require('./affiliateEarnings.routes'));
 router.use('/payments', paymentRoutes);

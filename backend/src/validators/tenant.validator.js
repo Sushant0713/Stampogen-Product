@@ -1,4 +1,4 @@
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const { TENANT_STATUS, SHOP_CATEGORY_VALUES } = require('@constants');
 
 const createTenantValidator = [
@@ -82,11 +82,53 @@ const changePlanValidator = [
   }),
 ];
 
+const grantTrialValidator = [
+  param('id').isMongoId().withMessage('Invalid tenant ID'),
+  body('days').isInt({ min: 1, max: 3650 }).withMessage('Days must be between 1 and 3650'),
+  body('planName').optional().trim().isLength({ min: 1, max: 120 }),
+  body('planId').optional().isMongoId().withMessage('Invalid plan ID'),
+  body('planCode').optional().isString().trim().isLength({ max: 80 }),
+  body().custom((_, { req }) => {
+    if (!req.body.planName && !req.body.planId && !req.body.planCode) {
+      throw new Error('Plan is required');
+    }
+    return true;
+  }),
+];
+
+const extendTrialValidator = [
+  param('id').isMongoId().withMessage('Invalid tenant ID'),
+  body('days').isInt({ min: 1, max: 3650 }).withMessage('Days must be between 1 and 3650'),
+];
+
+const trialReportsValidator = [
+  query('from')
+    .optional({ values: 'falsy' })
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('Invalid from date'),
+  query('to')
+    .optional({ values: 'falsy' })
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('Invalid to date'),
+  query('status')
+    .optional({ values: 'falsy' })
+    .isIn(['all', 'active', 'expired', 'converted', 'expiring_soon']),
+  query('origin').optional({ values: 'falsy' }).isIn(['all', 'signup', 'admin']),
+  query('plan').optional({ values: 'falsy' }).trim().isLength({ max: 120 }),
+  query('search').optional({ values: 'falsy' }).trim().isLength({ max: 120 }),
+  query('sort')
+    .optional({ values: 'falsy' })
+    .isIn(['ending', 'newest', 'oldest', 'name', 'converted']),
+];
+
 const tenantIdValidator = [param('id').isMongoId().withMessage('Invalid tenant ID')];
 
 module.exports = {
   createTenantValidator,
   updateTenantValidator,
   changePlanValidator,
+  grantTrialValidator,
+  extendTrialValidator,
+  trialReportsValidator,
   tenantIdValidator,
 };

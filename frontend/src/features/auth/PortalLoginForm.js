@@ -113,6 +113,7 @@ function PortalLoginFormInner({ role }) {
   useEffect(() => {
     const error = searchParams.get('error');
     const paid = searchParams.get('paid');
+    const trial = searchParams.get('trial');
 
     if (error) {
       toast.error(error, { id: 'login-query-error' });
@@ -123,9 +124,18 @@ function PortalLoginFormInner({ role }) {
       toast.success('Payment complete. Sign in with your email and password.', {
         id: 'payment-complete',
       });
-      // Remove ?paid=1 so later remounts don't fire again
       const url = new URL(window.location.href);
       url.searchParams.delete('paid');
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, '', next);
+    }
+
+    if (trial === '1') {
+      toast.success('Free trial started. Sign in with your email and password.', {
+        id: 'trial-complete',
+      });
+      const url = new URL(window.location.href);
+      url.searchParams.delete('trial');
       const next = `${url.pathname}${url.search}${url.hash}`;
       window.history.replaceState({}, '', next);
     }

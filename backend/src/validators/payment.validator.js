@@ -41,8 +41,17 @@ const verifyPaymentValidator = [
   body('registrationToken').optional().trim().isLength({ min: 16, max: 128 }),
 ];
 
+const startTrialValidator = [
+  body('registrationToken').trim().notEmpty().withMessage('Registration token is required').isLength({
+    min: 16,
+    max: 128,
+  }),
+  body('discountCode').optional({ values: 'falsy' }).trim().isLength({ max: 40 }),
+];
+
 module.exports = {
   previewPaymentValidator,
   createOrderValidator,
   verifyPaymentValidator,
+  startTrialValidator,
 };

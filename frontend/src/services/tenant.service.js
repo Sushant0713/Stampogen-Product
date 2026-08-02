@@ -8,5 +8,8 @@ export const tenantService = {
   update: (id, data) => api.patch(`/tenants/${id}`, data),
   changePlan: (id, payload) =>
     api.patch(`/tenants/${id}/plan`, typeof payload === 'string' ? { planName: payload } : payload),
+  grantTrial: (id, payload) => api.post(`/tenants/${id}/trial`, payload),
+  extendTrial: (id, payload) => api.post(`/tenants/${id}/trial/extend`, payload),
+  trialReports: (params) => api.get('/tenants/trial-reports', { params }),
   remove: (id) => api.delete(`/tenants/${id}`),
 };

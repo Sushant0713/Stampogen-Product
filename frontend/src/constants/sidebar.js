@@ -69,6 +69,8 @@ export const SIDEBAR_CONFIG = {
         children: [
           { label: 'Invoice setting', href: 'settings/invoice' },
           { label: 'Terms and conditions', href: 'settings/terms' },
+          { label: 'Free trial', href: 'settings/trial' },
+          { label: 'Free trial reports', href: 'settings/trial/reports' },
         ],
       },
       { label: 'QR', href: 'settings/qr', icon: QrCode },

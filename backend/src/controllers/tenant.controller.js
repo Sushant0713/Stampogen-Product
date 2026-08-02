@@ -103,6 +103,53 @@ class TenantController {
     }
   }
 
+  async grantTrial(req, res, next) {
+    try {
+      const tenant = await TenantService.grantTrial(
+        req.params.id,
+        {
+          planName: req.body.planName,
+          planId: req.body.planId,
+          planCode: req.body.planCode,
+          days: req.body.days,
+        },
+        req.user?._id || req.user?.id || null
+      );
+      return sendSuccess(res, {
+        message: `Free trial granted for ${tenant.trial?.planName || tenant.currentPlan?.name}`,
+        data: { tenant },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async extendTrial(req, res, next) {
+    try {
+      const tenant = await TenantService.extendTrial(req.params.id, {
+        days: req.body.days,
+      });
+      return sendSuccess(res, {
+        message: 'Trial extended',
+        data: { tenant },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async trialReports(req, res, next) {
+    try {
+      const report = await TenantService.getTrialReports(req.query);
+      return sendSuccess(res, {
+        message: 'Trial reports retrieved',
+        data: report,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   async remove(req, res, next) {
     try {
       await TenantService.remove(req.params.id);

@@ -6,6 +6,7 @@ const {
   previewPaymentValidator,
   createOrderValidator,
   verifyPaymentValidator,
+  startTrialValidator,
 } = require('@validators/payment.validator');
 
 const router = express.Router();
@@ -26,6 +27,13 @@ router.post(
   verifyPaymentValidator,
   validate,
   PaymentController.verify
+);
+router.post(
+  '/start-trial',
+  resolvePaymentActor,
+  startTrialValidator,
+  validate,
+  PaymentController.startTrial
 );
 
 module.exports = router;

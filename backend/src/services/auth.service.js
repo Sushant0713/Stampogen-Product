@@ -108,6 +108,8 @@ async function syncAdminPendingPlan(user) {
     currentPlan: updated.currentPlan,
     pendingPlan: updated.pendingPlan,
     billingHistory: updated.billingHistory,
+    subscriptionSource: updated.subscriptionSource,
+    trial: updated.trial,
   });
 
   return UserRepository.findById(user._id);

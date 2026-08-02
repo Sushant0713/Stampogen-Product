@@ -43,6 +43,24 @@ class PaymentController {
       return next(error);
     }
   }
+
+  async startTrial(req, res, next) {
+    try {
+      const result = await PaymentService.startTrial(
+        {
+          user: req.user || null,
+          pendingRegistration: req.pendingRegistration || null,
+        },
+        { discountCode: req.body?.discountCode }
+      );
+      return sendSuccess(res, {
+        message: `Free trial started on ${result.planName}`,
+        data: { trial: result },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
 }
 
 module.exports = new PaymentController();

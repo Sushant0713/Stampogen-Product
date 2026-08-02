@@ -21,6 +21,11 @@ const {
   ensureBillingLedger,
   applyPlanChange,
   summarizeBilling,
+  applyTrialPlan,
+  extendTrialOrPlan,
+  markSubscriptionManual,
+  calendarDaysRemaining,
+  getEffectiveEndsAt,
 } = require('@helpers/billing.helper');
 
 const REPAIR_COOLDOWN_MS = 5 * 60 * 1000;
@@ -558,10 +563,13 @@ class TenantService {
       pricePerCycle,
       plan.billing || 'Monthly'
     );
+    const manual = markSubscriptionManual(updated);
     const saved = await TenantRepository.updateById(id, {
-      currentPlan: updated.currentPlan,
-      pendingPlan: updated.pendingPlan,
-      billingHistory: updated.billingHistory,
+      currentPlan: manual.currentPlan,
+      pendingPlan: manual.pendingPlan,
+      billingHistory: manual.billingHistory,
+      subscriptionSource: manual.subscriptionSource,
+      trial: manual.trial,
     });
 
     let invoice = null;
@@ -569,7 +577,7 @@ class TenantService {
       invoice = await PlatformInvoiceService.issueForPlanChange({
         tenant: saved.toObject ? saved.toObject() : saved,
         planName,
-        pricePerCycle: updated.currentPlan?.pricePerCycle || pricePerCycle,
+        pricePerCycle: manual.currentPlan?.pricePerCycle || pricePerCycle,
       });
     } catch (error) {
       // Plan change should succeed even if invoice email fails
@@ -580,6 +588,269 @@ class TenantService {
       ...(saved.toObject ? saved.toObject() : saved),
       billing,
       invoice,
+    };
+  }
+
+  /**
+   * Grant or replace a free trial on an existing client (no payment / invoice).
+   */
+  async grantTrial(id, { planId, planCode, planName: planNameInput, days } = {}, grantedBy = null) {
+    let plan = null;
+    if (planId) {
+      plan = await PlanRepository.findById(planId);
+    }
+    if (!plan && planCode) {
+      plan = await PlanRepository.findByCode(String(planCode).trim());
+    }
+    if (!plan && planNameInput) {
+      plan =
+        (await PlanRepository.findByCode(String(planNameInput).trim())) ||
+        (await PlanRepository.findByName(String(planNameInput).trim()));
+    }
+
+    if (!plan) {
+      throw new AppError('Plan not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (plan.status === 'Inactive' || plan.enabled === false) {
+      throw new AppError('This plan is inactive', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (plan.priceCustom) {
+      throw new AppError('Custom / contact-sales plans cannot be used for trials', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const trialDays = Math.min(3650, Math.max(1, Number(days) || 14));
+    const tenant = await TenantRepository.findById(id);
+    if (!tenant) {
+      throw new AppError('Tenant not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const ensured = ensureBillingLedger(tenant);
+    if (ensured.needsPersist) {
+      await TenantRepository.updateById(id, {
+        currentPlan: ensured.tenant.currentPlan,
+        billingHistory: ensured.tenant.billingHistory,
+      });
+    }
+
+    const base = ensured.needsPersist ? await TenantRepository.findById(id) : tenant;
+    const { tenant: updated, billing } = applyTrialPlan(base, {
+      planName: plan.name,
+      planCode: plan.code,
+      catalogPricePerCycle: Number(plan.priceAmount) || 0,
+      billing: plan.billing || 'Monthly',
+      days: trialDays,
+      grantedBy,
+    });
+
+    const saved = await TenantRepository.updateById(id, {
+      currentPlan: updated.currentPlan,
+      pendingPlan: updated.pendingPlan,
+      billingHistory: updated.billingHistory,
+      subscriptionSource: updated.subscriptionSource,
+      trial: updated.trial,
+      status: updated.status,
+    });
+
+    return {
+      ...(saved.toObject ? saved.toObject() : saved),
+      billing,
+    };
+  }
+
+  /**
+   * Extend trial endsAt by N calendar days on the same registration.
+   */
+  async extendTrial(id, { days } = {}) {
+    const extraDays = Math.min(3650, Math.max(1, Number(days) || 1));
+    const tenant = await TenantRepository.findById(id);
+    if (!tenant) {
+      throw new AppError('Tenant not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const isOnTrial =
+      tenant.subscriptionSource === 'trial' ||
+      Boolean(tenant.trial?.active) ||
+      Boolean(tenant.trial?.endsAt);
+
+    if (!isOnTrial) {
+      throw new AppError('Client is not on a free trial', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!tenant.currentPlan?.name) {
+      throw new AppError('Client has no plan to extend', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const { tenant: updated, billing } = extendTrialOrPlan(tenant, { extraDays });
+    const saved = await TenantRepository.updateById(id, {
+      currentPlan: updated.currentPlan,
+      pendingPlan: updated.pendingPlan,
+      subscriptionSource: updated.subscriptionSource,
+      trial: updated.trial,
+    });
+
+    return {
+      ...(saved.toObject ? saved.toObject() : saved),
+      billing,
+    };
+  }
+
+  /**
+   * Super Admin free-trial analytics: KPIs, daily series, client list.
+   */
+  async getTrialReports(query = {}) {
+    const now = new Date();
+    const from = query.from ? new Date(`${String(query.from).slice(0, 10)}T00:00:00.000Z`) : null;
+    const to = query.to ? new Date(`${String(query.to).slice(0, 10)}T23:59:59.999Z`) : null;
+    const statusFilter = String(query.status || 'all').trim().toLowerCase();
+    const originFilter = String(query.origin || 'all').trim().toLowerCase();
+    const planFilter = String(query.plan || '').trim().toLowerCase();
+    const search = String(query.search || '').trim().toLowerCase();
+    const sort = String(query.sort || 'ending').trim().toLowerCase();
+
+    const tenants = await TenantRepository.findTrialReportCandidates();
+    const planSet = new Set();
+    const candidates = [];
+
+    for (const tenant of tenants) {
+      const trial = tenant.trial || {};
+      const startedAt = trial.startedAt || trial.grantedAt || null;
+      const endsAt = trial.endsAt || getEffectiveEndsAt(tenant.currentPlan) || null;
+      const convertedAt = trial.convertedAt || null;
+      const onTrialSource = tenant.subscriptionSource === 'trial' || Boolean(trial.active);
+      const daysRemaining = calendarDaysRemaining(endsAt, now);
+      const expired = onTrialSource && daysRemaining != null && daysRemaining < 0;
+      const active = onTrialSource && !expired && Boolean(trial.planName || tenant.currentPlan?.name);
+      const converted = Boolean(convertedAt) && !onTrialSource;
+
+      const hadTrial =
+        active ||
+        expired ||
+        converted ||
+        Boolean(startedAt) ||
+        Boolean(trial.planName) ||
+        (Array.isArray(tenant.billingHistory) &&
+          tenant.billingHistory.some((seg) => seg.kind === 'trial'));
+      if (!hadTrial) continue;
+
+      const planName = trial.planName || tenant.currentPlan?.name || '—';
+      if (planName && planName !== '—') planSet.add(planName);
+
+      let status = 'inactive';
+      if (active) status = daysRemaining != null && daysRemaining <= 7 ? 'expiring_soon' : 'active';
+      else if (expired) status = 'expired';
+      else if (converted) status = 'converted';
+
+      const origin = trial.grantedBy ? 'admin' : 'signup';
+      const owner = tenant.owner || {};
+      const ownerName =
+        owner.fullName ||
+        [owner.firstName, owner.lastName].filter(Boolean).join(' ').trim() ||
+        '';
+      const ownerEmail = String(owner.email || '').trim().toLowerCase();
+
+      candidates.push({
+        id: String(tenant._id),
+        name: tenant.name,
+        slug: tenant.slug,
+        status: tenant.status,
+        trialStatus: status,
+        planName,
+        planCode: trial.planCode || '',
+        origin,
+        startedAt,
+        endsAt,
+        convertedAt,
+        daysRemaining,
+        extendedCount: Number(trial.extendedCount) || 0,
+        catalogPricePerCycle: Number(trial.catalogPricePerCycle) || 0,
+        owner: {
+          id: owner._id ? String(owner._id) : null,
+          name: ownerName || '—',
+          email: ownerEmail || '—',
+        },
+      });
+    }
+
+    const inRange = (row) => {
+      if (!from && !to) return true;
+      const anchor = row.startedAt
+        ? new Date(row.startedAt)
+        : row.convertedAt
+          ? new Date(row.convertedAt)
+          : null;
+      if (!anchor || Number.isNaN(anchor.getTime())) return false;
+      if (from && anchor < from) return false;
+      if (to && anchor > to) return false;
+      return true;
+    };
+
+    let rows = candidates.filter((row) => {
+      if ((from || to) && !inRange(row)) return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'active' && row.trialStatus !== 'active' && row.trialStatus !== 'expiring_soon') {
+          return false;
+        }
+        if (statusFilter === 'expired' && row.trialStatus !== 'expired') return false;
+        if (statusFilter === 'converted' && row.trialStatus !== 'converted') return false;
+        if (statusFilter === 'expiring_soon' && row.trialStatus !== 'expiring_soon') return false;
+      }
+      if (originFilter !== 'all' && row.origin !== originFilter) return false;
+      if (planFilter && String(row.planName).toLowerCase() !== planFilter) return false;
+      if (search) {
+        const hay = `${row.name || ''} ${row.owner?.name || ''} ${row.owner?.email || ''} ${row.planName}`.toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      if (sort === 'newest') return new Date(b.startedAt || 0) - new Date(a.startedAt || 0);
+      if (sort === 'oldest') return new Date(a.startedAt || 0) - new Date(b.startedAt || 0);
+      if (sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+      if (sort === 'converted') return new Date(b.convertedAt || 0) - new Date(a.convertedAt || 0);
+      const da = a.daysRemaining;
+      const db = b.daysRemaining;
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return da - db;
+    });
+
+    const seriesMap = new Map();
+    for (const row of rows) {
+      if (!row.startedAt) continue;
+      const key = new Date(row.startedAt).toISOString().slice(0, 10);
+      seriesMap.set(key, (seriesMap.get(key) || 0) + 1);
+    }
+    const series = Array.from(seriesMap.entries())
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    const active = rows.filter((r) => r.trialStatus === 'active' || r.trialStatus === 'expiring_soon').length;
+    const expired = rows.filter((r) => r.trialStatus === 'expired').length;
+    const converted = rows.filter((r) => r.trialStatus === 'converted').length;
+    const decided = active + expired + converted;
+    const conversionRate = decided > 0 ? Math.round((converted / decided) * 1000) / 10 : 0;
+
+    return {
+      summary: {
+        active,
+        expired,
+        converted,
+        startedInRange: rows.filter((r) => r.startedAt).length,
+        totalExtensions: rows.reduce((sum, r) => sum + (Number(r.extendedCount) || 0), 0),
+        signupOrigin: rows.filter((r) => r.origin === 'signup').length,
+        adminOrigin: rows.filter((r) => r.origin === 'admin').length,
+        conversionRate,
+        clients: rows.length,
+        expiringSoon: rows.filter((r) => r.trialStatus === 'expiring_soon').length,
+      },
+      series,
+      plans: Array.from(planSet).sort((a, b) => a.localeCompare(b)),
+      items: rows,
+      range: {
+        from: from ? from.toISOString() : null,
+        to: to ? to.toISOString() : null,
+      },
     };
   }
 

@@ -5,4 +5,5 @@ export const paymentService = {
   preview: (data) => api.post('/payments/preview', data),
   createOrder: (data) => api.post('/payments/create-order', data),
   verify: (data) => api.post('/payments/verify', data),
+  startTrial: (data) => api.post('/payments/start-trial', data),
 };

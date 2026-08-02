@@ -12,7 +12,7 @@ const PlatformInvoiceService = require('@services/platformInvoice.service');
 const InvoiceSettingsService = require('@services/invoiceSettings.service');
 const { evaluateDiscount } = require('@helpers/discount.helper');
 const { formatPrice } = require('@helpers/plan.helper');
-const { scheduleOrApplyPurchase } = require('@helpers/billing.helper');
+const { scheduleOrApplyPurchase, markSubscriptionPaid, applyTrialPlan } = require('@helpers/billing.helper');
 const { resolveTaxMode, calcLineTax } = require('@helpers/gstTax.helper');
 
 function getRazorpayClient() {
@@ -285,11 +285,15 @@ async function activateTenantPlanFromPayment(payment) {
     billing: payment.billing || 'Monthly',
     purchasedAt,
   });
+  const paid = markSubscriptionPaid(updated);
 
   return TenantRepository.updateById(tenantId, {
-    currentPlan: updated.currentPlan,
-    pendingPlan: updated.pendingPlan,
-    billingHistory: updated.billingHistory,
+    currentPlan: paid.currentPlan,
+    pendingPlan: paid.pendingPlan,
+    billingHistory: paid.billingHistory,
+    subscriptionSource: paid.subscriptionSource,
+    trial: paid.trial,
+    reservedDiscountCode: '',
     status: TENANT_STATUS.ACTIVE,
   });
 }
@@ -612,6 +616,111 @@ class PaymentService {
       discountCode: updated.discountCode,
       invoice,
       signupCompleted: Boolean(updated.pendingRegistration),
+    };
+  }
+
+  /**
+   * Signup-only: create admin account and apply platform free trial (no Razorpay).
+   */
+  async startTrial(actorOrUser = {}, body = {}) {
+    const pendingRegistration = actorOrUser?.pendingRegistration || null;
+    if (!pendingRegistration) {
+      throw new AppError(
+        'Registration session required to start a free trial',
+        HTTP_STATUS.UNAUTHORIZED
+      );
+    }
+
+    const PlatformTrialSettingsService = require('@services/platformTrialSettings.service');
+    const publicTrial = await PlatformTrialSettingsService.getPublic();
+    if (!publicTrial.available || !publicTrial.plan) {
+      throw new AppError(
+        'Free trial is not available for public signup right now',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    const AuthService = require('@services/auth.service');
+    const PendingAdminRegistrationRepository = require('@repositories/pendingAdminRegistration.repository');
+    const pending =
+      pendingRegistration.passwordHash !== undefined
+        ? pendingRegistration
+        : await PendingAdminRegistrationRepository.findById(pendingRegistration._id, {
+            withSecrets: true,
+          });
+
+    if (!pending) {
+      throw new AppError(
+        'Registration draft expired. Please register again.',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    const email = String(pending.email || '')
+      .trim()
+      .toLowerCase();
+
+    const reservedCode = String(body.discountCode || pending.discountCode || '')
+      .trim()
+      .toUpperCase();
+
+    const plan = await resolvePlan(publicTrial.plan.id || publicTrial.plan.code);
+
+    // Validate optional affiliate/promo code before creating the account
+    if (reservedCode) {
+      await quotePlan(plan, reservedCode, { customerEmail: email });
+    }
+
+    const existingUser = await UserRepository.findByEmail(email);
+    let user;
+    if (existingUser && !existingUser.tenant) {
+      user = await AuthService.createAdminAccountFromPending(pending);
+    } else if (existingUser) {
+      throw new AppError(
+        'An account already exists for this email. Please sign in.',
+        HTTP_STATUS.CONFLICT
+      );
+    } else {
+      user = await AuthService.createAdminAccountFromPending(pending);
+    }
+
+    const tenantId = user?.tenant?._id || user?.tenant;
+    if (!tenantId) {
+      throw new AppError('Unable to create shop for trial', HTTP_STATUS.INTERNAL_SERVER);
+    }
+
+    const tenant = await TenantRepository.findById(tenantId);
+    if (!tenant) {
+      throw new AppError('Shop not found after registration', HTTP_STATUS.INTERNAL_SERVER);
+    }
+
+    const { tenant: updated } = applyTrialPlan(tenant, {
+      planName: plan.name,
+      planCode: plan.code,
+      catalogPricePerCycle: Number(plan.priceAmount) || 0,
+      billing: plan.billing || 'Monthly',
+      days: publicTrial.trialDays,
+      grantedBy: null,
+    });
+
+    await TenantRepository.updateById(tenantId, {
+      currentPlan: updated.currentPlan,
+      pendingPlan: updated.pendingPlan,
+      billingHistory: updated.billingHistory,
+      subscriptionSource: updated.subscriptionSource,
+      trial: updated.trial,
+      reservedDiscountCode: reservedCode || '',
+      status: TENANT_STATUS.ACTIVE,
+    });
+
+    return {
+      signupCompleted: true,
+      trialStarted: true,
+      trialDays: publicTrial.trialDays,
+      planCode: plan.code,
+      planName: plan.name,
+      endsAt: updated.currentPlan?.endsAt || updated.trial?.endsAt || null,
+      reservedDiscountCode: reservedCode || '',
     };
   }
 

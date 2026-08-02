@@ -4,7 +4,8 @@ const { User } = require('@models');
 const AUTH_ROLE_POPULATE = { path: 'role', select: 'slug name' };
 const AUTH_TENANT_POPULATE = {
   path: 'tenant',
-  select: 'name slug status billingProfile currentPlan pendingPlan loyaltyStampMode socialLinks',
+  select:
+    'name slug status billingProfile currentPlan pendingPlan loyaltyStampMode socialLinks subscriptionSource trial reservedDiscountCode',
 };
 
 function withAuthPopulate(query) {

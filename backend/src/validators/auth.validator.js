@@ -28,21 +28,24 @@ function assertAffiliateVerification(req) {
   }
 }
 
-function assertIdentityProfile(body, { requireBirthDate = false } = {}) {
+function assertIdentityProfile(body, { requireBirthDate = false, requireMiddleName = true } = {}) {
   if (!String(body.firstName || '').trim()) {
     throw new Error('First name is required');
   }
-  if (!String(body.middleName || '').trim()) {
+  if (requireMiddleName && !String(body.middleName || '').trim()) {
     throw new Error('Middle name is required');
   }
   if (!String(body.lastName || '').trim()) {
     throw new Error('Last name is required');
   }
 
-  if (requireBirthDate) {
-    const birthRaw = String(body.birthDate || '').trim();
+  const birthRaw = String(body.birthDate || '').trim();
+  if (requireBirthDate && !birthRaw) {
+    throw new Error('Birth date is required');
+  }
+  if (birthRaw) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(birthRaw)) {
-      throw new Error('Birth date is required');
+      throw new Error('Enter a valid birth date');
     }
     const birthDate = new Date(`${birthRaw}T00:00:00.000Z`);
     if (Number.isNaN(birthDate.getTime())) {
@@ -291,7 +294,7 @@ const googleTokenValidator = [
   body('firstName').optional().isString().trim().isLength({ max: 50 }),
   body('middleName').optional().isString().trim().isLength({ max: 50 }),
   body('lastName').optional().isString().trim().isLength({ max: 50 }),
-  body('birthDate').optional().isString().trim().matches(/^\d{4}-\d{2}-\d{2}$/),
+  body('birthDate').optional({ values: 'falsy' }).isString().trim().matches(/^\d{4}-\d{2}-\d{2}$/),
   body('phone').optional().isString().trim().isLength({ max: 20 }),
   body('street').optional().isString().trim().isLength({ max: 300 }),
   body('city').optional().isString().trim().isLength({ max: 100 }),
@@ -319,7 +322,11 @@ const googleTokenValidator = [
       throw new Error('Google credential is required');
     }
     if (req.body.allowCreate === true) {
-      assertIdentityProfile(req.body, { requireBirthDate: req.params.role === 'user' });
+      const isCustomer = req.params.role === 'user';
+      assertIdentityProfile(req.body, {
+        requireBirthDate: false,
+        requireMiddleName: !isCustomer,
+      });
     }
     if (
       req.body.allowCreate === true &&

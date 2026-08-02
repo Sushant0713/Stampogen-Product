@@ -59,6 +59,24 @@ const birthDateSchema = z
     return date <= minAge;
   }, 'You must be at least 13 years old');
 
+const optionalBirthDateSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => String(value || '').trim())
+  .refine((value) => {
+    if (!value) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) return false;
+    const today = new Date();
+    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    if (date > todayUtc) return false;
+    const minAge = new Date(todayUtc);
+    minAge.setUTCFullYear(minAge.getUTCFullYear() - 13);
+    return date <= minAge;
+  }, 'Enter a valid birth date (must be at least 13 years old)');
+
 const identityFields = {
   firstName: z.string().min(1, 'First name is required').max(50),
   middleName: z.string().min(1, 'Middle name is required').max(50),
@@ -345,9 +363,8 @@ export function getGoogleCompleteSchema(role) {
   if (role === 'user') {
     return z.object({
       firstName: identityFields.firstName,
-      middleName: identityFields.middleName,
       lastName: identityFields.lastName,
-      birthDate: birthDateSchema,
+      birthDate: optionalBirthDateSchema,
       phone: identityFields.phone,
       email: z.string().email('Valid email is required'),
     });

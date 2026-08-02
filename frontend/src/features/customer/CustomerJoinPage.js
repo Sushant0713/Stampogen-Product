@@ -38,7 +38,6 @@ export function CustomerJoinPage({ slug }) {
     resolver: zodResolver(customerGoogleCompleteSchema),
     defaultValues: {
       firstName: '',
-      middleName: '',
       lastName: '',
       birthDate: '',
       phone: '',
@@ -110,7 +109,6 @@ export function CustomerJoinPage({ slug }) {
         setGoogleDraft({ accessToken, profile });
         reset({
           firstName: profile.firstName || '',
-          middleName: '',
           lastName: profile.lastName || '',
           birthDate: '',
           phone: '',
@@ -137,9 +135,9 @@ export function CustomerJoinPage({ slug }) {
         accessToken: googleDraft.accessToken,
         allowCreate: true,
         firstName: values.firstName.trim(),
-        middleName: values.middleName.trim(),
+        middleName: '',
         lastName: values.lastName.trim(),
-        birthDate: values.birthDate,
+        birthDate: String(values.birthDate || '').trim(),
         phone: values.phone.trim(),
       });
       setUser(data.data.user);
@@ -210,11 +208,11 @@ export function CustomerJoinPage({ slug }) {
             <>
               <h2 className="text-2xl font-extrabold text-[#021A54]">Complete your profile</h2>
               <p className="mt-2 text-sm leading-relaxed text-[#64748B]">
-                First name, middle name, last name, birth date and mobile number are required to
-                join {shop.name}.
+                First name, last name, and mobile number are required to join {shop.name}. Birth date
+                is optional.
               </p>
               <form onSubmit={handleSubmit(onGoogleComplete)} className="mt-6 space-y-3" noValidate>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-semibold text-[#101828]">First name</label>
                     <AuthInput
@@ -223,16 +221,6 @@ export function CustomerJoinPage({ slug }) {
                     />
                     {errors.firstName && (
                       <p className="mt-1 text-xs text-red-500">{errors.firstName.message}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-semibold text-[#101828]">Middle name</label>
-                    <AuthInput
-                      className={`${inputClass} ${errors.middleName ? 'border-red-500' : ''}`}
-                      {...register('middleName')}
-                    />
-                    {errors.middleName && (
-                      <p className="mt-1 text-xs text-red-500">{errors.middleName.message}</p>
                     )}
                   </div>
                   <div>
@@ -257,7 +245,9 @@ export function CustomerJoinPage({ slug }) {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-sm font-semibold text-[#101828]">Birth date</label>
+                    <label className="mb-1 block text-sm font-semibold text-[#101828]">
+                      Birth date <span className="font-normal text-[#98A2B3]">(optional)</span>
+                    </label>
                     <AuthInput
                       type="date"
                       className={`${inputClass} ${errors.birthDate ? 'border-red-500' : ''}`}

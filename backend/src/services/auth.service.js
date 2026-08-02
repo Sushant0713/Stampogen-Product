@@ -61,18 +61,25 @@ function parseBirthDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function assertRequiredIdentity({ firstName, middleName, lastName, birthDate, phone }, { requireBirthDate = false } = {}) {
+function assertRequiredIdentity(
+  { firstName, middleName, lastName, birthDate, phone },
+  { requireBirthDate = false, requireMiddleName = true } = {}
+) {
   if (!String(firstName || '').trim()) {
     throw new AppError('First name is required', HTTP_STATUS.BAD_REQUEST);
   }
-  if (!String(middleName || '').trim()) {
+  if (requireMiddleName && !String(middleName || '').trim()) {
     throw new AppError('Middle name is required', HTTP_STATUS.BAD_REQUEST);
   }
   if (!String(lastName || '').trim()) {
     throw new AppError('Last name is required', HTTP_STATUS.BAD_REQUEST);
   }
-  if (requireBirthDate && !parseBirthDate(birthDate)) {
+  const birthRaw = String(birthDate || '').trim();
+  if (requireBirthDate && !parseBirthDate(birthRaw)) {
     throw new AppError('Birth date is required', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (birthRaw && !parseBirthDate(birthRaw)) {
+    throw new AppError('Enter a valid birth date', HTTP_STATUS.BAD_REQUEST);
   }
   if (String(phone || '').trim().length < 8) {
     throw new AppError('Mobile number is required', HTTP_STATUS.BAD_REQUEST);
@@ -1144,6 +1151,7 @@ class AuthService {
     const resolvedTenantName = String(tenantName || '').trim();
 
     if (allowCreate) {
+      const isCustomer = roleSlug === ROLES.USER;
       assertRequiredIdentity(
         {
           firstName: resolvedFirstName,
@@ -1152,7 +1160,10 @@ class AuthService {
           birthDate,
           phone: resolvedPhone,
         },
-        { requireBirthDate: roleSlug === ROLES.USER }
+        {
+          requireBirthDate: false,
+          requireMiddleName: !isCustomer,
+        }
       );
     }
 

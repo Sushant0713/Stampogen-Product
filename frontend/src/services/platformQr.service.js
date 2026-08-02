@@ -8,4 +8,5 @@ export const platformQrService = {
   remove: (id) => api.delete(`/platform-qr/${id}`),
   reports: (params) => api.get('/platform-qr/reports', { params }),
   options: () => api.get('/platform-qr/options'),
+  listForAffiliates: () => api.get('/platform-qr/affiliate'),
 };

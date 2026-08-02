@@ -14,6 +14,7 @@ import {
   UserCircle,
   QrCode,
   ScanLine,
+  BookOpen,
 } from 'lucide-react';
 import { ROLES } from '@/constants';
 
@@ -99,6 +100,7 @@ export const SIDEBAR_CONFIG = {
     basePath: '/affiliate',
     items: withBasePath('/affiliate', [
       { label: 'Dashboard', href: 'dashboard', icon: LayoutDashboard },
+      { label: 'Guide', href: 'guide', icon: BookOpen },
     ]),
   },
 };

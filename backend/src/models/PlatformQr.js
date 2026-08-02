@@ -36,6 +36,11 @@ const platformQrSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    showToAffiliates: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

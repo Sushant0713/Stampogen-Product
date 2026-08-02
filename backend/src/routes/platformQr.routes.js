@@ -1,7 +1,7 @@
 const express = require('express');
 const PlatformQrController = require('@controllers/platformQr.controller');
 const { authenticate } = require('@middlewares/auth.middleware');
-const { isSuperAdmin } = require('@middlewares/authorize.middleware');
+const { isSuperAdmin, isAffiliate } = require('@middlewares/authorize.middleware');
 const validate = require('@middlewares/validate.middleware');
 const {
   createPlatformQrValidator,
@@ -26,6 +26,9 @@ router.get(
   validate,
   PlatformQrController.go
 );
+
+// Affiliate-facing shared guides
+router.get('/affiliate', authenticate, isAffiliate, PlatformQrController.listForAffiliates);
 
 router.use(authenticate, isSuperAdmin);
 

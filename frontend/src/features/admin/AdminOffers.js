@@ -301,7 +301,7 @@ export function AdminOffers() {
                 <input
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Buy 5 Get 1 Free"
+                  placeholder="Collect 6 Stamps & Enjoy FREE Fries."
                   maxLength={200}
                   className="w-full rounded-xl border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm font-semibold text-[#021A54] outline-none focus:border-[#021A54]"
                   autoFocus

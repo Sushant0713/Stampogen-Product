@@ -108,6 +108,18 @@ class PlatformQrController {
       return next(error);
     }
   }
+
+  async listForAffiliates(req, res, next) {
+    try {
+      const result = await PlatformQrService.listForAffiliates();
+      return sendSuccess(res, {
+        message: 'Affiliate QR guides retrieved',
+        data: result,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
 }
 
 module.exports = new PlatformQrController();

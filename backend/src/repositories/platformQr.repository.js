@@ -20,6 +20,7 @@ function toView(doc) {
     scanUrl: code ? buildScanUrl(code) : '',
     scanCount: Number(plain.scanCount) || 0,
     lastScannedAt: plain.lastScannedAt || null,
+    showToAffiliates: Boolean(plain.showToAffiliates),
     createdAt: plain.createdAt,
     updatedAt: plain.updatedAt,
   };
@@ -67,7 +68,12 @@ class PlatformQrRepository {
 
   async create(data) {
     const code = data.code || (await this.generateUniqueCode());
-    const created = await PlatformQr.create({ ...data, code, scanCount: 0 });
+    const created = await PlatformQr.create({
+      ...data,
+      code,
+      scanCount: 0,
+      showToAffiliates: Boolean(data.showToAffiliates),
+    });
     return this.toView(created);
   }
 
@@ -116,6 +122,16 @@ class PlatformQrRepository {
         pages: Math.max(1, Math.ceil(total / take) || 1),
       },
     };
+  }
+
+  async findForAffiliates() {
+    const rows = await PlatformQr.find({ showToAffiliates: true }).sort('title');
+    const items = [];
+    for (const row of rows) {
+      // eslint-disable-next-line no-await-in-loop
+      items.push(this.toView(await this.ensureCode(row)));
+    }
+    return { items };
   }
 
   async updateById(id, data) {

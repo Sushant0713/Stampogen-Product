@@ -74,10 +74,17 @@ class PlatformQrService {
     if (body.note !== undefined) {
       patch.note = String(body.note || '').trim().slice(0, 500);
     }
+    if (body.showToAffiliates !== undefined) {
+      patch.showToAffiliates = Boolean(body.showToAffiliates);
+    }
 
     const item = await PlatformQrRepository.updateById(id, patch);
     if (!item) throw new AppError('QR entry not found', HTTP_STATUS.NOT_FOUND);
     return item;
+  }
+
+  async listForAffiliates() {
+    return PlatformQrRepository.findForAffiliates();
   }
 
   async remove(id) {

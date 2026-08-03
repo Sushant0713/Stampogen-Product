@@ -14,6 +14,8 @@ const EmailOtpRepository = require('@repositories/emailOtp.repository');
 const PlatformInvoiceService = require('@services/platformInvoice.service');
 const PaymentRepository = require('@repositories/payment.repository');
 const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
+const { evaluateDiscount } = require('@helpers/discount.helper');
+const DiscountRepository = require('@repositories/discount.repository');
 const { sendAdminClientCredentialsEmail, sendFreeTrialStartedEmail } = require('@services/email.service');
 const {
   PLAN_RATES,
@@ -294,6 +296,38 @@ class TenantService {
       throw new AppError('Valid 6-digit PIN code is required', HTTP_STATUS.BAD_REQUEST);
     }
 
+    const discountCode = String(data.discountCode || '')
+      .trim()
+      .toUpperCase();
+    let reservedDiscountCode = '';
+    if (discountCode) {
+      const discount = await DiscountRepository.findByCode(discountCode);
+      if (!discount) {
+        throw new AppError('Invalid discount code', HTTP_STATUS.BAD_REQUEST);
+      }
+
+      let planForDiscount = null;
+      if (data.planId) planForDiscount = await PlanRepository.findById(data.planId);
+      if (!planForDiscount && data.planCode) {
+        planForDiscount = await PlanRepository.findByCode(String(data.planCode).trim());
+      }
+      if (!planForDiscount && data.planName) {
+        planForDiscount =
+          (await PlanRepository.findByCode(String(data.planName).trim())) ||
+          (await PlanRepository.findByName(String(data.planName).trim()));
+      }
+
+      const result = evaluateDiscount(discount, {
+        orderAmount: Number(planForDiscount?.priceAmount) || 0,
+        planName: planForDiscount?.name || '',
+        billingCycle: planForDiscount?.billing || '',
+      });
+      if (!result.ok) {
+        throw new AppError(result.reason || 'Discount cannot be applied', HTTP_STATUS.BAD_REQUEST);
+      }
+      reservedDiscountCode = result.code || discountCode;
+    }
+
     const existing = await UserRepository.findByEmail(email);
     if (existing) {
       throw new AppError('Email already registered', HTTP_STATUS.CONFLICT);
@@ -340,6 +374,7 @@ class TenantService {
         loyaltyStampMode,
         category,
         customCategory: category === SHOP_CATEGORIES.CUSTOM ? customCategory : '',
+        ...(reservedDiscountCode ? { reservedDiscountCode } : {}),
       });
     } catch (error) {
       await UserRepository.deleteById(user._id);
@@ -392,6 +427,7 @@ class TenantService {
       },
       issuedPassword,
       loginUrl,
+      reservedDiscountCode: reservedDiscountCode || '',
     };
   }
 

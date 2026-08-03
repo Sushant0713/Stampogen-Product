@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { tenantService } from '@/services/tenant.service';
 import { planService } from '@/services/plan.service';
+import { paymentService } from '@/services/payment.service';
 import { getErrorMessage } from '@/utils';
 import { subscribeClientsChanged, notifyClientsChanged } from '@/utils/clientsSync';
 import { SHOP_CATEGORIES, SHOP_CATEGORY_OPTIONS } from '@/constants';
@@ -46,6 +47,7 @@ const EMPTY_ADD_FORM = {
   pan: '',
   planId: '',
   password: '',
+  discountCode: '',
 };
 
 const STATUS_OPTIONS = [
@@ -213,6 +215,8 @@ export function ClientManagement() {
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
   const [addSaving, setAddSaving] = useState(false);
+  const [discountApplying, setDiscountApplying] = useState(false);
+  const [discountApplied, setDiscountApplied] = useState(null);
   const [issuedCredentials, setIssuedCredentials] = useState(null);
   const pageRef = useRef(1);
 
@@ -564,7 +568,53 @@ export function ClientManagement() {
 
   const handleAddOpen = () => {
     setAddForm(EMPTY_ADD_FORM);
+    setDiscountApplied(null);
     setAddOpen(true);
+  };
+
+  const handleApplyDiscount = async () => {
+    const code = String(addForm.discountCode || '')
+      .trim()
+      .toUpperCase();
+    if (!code) {
+      toast.error('Enter a discount code');
+      return;
+    }
+
+    try {
+      setDiscountApplying(true);
+      if (addForm.planId) {
+        const { data } = await paymentService.preview({
+          planId: addForm.planId,
+          discountCode: code,
+          customerEmail: addForm.email.trim() || undefined,
+          customerState: addForm.state.trim() || undefined,
+          customerGstin: addForm.gstin.trim() || undefined,
+        });
+        const quote = data?.data?.quote;
+        if (!quote?.discountCode) {
+          throw new Error('Discount could not be applied');
+        }
+        setAddForm((f) => ({ ...f, discountCode: quote.discountCode }));
+        setDiscountApplied({
+          code: quote.discountCode,
+          discountAmount: Number(quote.discountAmount) || 0,
+          payableAmount: Number(quote.payableAmount) || 0,
+          listAmount: Number(quote.listAmount) || 0,
+        });
+        toast.success(`Discount ${quote.discountCode} applied`);
+      } else {
+        // No plan yet — reserve code; backend validates on create
+        setAddForm((f) => ({ ...f, discountCode: code }));
+        setDiscountApplied({ code, discountAmount: null, payableAmount: null, listAmount: null });
+        toast.success(`Discount ${code} will be reserved for this client`);
+      }
+    } catch (error) {
+      setDiscountApplied(null);
+      toast.error(getErrorMessage(error, 'Unable to apply discount'));
+    } finally {
+      setDiscountApplying(false);
+    }
   };
 
   const handleAddSave = async () => {
@@ -636,6 +686,9 @@ export function ClientManagement() {
         pan: addForm.pan.trim(),
         ...(addForm.planId ? { planId: addForm.planId } : {}),
         ...(addForm.password.trim() ? { password: addForm.password.trim() } : {}),
+        ...(addForm.discountCode.trim()
+          ? { discountCode: addForm.discountCode.trim().toUpperCase() }
+          : {}),
       };
 
       const { data } = await tenantService.create(payload);
@@ -1041,7 +1094,9 @@ export function ClientManagement() {
                   (Array.isArray(viewClient.billing?.discountCodes) &&
                   viewClient.billing.discountCodes.length
                     ? viewClient.billing.discountCodes.join(', ')
-                    : '—')
+                    : '') ||
+                  viewClient.reservedDiscountCode ||
+                  '—'
                 }
               />
               <DetailRow
@@ -1365,7 +1420,10 @@ export function ClientManagement() {
                   <select
                     className={inputClass}
                     value={addForm.planId}
-                    onChange={(e) => setAddForm((f) => ({ ...f, planId: e.target.value }))}
+                    onChange={(e) => {
+                      setDiscountApplied(null);
+                      setAddForm((f) => ({ ...f, planId: e.target.value }));
+                    }}
                     disabled={addSaving}
                   >
                     <option value="">No plan yet</option>
@@ -1393,7 +1451,10 @@ export function ClientManagement() {
                 <select
                   className={inputClass}
                   value={addForm.planId}
-                  onChange={(e) => setAddForm((f) => ({ ...f, planId: e.target.value }))}
+                  onChange={(e) => {
+                    setDiscountApplied(null);
+                    setAddForm((f) => ({ ...f, planId: e.target.value }));
+                  }}
                   disabled={addSaving}
                 >
                   <option value="">No plan yet</option>
@@ -1411,6 +1472,50 @@ export function ClientManagement() {
                 </select>
               </label>
             ) : null}
+
+            <div>
+              <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                Discount code (optional)
+              </span>
+              <div className="flex gap-2">
+                <input
+                  className={inputClass}
+                  value={addForm.discountCode}
+                  onChange={(e) => {
+                    setDiscountApplied(null);
+                    setAddForm((f) => ({
+                      ...f,
+                      discountCode: e.target.value.toUpperCase(),
+                    }));
+                  }}
+                  placeholder="Enter code"
+                  disabled={addSaving || discountApplying}
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyDiscount}
+                  disabled={addSaving || discountApplying || !addForm.discountCode.trim()}
+                  className="h-10 shrink-0 rounded-lg border border-[#021A54] bg-white px-4 text-sm font-bold text-[#021A54] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {discountApplying ? 'Applying…' : 'Apply'}
+                </button>
+              </div>
+              {discountApplied?.code ? (
+                <p className="mt-1.5 text-[12px] font-medium text-emerald-700">
+                  Applied {discountApplied.code}
+                  {discountApplied.discountAmount != null
+                    ? ` · save ${formatMoney(discountApplied.discountAmount)}`
+                    : ' · reserved for client checkout'}
+                  {discountApplied.payableAmount != null
+                    ? ` · payable ${formatMoney(discountApplied.payableAmount)}`
+                    : ''}
+                </p>
+              ) : (
+                <p className="mt-1.5 text-[11px] text-[#667085]">
+                  Select a plan first to preview savings, or reserve a code for their first payment.
+                </p>
+              )}
+            </div>
 
             <div>
               <p className="mb-2 text-[13px] font-semibold text-[#344054]">Billing address *</p>

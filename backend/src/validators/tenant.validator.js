@@ -54,6 +54,7 @@ const createTenantValidator = [
   body('planId').optional({ values: 'falsy' }).isMongoId().withMessage('Invalid plan ID'),
   body('planCode').optional({ values: 'falsy' }).trim().isLength({ max: 80 }),
   body('planName').optional({ values: 'falsy' }).trim().isLength({ max: 120 }),
+  body('discountCode').optional({ values: 'falsy' }).trim().isLength({ max: 40 }),
 ];
 
 const updateTenantValidator = [

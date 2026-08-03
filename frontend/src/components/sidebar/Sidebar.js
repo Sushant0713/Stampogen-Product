@@ -43,7 +43,10 @@ function NavLink({ item, collapsed, pathname, badgeCount = 0, siblingHrefs = [] 
         href.startsWith(`${item.href}/`) &&
         (pathname === href || pathname.startsWith(`${href}/`))
     );
-  const isActive = exact || (prefixMatch && !stolenByLongerSibling);
+  const isActive =
+    item.match === 'exact'
+      ? exact
+      : exact || (prefixMatch && !stolenByLongerSibling);
   const badge = formatBadgeCount(badgeCount);
 
   if (item.disabled) {
@@ -85,9 +88,11 @@ function NavLink({ item, collapsed, pathname, badgeCount = 0, siblingHrefs = [] 
 
 function NavGroup({ item, collapsed, pathname, badges = {} }) {
   const Icon = item.icon;
-  const childActive = item.children?.some(
-    (child) => pathname === child.href || pathname.startsWith(`${child.href}/`)
-  );
+  const childActive = item.children?.some((child) => {
+    if (pathname === child.href) return true;
+    if (child.match === 'exact') return false;
+    return pathname.startsWith(`${child.href}/`);
+  });
   const [open, setOpen] = useState(childActive);
   const groupBadgeCount = (item.children || []).reduce((sum, child) => {
     if (!child.badgeKey) return sum;

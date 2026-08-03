@@ -1761,15 +1761,24 @@ class LoyaltyService {
 
   async getAdminDashboardStats(adminUser) {
     const tenantId = await this.getAdminTenantId(adminUser);
+    return this.getTenantDashboardStats(tenantId);
+  }
+
+  /**
+   * Loyalty KPIs for any shop/outlet tenant (used by HQ outlet reports).
+   */
+  async getTenantDashboardStats(tenantId) {
     const { catalog } = await this.getCatalogForTenant(tenantId);
     const rows = await LoyaltyMembershipRepository.findByTenant(tenantId);
     let pendingRewards = 0;
     let redeemedRewards = 0;
     let pendingStampRequests = 0;
     let repeatCustomers = 0;
+    let totalStamps = 0;
     rows.forEach((membership) => {
       pendingStampRequests += (membership.stampRequests || []).filter((r) => r.status === 'pending').length;
       ensureOffers(membership).forEach((o) => {
+        totalStamps += o.stamps || 0;
         if (o.rewardStatus === 'pending' || o.rewardStatus === 'verified') pendingRewards += 1;
       });
       redeemedRewards += countRedeemedRewards(membership);
@@ -1785,6 +1794,7 @@ class LoyaltyService {
       pendingStampRequests,
       redeemedRewards,
       repeatCustomers,
+      totalStamps,
       activeCampaigns: catalog.filter((o) => o.status === 'active').length,
       loyaltyStampMode: readStampMode(tenant),
       qrScans,

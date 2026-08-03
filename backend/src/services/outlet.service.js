@@ -200,37 +200,95 @@ class OutletService {
     const activeSeats = seats.filter((s) => s.active);
     const unusedSeats = activeSeats.filter((s) => !s.used);
     const outlets = await TenantRepository.findOutletsByParent(hq._id);
+    const LoyaltyService = require('@services/loyalty.service');
 
-    const outletRows = outlets.map((o) => {
-      const id = String(o._id);
-      const seat = seats.find((s) => s.outletTenantId === id) || null;
-      const sub = getSubscriptionView(o);
-      const endsAt = sub?.endsAt || o.currentPlan?.endsAt || seat?.endsAt || null;
-      const planActive = endsAt ? isSeatActive({ endsAt }) : Boolean(sub?.planName && !['expired', 'trial_expired'].includes(sub?.status));
-      const expired =
-        Boolean(sub?.planName) &&
-        (sub.status === 'expired' ||
-          sub.status === 'trial_expired' ||
-          (sub.daysRemaining != null && sub.daysRemaining < 0) ||
-          (endsAt && !isSeatActive({ endsAt })));
+    const outletRows = await Promise.all(
+      outlets.map(async (o) => {
+        const id = String(o._id);
+        const seat = seats.find((s) => s.outletTenantId === id) || null;
+        const sub = getSubscriptionView(o);
+        const endsAt = sub?.endsAt || o.currentPlan?.endsAt || seat?.endsAt || null;
+        const planActive =
+          endsAt
+            ? isSeatActive({ endsAt })
+            : Boolean(sub?.planName && !['expired', 'trial_expired'].includes(sub?.status));
+        const expired =
+          Boolean(sub?.planName) &&
+          (sub.status === 'expired' ||
+            sub.status === 'trial_expired' ||
+            (sub.daysRemaining != null && sub.daysRemaining < 0) ||
+            (endsAt && !isSeatActive({ endsAt })));
 
-      return {
-        id,
-        name: o.name,
-        slug: o.slug,
-        status: o.status,
-        createdAt: o.createdAt,
-        ownerEmail: o.owner?.email || '',
-        ownerName: [o.owner?.firstName, o.owner?.lastName].filter(Boolean).join(' ').trim(),
-        planName: sub?.planName || seat?.planName || o.currentPlan?.name || '',
-        planCode: seat?.planCode || '',
-        planEndsAt: endsAt,
-        planActive: Boolean(planActive) && !expired,
-        expired: Boolean(expired),
-        seatId: seat?.id || null,
-        daysRemaining: sub?.daysRemaining ?? null,
-      };
-    });
+        let stats = {
+          totalCustomers: 0,
+          pendingRewards: 0,
+          pendingStampRequests: 0,
+          redeemedRewards: 0,
+          repeatCustomers: 0,
+          totalStamps: 0,
+          activeCampaigns: 0,
+          qrScans: { month: '', monthLabel: '', total: 0, days: [] },
+        };
+        try {
+          stats = await LoyaltyService.getTenantDashboardStats(o._id);
+        } catch {
+          // Keep zeroed stats if an outlet is misconfigured
+        }
+
+        return {
+          id,
+          name: o.name,
+          slug: o.slug,
+          status: o.status,
+          createdAt: o.createdAt,
+          ownerEmail: o.owner?.email || '',
+          ownerName: [o.owner?.firstName, o.owner?.lastName].filter(Boolean).join(' ').trim(),
+          planName: sub?.planName || seat?.planName || o.currentPlan?.name || '',
+          planCode: seat?.planCode || '',
+          planEndsAt: endsAt,
+          planActive: Boolean(planActive) && !expired,
+          expired: Boolean(expired),
+          seatId: seat?.id || null,
+          daysRemaining: sub?.daysRemaining ?? null,
+          stats: {
+            totalCustomers: Number(stats.totalCustomers) || 0,
+            pendingRewards: Number(stats.pendingRewards) || 0,
+            pendingStampRequests: Number(stats.pendingStampRequests) || 0,
+            redeemedRewards: Number(stats.redeemedRewards) || 0,
+            repeatCustomers: Number(stats.repeatCustomers) || 0,
+            totalStamps: Number(stats.totalStamps) || 0,
+            activeCampaigns: Number(stats.activeCampaigns) || 0,
+            qrScansMonth: Number(stats.qrScans?.total) || 0,
+            qrScansMonthLabel: stats.qrScans?.monthLabel || '',
+          },
+        };
+      })
+    );
+
+    const totals = outletRows.reduce(
+      (acc, row) => {
+        acc.totalCustomers += row.stats.totalCustomers;
+        acc.pendingRewards += row.stats.pendingRewards;
+        acc.pendingStampRequests += row.stats.pendingStampRequests;
+        acc.redeemedRewards += row.stats.redeemedRewards;
+        acc.repeatCustomers += row.stats.repeatCustomers;
+        acc.totalStamps += row.stats.totalStamps;
+        acc.qrScansMonth += row.stats.qrScansMonth;
+        return acc;
+      },
+      {
+        outlets: outletRows.length,
+        activeOutlets: outletRows.filter((o) => !o.expired && o.status === 'active').length,
+        expiredOutlets: outletRows.filter((o) => o.expired).length,
+        totalCustomers: 0,
+        pendingRewards: 0,
+        pendingStampRequests: 0,
+        redeemedRewards: 0,
+        repeatCustomers: 0,
+        totalStamps: 0,
+        qrScansMonth: 0,
+      }
+    );
 
     return {
       hq: {
@@ -250,6 +308,7 @@ class OutletService {
       outlets: outletRows,
       expiredOutlets: outletRows.filter((o) => o.expired),
       canAddOutlet: unusedSeats.length > 0,
+      totals,
     };
   }
 

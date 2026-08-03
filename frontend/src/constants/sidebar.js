@@ -84,6 +84,12 @@ export const SIDEBAR_CONFIG = {
     basePath: '/admin',
     items: withBasePath('/admin', [
       { label: 'Home', href: 'dashboard', icon: Home, tourId: 'admin-home' },
+      {
+        label: 'Outlets Dashboard',
+        href: 'outlets/dashboard',
+        icon: LayoutDashboard,
+        hqOnly: true,
+      },
       { label: 'Offers', href: 'offers', icon: Gift, tourId: 'admin-offers' },
       { label: 'Rewards', href: 'rewards', icon: Trophy, tourId: 'admin-rewards' },
       { label: 'Customers', href: 'customers', icon: Users, tourId: 'admin-customers' },
@@ -92,7 +98,7 @@ export const SIDEBAR_CONFIG = {
         icon: Store,
         hqOnly: true,
         children: [
-          { label: 'My outlets', href: 'outlets' },
+          { label: 'My outlets', href: 'outlets', match: 'exact' },
           { label: 'Browse outlet plans', href: 'plans/outlet/browse' },
         ],
       },

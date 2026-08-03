@@ -536,6 +536,11 @@ export function AdminProfile() {
             OUTLETS
           </p>
           <div className={adminCardClass('mb-5 overflow-hidden')}>
+            <ProfileRow
+              emoji="📊"
+              label="Outlets Dashboard"
+              href="/admin/outlets/dashboard"
+            />
             <ProfileRow emoji="🏪" label="My outlets" href="/admin/outlets" />
             <ProfileRow
               emoji="🛒"

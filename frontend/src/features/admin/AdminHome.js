@@ -391,6 +391,32 @@ export function AdminHome() {
         </div>
       </div>
 
+      {/* Outlets Dashboard — HQ only, separate card below QR */}
+      {!isOutlet ? (
+        <Link
+          href="/admin/outlets/dashboard"
+          className={adminCardClass(
+            'flex items-center gap-4 p-[18px] transition active:scale-[0.99] hover:bg-[#F8FAFC]'
+          )}
+        >
+          <div
+            className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#021A54] to-[#3B82F6] text-2xl shadow-[0_4px_10px_rgba(2,26,84,0.15)]"
+            aria-hidden
+          >
+            🏪
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold text-[#021A54]">Outlets Dashboard</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-[#94A3B8]">
+              Reports for all outlets — customers, stamps, rewards &amp; QR scans.
+            </p>
+          </div>
+          <span className="shrink-0 text-[#94A3B8]" aria-hidden>
+            ›
+          </span>
+        </Link>
+      ) : null}
+
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 lg:gap-3">
         {statCards.map((card) => (

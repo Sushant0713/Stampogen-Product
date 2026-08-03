@@ -52,3 +52,38 @@ export function buildCheckoutPath({ planCode, discountCode, planId } = {}) {
   const qs = params.toString();
   return qs ? `/checkout?${qs}` : '/checkout';
 }
+
+/**
+ * After signup payment gate: go straight to free-trial checkout when available.
+ * Only send users to /pricing when they must pick a paid plan (no public trial).
+ */
+export async function resolvePostSignupPaymentPath({
+  planCode,
+  discountCode,
+  planId,
+} = {}) {
+  if (planCode || planId) {
+    return {
+      path: buildCheckoutPath({ planCode, discountCode, planId }),
+      kind: 'checkout',
+    };
+  }
+
+  try {
+    const { platformTrialSettingsService } = await import(
+      '@/services/platformTrialSettings.service'
+    );
+    const { data } = await platformTrialSettingsService.getPublic();
+    const trial = data?.data?.settings;
+    if (trial?.available && trial?.plan) {
+      return {
+        path: buildCheckoutPath({ discountCode }),
+        kind: 'trial',
+      };
+    }
+  } catch {
+    // Fall through to pricing if trial settings cannot be loaded.
+  }
+
+  return { path: '/pricing', kind: 'pricing' };
+}

@@ -21,7 +21,7 @@ import {
 } from '@/constants/affiliateTypes';
 import { getErrorMessage, getLoginPath } from '@/utils';
 import {
-  buildCheckoutPath,
+  resolvePostSignupPaymentPath,
   saveRegistrationSession,
 } from '@/utils/registrationSession';
 import { useClientMounted } from '@/hooks/useClientMounted';
@@ -42,7 +42,7 @@ import {
 const REGISTER_COPY = {
   [ROLES.ADMIN]: {
     title: 'Create Account',
-    subtitle: 'Register to continue with your selected plan. Email signup needs a one-time code.',
+    subtitle: 'Register your shop. After email verification you can start a free trial or pick a plan.',
   },
   [ROLES.SUPER_ADMIN]: {
     title: 'Create Super Admin',
@@ -381,7 +381,7 @@ function PortalRegisterFormInner({ role }) {
     []
   );
 
-  const finishAdminRedirect = useCallback(() => {
+  const finishAdminRedirect = useCallback(async () => {
     if (role !== ROLES.ADMIN) {
       router.push(`/${role}/dashboard`);
       return;
@@ -391,6 +391,11 @@ function PortalRegisterFormInner({ role }) {
       if (discountCode) params.set('discount', discountCode);
       // Hard nav avoids auth-shell racing checkout
       window.location.assign(`/checkout?${params.toString()}`);
+      return;
+    }
+    const next = await resolvePostSignupPaymentPath({ discountCode });
+    if (next.path.startsWith('/checkout')) {
+      window.location.assign(next.path);
       return;
     }
     // Soft nav keeps SPA cache — pricing feels instant
@@ -528,18 +533,18 @@ function PortalRegisterFormInner({ role }) {
         setGoogleDraft(null);
         const nextPlan = planCode || data.data.profile?.planCode || '';
         const nextDiscount = discountCode || data.data.profile?.discountCode || '';
-        if (nextPlan) {
+        const next = await resolvePostSignupPaymentPath({
+          planCode: nextPlan,
+          discountCode: nextDiscount,
+        });
+        if (next.kind === 'trial') {
+          toast.success('Continue to free trial to finish registration');
+        } else if (next.kind === 'checkout') {
           toast.success('Continue to payment to finish registration');
-          window.location.assign(
-            buildCheckoutPath({
-              planCode: nextPlan,
-              discountCode: nextDiscount,
-            })
-          );
-          return;
+        } else {
+          toast.success('Choose a plan to finish registration');
         }
-        toast.success('Choose a plan to finish registration');
-        window.location.assign('/pricing');
+        window.location.assign(next.path);
         return;
       }
       setUser(data.data.user);

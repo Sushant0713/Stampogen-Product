@@ -11,7 +11,7 @@ import { getErrorMessage, getLoginPath, getRegisterPath, navigateAfterAuth, reso
 import { ROLES } from '@/constants';
 import { toastAdminWelcome } from '@/features/auth/adminPlanToast';
 import {
-  buildCheckoutPath,
+  resolvePostSignupPaymentPath,
   saveRegistrationSession,
 } from '@/utils/registrationSession';
 
@@ -78,7 +78,7 @@ function VerifyEmailFormInner({ role }) {
         return;
       }
 
-      // Admin payment-gated signup: no User until checkout succeeds
+      // Admin payment-gated signup: no User until checkout / free trial succeeds
       if (data.data?.requiresPayment && data.data?.registrationToken) {
         saveRegistrationSession({
           registrationToken: data.data.registrationToken,
@@ -86,15 +86,18 @@ function VerifyEmailFormInner({ role }) {
         });
         const checkoutPlan = planCode || data.data.profile?.planCode || '';
         const checkoutDiscount = discountCode || data.data.profile?.discountCode || '';
-        if (checkoutPlan) {
+        const next = await resolvePostSignupPaymentPath({
+          planCode: checkoutPlan,
+          discountCode: checkoutDiscount,
+        });
+        if (next.kind === 'trial') {
+          toast.success('Email verified — start your free trial to finish registration');
+        } else if (next.kind === 'checkout') {
           toast.success('Email verified — complete payment to finish registration');
-          window.location.assign(
-            buildCheckoutPath({ planCode: checkoutPlan, discountCode: checkoutDiscount })
-          );
-          return;
+        } else {
+          toast.success('Email verified — choose a plan to finish registration');
         }
-        toast.success('Email verified — choose a plan to finish registration');
-        window.location.assign('/pricing');
+        window.location.assign(next.path);
         return;
       }
 
@@ -123,7 +126,8 @@ function VerifyEmailFormInner({ role }) {
           window.location.assign(`/checkout?${params.toString()}`);
           return;
         }
-        router.replace('/pricing');
+        const next = await resolvePostSignupPaymentPath({ discountCode });
+        window.location.assign(next.path);
         return;
       }
 

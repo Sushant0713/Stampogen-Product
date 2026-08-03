@@ -39,7 +39,7 @@ export function NotificationBell({ role }) {
   const panelRef = useRef(null);
 
   const loadUnreadOnly = useCallback(async () => {
-    if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN) return;
+    if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN && role !== ROLES.USER) return;
     try {
       const countRes = await notificationService.unreadCount();
       const next = countRes.data?.data?.unreadCount || 0;
@@ -51,7 +51,7 @@ export function NotificationBell({ role }) {
   }, [role]);
 
   const loadList = useCallback(async ({ force = false } = {}) => {
-    if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN) return;
+    if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN && role !== ROLES.USER) return;
     const fresh = Date.now() - notificationsCache.fetchedAt < CACHE_TTL_MS;
     if (!force && fresh && notificationsCache.items.length >= 0 && notificationsCache.fetchedAt) {
       setItems(notificationsCache.items);
@@ -78,7 +78,7 @@ export function NotificationBell({ role }) {
   }, [role]);
 
   useEffect(() => {
-    if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN) return undefined;
+    if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN && role !== ROLES.USER) return undefined;
     // Hydrate from cache immediately; only fetch unread badge on interval
     if (notificationsCache.fetchedAt) {
       setItems(notificationsCache.items);
@@ -101,7 +101,7 @@ export function NotificationBell({ role }) {
     return () => document.removeEventListener('mousedown', onClick);
   }, [open]);
 
-  if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN) return null;
+  if (role !== ROLES.SUPER_ADMIN && role !== ROLES.ADMIN && role !== ROLES.USER) return null;
 
   const handleOpen = async () => {
     const nextOpen = !open;
@@ -215,14 +215,34 @@ export function NotificationBell({ role }) {
             )}
           </div>
           <div className="border-t border-[#F2F4F7] px-4 py-2.5">
-            <Link
-              href="/super-admin/affiliates/pending"
-              prefetch={false}
-              onClick={() => setOpen(false)}
-              className="text-[12px] font-semibold text-[#021A54] hover:underline"
-            >
-              Open pending affiliates
-            </Link>
+            {role === ROLES.SUPER_ADMIN ? (
+              <Link
+                href="/super-admin/affiliates/pending"
+                prefetch={false}
+                onClick={() => setOpen(false)}
+                className="text-[12px] font-semibold text-[#021A54] hover:underline"
+              >
+                Open pending affiliates
+              </Link>
+            ) : role === ROLES.USER ? (
+              <Link
+                href="/app"
+                prefetch={false}
+                onClick={() => setOpen(false)}
+                className="text-[12px] font-semibold text-[#021A54] hover:underline"
+              >
+                Open my cards
+              </Link>
+            ) : (
+              <Link
+                href="/admin/rewards"
+                prefetch={false}
+                onClick={() => setOpen(false)}
+                className="text-[12px] font-semibold text-[#021A54] hover:underline"
+              >
+                Open rewards
+              </Link>
+            )}
           </div>
         </div>
       ) : null}

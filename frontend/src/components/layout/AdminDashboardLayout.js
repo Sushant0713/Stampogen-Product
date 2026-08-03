@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { Navbar } from '@/components/navbar/Navbar';
 import { PageLoader } from '@/components/loaders/Spinner';
@@ -10,17 +10,28 @@ import { AdminStampRequestNotifier } from '@/features/admin/AdminStampRequestNot
 import { AdminBillStampNotifier } from '@/features/admin/AdminBillStampNotifier';
 import { AdminSoundUnlock } from '@/features/admin/AdminSoundUnlock';
 import { AdminOnboardingTour } from '@/features/admin/AdminOnboardingTour';
+import { AdminUpgradeGate } from '@/features/admin/AdminUpgradeGate';
 import { ADMIN_BG } from '@/features/admin/adminTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
-import { cn, getLoginPath } from '@/utils';
+import {
+  cn,
+  getLoginPath,
+  getAdminSubscriptionLock,
+  isAdminUpgradeAllowedPath,
+} from '@/utils';
 
 export function AdminDashboardLayout({ children }) {
   const router = useRouter();
+  const pathname = usePathname() || '';
   const { user, loading, initialized, role: userRole } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
   const authReady = initialized && !loading && Boolean(user) && userRole === ROLES.ADMIN;
+  const subscriptionLock = authReady ? getAdminSubscriptionLock(user) : { locked: false };
+  const showUpgradeGate =
+    authReady && subscriptionLock.locked && !isAdminUpgradeAllowedPath(pathname);
+  const facilitiesEnabled = authReady && !subscriptionLock.locked;
 
   useEffect(() => {
     try {
@@ -76,13 +87,19 @@ export function AdminDashboardLayout({ children }) {
             'mx-auto w-full max-w-6xl'
           )}
         >
-          {authReady ? children : <PageLoader />}
+          {!authReady ? (
+            <PageLoader />
+          ) : showUpgradeGate ? (
+            <AdminUpgradeGate lock={subscriptionLock} />
+          ) : (
+            children
+          )}
         </main>
         {authReady ? <AdminBottomNav /> : null}
-        {authReady ? <AdminSoundUnlock enabled /> : null}
-        {authReady ? <AdminStampRequestNotifier enabled /> : null}
-        {authReady ? <AdminBillStampNotifier enabled /> : null}
-        {authReady ? <AdminOnboardingTour enabled /> : null}
+        {facilitiesEnabled ? <AdminSoundUnlock enabled /> : null}
+        {facilitiesEnabled ? <AdminStampRequestNotifier enabled /> : null}
+        {facilitiesEnabled ? <AdminBillStampNotifier enabled /> : null}
+        {facilitiesEnabled ? <AdminOnboardingTour enabled /> : null}
       </div>
     </div>
   );

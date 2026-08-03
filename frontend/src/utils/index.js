@@ -57,6 +57,52 @@ export function adminHasActivePlan(user) {
   return Boolean(sub?.planName);
 }
 
+/** True when free trial or paid plan has ended (or no plan at all). */
+export function adminSubscriptionIsLocked(user) {
+  return getAdminSubscriptionLock(user).locked;
+}
+
+/**
+ * Access lock for admin portal facilities after trial/plan end.
+ * @returns {{ locked: boolean, reason: 'none'|'trial'|'plan'|null, subscription: object|null }}
+ */
+export function getAdminSubscriptionLock(user) {
+  const sub = user?.subscription || user?.tenant?.subscription || null;
+  if (!sub?.planName) {
+    return { locked: true, reason: 'none', subscription: sub };
+  }
+
+  const days = sub.daysRemaining;
+  const expiredByStatus = sub.status === 'trial_expired' || sub.status === 'expired';
+  const expiredByDays = days != null && days < 0;
+  if (!expiredByStatus && !expiredByDays) {
+    return { locked: false, reason: null, subscription: sub };
+  }
+
+  const isTrial =
+    sub.isTrial ||
+    sub.source === 'trial' ||
+    sub.status === 'trial_expired' ||
+    ['trial_active', 'trial_expiring_soon'].includes(sub.status);
+
+  return {
+    locked: true,
+    reason: isTrial ? 'trial' : 'plan',
+    subscription: sub,
+  };
+}
+
+/** Routes still usable while the upgrade gate is up. */
+export function isAdminUpgradeAllowedPath(pathname = '') {
+  const path = String(pathname || '').split('?')[0];
+  return (
+    path === '/admin/plans/browse' ||
+    path === '/admin/plans/my' ||
+    path.startsWith('/admin/plans/browse/') ||
+    path.startsWith('/admin/plans/my/')
+  );
+}
+
 /** Checkout URL for an admin finishing / starting a plan purchase. */
 export function getAdminCheckoutPath({ planCode, discountCode } = {}) {
   if (!planCode) return null;
@@ -83,8 +129,14 @@ export function getLoginWithRedirectPath(role, redirect) {
  */
 export function resolvePostAuthPath({ role, user, redirect } = {}) {
   if (isSafeAppRedirect(redirect)) return redirect;
-  if (role === ROLES.ADMIN && user && !adminHasActivePlan(user)) {
-    return '/pricing';
+  if (role === ROLES.ADMIN && user) {
+    const lock = getAdminSubscriptionLock(user);
+    if (lock.locked && lock.reason !== 'none') {
+      return '/admin/plans/browse';
+    }
+    if (!adminHasActivePlan(user)) {
+      return '/pricing';
+    }
   }
   if (role === ROLES.USER) return '/app';
   return `/${role}/dashboard`;

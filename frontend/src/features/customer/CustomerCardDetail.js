@@ -1,23 +1,41 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { PremiumLoyaltyCard } from '@/features/customer/LoyaltyCard';
 import { PartyPopper } from '@/features/customer/PartyPopper';
+import { StampCelebrateOverlay } from '@/features/customer/StampCelebrateOverlay';
 import { ShopSocialLinks } from '@/features/shared/ShopSocialLinks';
 import { customerCardClass, relativeTime } from '@/features/customer/customerTheme';
 import { loyaltyService } from '@/services/loyalty.service';
 import { getErrorMessage } from '@/utils';
 import { playCustomerStampSound, unlockCustomerStampSound } from '@/utils/customerStampSound';
 
-export function CustomerCardDetail({ slug }) {
+function parseCelebrateMode(celebrate, source) {
+  if (celebrate === 'complete') return 'complete';
+  if (source === 'approved') return 'approved';
+  if (celebrate === '1' || celebrate === 'true' || celebrate === 'photo') return 'photo';
+  return null;
+}
+
+function CustomerCardDetailInner({ slug }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const celebrateParam = searchParams.get('celebrate') || '';
+  const sourceParam = searchParams.get('source') || '';
+
   const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [celebrate, setCelebrate] = useState(false);
+  const [redeemCelebrate, setRedeemCelebrate] = useState(false);
+  const [stampCelebrate, setStampCelebrate] = useState(null);
+  const celebrateHandledRef = useRef('');
+
+  const clearCelebrateQuery = useCallback(() => {
+    router.replace(`/app/cards/${slug}`, { scroll: false });
+  }, [router, slug]);
 
   const load = useCallback(async () => {
     try {
@@ -36,13 +54,30 @@ export function CustomerCardDetail({ slug }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (loading || !card) return;
+    const mode = parseCelebrateMode(celebrateParam, sourceParam);
+    if (!mode) return;
+
+    const key = `${slug}:${celebrateParam}:${sourceParam}`;
+    if (celebrateHandledRef.current === key) return;
+    celebrateHandledRef.current = key;
+
+    setStampCelebrate({
+      mode,
+      intensity: mode === 'complete' ? 'big' : 'normal',
+    });
+    void unlockCustomerStampSound().then(() => playCustomerStampSound());
+    clearCelebrateQuery();
+  }, [loading, card, celebrateParam, sourceParam, slug, clearCelebrateQuery]);
+
   const handleRedeem = async () => {
     try {
       setBusy(true);
       const { data } = await loyaltyService.redeem(slug);
       setCard(data.data.card);
       toast.success(data.message || 'Sent to the shop for verification');
-      setCelebrate(true);
+      setRedeemCelebrate(true);
       void unlockCustomerStampSound().then(() => playCustomerStampSound());
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to redeem'));
@@ -83,7 +118,19 @@ export function CustomerCardDetail({ slug }) {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 lg:max-w-none lg:grid lg:grid-cols-[280px_1fr] lg:items-start lg:gap-8">
-      <PartyPopper active={celebrate} intensity="big" onDone={() => setCelebrate(false)} />
+      <PartyPopper
+        active={redeemCelebrate}
+        intensity="big"
+        onDone={() => setRedeemCelebrate(false)}
+      />
+      <StampCelebrateOverlay
+        active={Boolean(stampCelebrate)}
+        card={card}
+        mode={stampCelebrate?.mode || 'photo'}
+        intensity={stampCelebrate?.intensity || 'normal'}
+        onDone={() => setStampCelebrate(null)}
+      />
+
       <div className="lg:sticky lg:top-24">
         <button
           type="button"
@@ -167,5 +214,19 @@ export function CustomerCardDetail({ slug }) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export function CustomerCardDetail({ slug }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-[#64748B]">
+          Loading card…
+        </div>
+      }
+    >
+      <CustomerCardDetailInner slug={slug} />
+    </Suspense>
   );
 }

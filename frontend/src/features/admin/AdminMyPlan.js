@@ -93,8 +93,12 @@ export function AdminMyPlan() {
 
       {trialExpired ? (
         <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Your free trial has ended. Browse plans to continue with a paid subscription — your shop
-          stays open meanwhile.
+          Your free trial has ended. Shop tools are locked until you upgrade to a paid plan.
+        </div>
+      ) : null}
+      {paidExpired ? (
+        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          Your plan has ended. Shop tools are locked until you renew or upgrade.
         </div>
       ) : null}
 

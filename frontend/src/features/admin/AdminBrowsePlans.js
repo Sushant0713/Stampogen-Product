@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 import { planService } from '@/services/plan.service';
 import { useAuth } from '@/contexts/AuthContext';
-import { getErrorMessage, cn } from '@/utils';
+import { getErrorMessage, cn, getAdminSubscriptionLock } from '@/utils';
 import { MARKETING_LINKS } from '@/constants/marketing';
 import { AdminPageHeader } from '@/features/admin/AdminPageShell';
 import { ADMIN_ACCENT, adminCardClass } from '@/features/admin/adminTheme';
@@ -24,6 +24,7 @@ export function AdminBrowsePlans() {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const currentName = user?.subscription?.planName || user?.tenant?.subscription?.planName || '';
+  const lock = getAdminSubscriptionLock(user);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +53,23 @@ export function AdminBrowsePlans() {
         title="Browse plans"
         subtitle="Choose a plan to upgrade or renew. Checkout uses your logged-in admin account."
       />
+
+      {lock.locked ? (
+        <div
+          className={`mb-5 rounded-xl border px-4 py-3 text-sm ${
+            lock.reason === 'plan'
+              ? 'border-red-200 bg-red-50 text-red-900'
+              : 'border-amber-200 bg-amber-50 text-amber-950'
+          }`}
+        >
+          {lock.reason === 'none'
+            ? 'You need an active plan to use shop tools. Pick a plan below to continue.'
+            : lock.reason === 'trial'
+              ? 'Your free trial has ended. Choose a plan below to unlock stamps, offers, rewards, and customers.'
+              : 'Your plan has ended. Renew or pick a plan below to unlock your shop tools.'}
+        </div>
+      ) : null}
+
       <div className="mb-4 flex justify-end">
         <Link href="/admin/plans/my" className="text-sm font-bold text-[#021A54] hover:underline">
           ← My plan

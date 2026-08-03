@@ -2,10 +2,16 @@ const express = require('express');
 const LoyaltyController = require('@controllers/loyalty.controller');
 const { authenticate } = require('@middlewares/auth.middleware');
 const { isCustomer, isAdmin } = require('@middlewares/authorize.middleware');
+const {
+  requireActiveSubscription,
+} = require('@middlewares/requireActiveSubscription.middleware');
 const validate = require('@middlewares/validate.middleware');
 const { body, param, query } = require('express-validator');
 
 const router = express.Router();
+
+/** Admin shop facilities — blocked after trial/plan end. */
+const adminFacility = [authenticate, isAdmin, requireActiveSubscription];
 
 router.get(
   '/shops/:slug/preview',
@@ -16,24 +22,17 @@ router.get(
 
 router.get(
   '/admin/rewards',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   query('filter').optional().isIn(['pending', 'redeemed', 'all']),
   validate,
   LoyaltyController.adminListRewards
 );
 
-router.get(
-  '/admin/customers',
-  authenticate,
-  isAdmin,
-  LoyaltyController.adminListCustomers
-);
+router.get('/admin/customers', ...adminFacility, LoyaltyController.adminListCustomers);
 
 router.get(
   '/admin/customers/:id',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Customer id is required'),
   validate,
   LoyaltyController.adminGetCustomer
@@ -41,8 +40,7 @@ router.get(
 
 router.patch(
   '/admin/customers/:id',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Customer id is required'),
   body('status').isIn(['active', 'suspended']).withMessage('Status must be active or suspended'),
   validate,
@@ -51,31 +49,19 @@ router.patch(
 
 router.delete(
   '/admin/customers/:id',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Customer id is required'),
   validate,
   LoyaltyController.adminDeleteCustomer
 );
 
-router.get(
-  '/admin/stats',
-  authenticate,
-  isAdmin,
-  LoyaltyController.adminDashboardStats
-);
+router.get('/admin/stats', ...adminFacility, LoyaltyController.adminDashboardStats);
 
-router.get(
-  '/admin/settings',
-  authenticate,
-  isAdmin,
-  LoyaltyController.adminGetSettings
-);
+router.get('/admin/settings', ...adminFacility, LoyaltyController.adminGetSettings);
 
 router.patch(
   '/admin/settings',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   body('loyaltyStampMode').optional().isIn(['bill', 'request']).withMessage('Invalid loyalty stamp mode'),
   body('socialLinks').optional().isObject().withMessage('Social links must be an object'),
   body('billingProfile').optional().isObject().withMessage('Billing profile must be an object'),
@@ -83,24 +69,17 @@ router.patch(
   LoyaltyController.adminUpdateSettings
 );
 
-router.get(
-  '/admin/stamp-requests',
-  authenticate,
-  isAdmin,
-  LoyaltyController.adminListStampRequests
-);
+router.get('/admin/stamp-requests', ...adminFacility, LoyaltyController.adminListStampRequests);
 
 router.get(
   '/admin/recent-bill-stamps',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   LoyaltyController.adminListRecentBillStamps
 );
 
 router.post(
   '/admin/stamp-requests/:id/approve',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Invalid stamp request id'),
   validate,
   LoyaltyController.adminApproveStampRequest
@@ -108,24 +87,17 @@ router.post(
 
 router.post(
   '/admin/stamp-requests/:id/reject',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Invalid stamp request id'),
   validate,
   LoyaltyController.adminRejectStampRequest
 );
 
-router.get(
-  '/admin/offers',
-  authenticate,
-  isAdmin,
-  LoyaltyController.adminListOffers
-);
+router.get('/admin/offers', ...adminFacility, LoyaltyController.adminListOffers);
 
 router.post(
   '/admin/offers',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   body('title').trim().notEmpty().withMessage('Offer title is required').isLength({ max: 200 }),
   body('stampsRequired').optional().isInt({ min: 1, max: 100 }),
   body('color').optional().trim().isLength({ max: 40 }),
@@ -145,8 +117,7 @@ router.post(
 
 router.patch(
   '/admin/offers/:key',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('key').trim().notEmpty().withMessage('Offer key is required'),
   body('title').optional().trim().notEmpty().isLength({ max: 200 }),
   body('stampsRequired').optional().isInt({ min: 1, max: 100 }),
@@ -168,8 +139,7 @@ router.patch(
 
 router.get(
   '/admin/rewards/:id',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Invalid reward id'),
   validate,
   LoyaltyController.adminGetReward
@@ -177,8 +147,7 @@ router.get(
 
 router.post(
   '/admin/rewards/:id/verify',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Invalid reward id'),
   validate,
   LoyaltyController.adminVerify
@@ -186,8 +155,7 @@ router.post(
 
 router.post(
   '/admin/rewards/:id/cancel',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Invalid reward id'),
   validate,
   LoyaltyController.adminCancel
@@ -195,8 +163,7 @@ router.post(
 
 router.post(
   '/admin/rewards/:id/give',
-  authenticate,
-  isAdmin,
+  ...adminFacility,
   param('id').trim().notEmpty().withMessage('Invalid reward id'),
   validate,
   LoyaltyController.adminGive

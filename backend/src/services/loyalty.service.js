@@ -1266,13 +1266,46 @@ class LoyaltyService {
     });
 
     const { catalog } = await this.getCatalogForTenant(tenantId);
+    const card = formatCard(updated, catalog);
+
+    try {
+      const customerId = membership.user?._id || membership.user || updated.user?._id || updated.user;
+      const slug =
+        updated.tenant?.slug ||
+        membership.tenant?.slug ||
+        (await TenantRepository.findById(tenantId))?.slug ||
+        '';
+      if (customerId && slug) {
+        const complete = nextStatus === 'pending';
+        const celebrate = complete ? 'complete' : '1';
+        await NotificationService.notifyUser({
+          userId: customerId,
+          type: 'stamp_approved',
+          title: complete ? 'Card complete!' : 'Stamp approved!',
+          message: complete
+            ? `Your stamp for “${offerLabel}” was approved — all stamps collected at ${card.name}.`
+            : `The shop approved your stamp for “${offerLabel}”.`,
+          link: `/app/cards/${encodeURIComponent(slug)}?celebrate=${celebrate}&source=approved`,
+          meta: {
+            slug,
+            offerKey: request.offerKey,
+            offerTitle: offerLabel,
+            complete,
+            celebrate,
+          },
+        });
+      }
+    } catch {
+      // Notification failure should not block approval
+    }
+
     return {
       request: this.formatStampRequestRow({ ...updated.toObject(), user: membership.user }, {
         ...request.toObject?.() || request,
         status: 'approved',
         resolvedAt: new Date(),
       }),
-      card: formatCard(updated, catalog),
+      card,
       message:
         nextStatus === 'pending'
           ? `${offerLabel} complete! Customer can collect their reward after you confirm.`

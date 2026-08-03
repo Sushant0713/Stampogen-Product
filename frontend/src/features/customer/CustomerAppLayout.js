@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { PageLoader } from '@/components/loaders/Spinner';
 import { CustomerBottomNav, CustomerSidebar } from '@/features/customer/CustomerNav';
+import { CustomerStampApprovalWatcher } from '@/features/customer/CustomerStampApprovalWatcher';
 import { CUSTOMER_BG } from '@/features/customer/customerTheme';
+import { NotificationBell } from '@/components/navbar/NotificationBell';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLES } from '@/constants';
 import { cn, getErrorMessage, getLoginPath } from '@/utils';
@@ -56,10 +58,18 @@ export function CustomerAppLayout({ children, hideNav = false }) {
 
       <div className={cn('min-h-screen', authReady ? 'lg:ml-[240px]' : '')}>
         {authReady ? (
+          <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[#E2E8F0] bg-white/90 px-4 py-3 backdrop-blur-md lg:hidden">
+            <p className="text-sm font-extrabold text-[#021A54]">Stampogen</p>
+            <NotificationBell role={ROLES.USER} />
+          </header>
+        ) : null}
+
+        {authReady ? (
           <header className="sticky top-0 z-30 hidden border-b border-[#E2E8F0] bg-white/90 backdrop-blur-md lg:block">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-4">
               <p className="text-sm font-semibold text-[#64748B]">Your loyalty wallet</p>
               <div className="flex items-center gap-3">
+                <NotificationBell role={ROLES.USER} />
                 <div className="text-right">
                   <p className="text-sm font-bold text-[#021A54]">{displayName}</p>
                   <p className="text-xs text-[#94A3B8]">{user.email}</p>
@@ -95,6 +105,7 @@ export function CustomerAppLayout({ children, hideNav = false }) {
         </main>
 
         {showNav ? <CustomerBottomNav /> : null}
+        {authReady ? <CustomerStampApprovalWatcher enabled /> : null}
       </div>
     </div>
   );

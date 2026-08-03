@@ -64,6 +64,18 @@ class LoyaltyController {
     }
   }
 
+  async listHistory(req, res, next) {
+    try {
+      const history = await LoyaltyService.listHistory(req.user._id);
+      return sendSuccess(res, {
+        message: 'Activity history retrieved',
+        data: history,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   async addStamp(req, res, next) {
     try {
       const result = await LoyaltyService.addStamp(req.user._id, req.params.slug, {

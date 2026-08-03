@@ -53,6 +53,36 @@ const NAV = [
       </svg>
     ),
   },
+  {
+    id: 'history',
+    label: 'History',
+    href: '/app/history',
+    mobileLabel: 'History',
+    icon: (active) => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M12 8v5l3 2"
+          stroke={active ? '#fff' : '#64748B'}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M3.05 11a9 9 0 1 1 .5 4"
+          stroke={active ? '#fff' : '#64748B'}
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M3 16v-5h5"
+          stroke={active ? '#fff' : '#64748B'}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
 ];
 
 function isActive(pathname, href) {
@@ -109,7 +139,7 @@ export function CustomerBottomNav() {
               key={item.id}
               href={item.href}
               className={cn(
-                'flex items-center gap-2 rounded-[100px] px-5 py-2.5 text-[13px] font-bold transition',
+                'flex items-center gap-1.5 rounded-[100px] px-3.5 py-2.5 text-[12.5px] font-bold transition sm:gap-2 sm:px-5 sm:text-[13px]',
                 active ? 'bg-[#021A54] text-white' : 'text-[#64748B]'
               )}
             >

@@ -191,6 +191,8 @@ router.get(
 
 router.get('/rewards', authenticate, isCustomer, LoyaltyController.listRewards);
 
+router.get('/history', authenticate, isCustomer, LoyaltyController.listHistory);
+
 router.post(
   '/cards/:slug/stamps',
   authenticate,

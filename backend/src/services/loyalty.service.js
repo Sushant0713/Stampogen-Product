@@ -930,6 +930,97 @@ class LoyaltyService {
     return rows;
   }
 
+  /**
+   * Customer activity history, grouped by shop (stamps + offer redeems).
+   * Uses the same ~2 month visit/redeem logs as admin customer detail.
+   */
+  async listHistory(userId) {
+    const memberships = await LoyaltyMembershipRepository.findByUser(userId);
+    const shops = [];
+
+    for (const membership of memberships) {
+      const tenant = membership.tenant;
+      if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) continue;
+
+      const cutoff = historyCutoff();
+      let visitHistory = pruneDatedEntries(membership.visitHistory || [], cutoff);
+      let offerRedeemHistory = pruneDatedEntries(membership.offerRedeemHistory || [], cutoff);
+
+      if (!visitHistory.length) {
+        visitHistory = buildVisitEventsFromLegacy(membership);
+      }
+
+      const historyChanged =
+        visitHistory.length !== (membership.visitHistory || []).length ||
+        offerRedeemHistory.length !== (membership.offerRedeemHistory || []).length ||
+        ((membership.visitHistory || []).length === 0 && visitHistory.length > 0);
+
+      if (historyChanged) {
+        void LoyaltyMembershipRepository.updateById(membership._id, {
+          visitHistory,
+          offerRedeemHistory,
+        }).catch((error) => {
+          console.warn('[loyalty] customer history prune/backfill failed:', error.message);
+        });
+      }
+
+      const stamps = [...visitHistory]
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+        .map((event) => ({
+          id: `stamp:${String(event.at)}:${event.offerKey || ''}:${event.source || 'bill'}`,
+          type: 'stamp',
+          at: event.at,
+          offerKey: event.offerKey || '',
+          offerTitle: event.offerTitle || 'Stamp',
+          source: event.source === 'request' ? 'request' : 'bill',
+          label:
+            event.source === 'request' ? 'Stamp collected · request approved' : 'Stamp collected',
+        }));
+
+      const redeems = [...offerRedeemHistory]
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+        .map((entry) => ({
+          id: `redeem:${String(entry.at)}:${entry.offerKey || ''}`,
+          type: 'redeem',
+          at: entry.at,
+          offerKey: entry.offerKey || '',
+          offerTitle: entry.offerTitle || 'Offer',
+          source: 'redeem',
+          label: 'Offer redeemed',
+        }));
+
+      if (!stamps.length && !redeems.length) continue;
+
+      const events = [...stamps, ...redeems].sort(
+        (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+      );
+
+      shops.push({
+        membershipId: String(membership._id),
+        slug: tenant.slug,
+        name: tenant.name,
+        initials: shopInitials(tenant.name),
+        stampCount: stamps.length,
+        redeemCount: redeems.length,
+        lastActivityAt: events[0]?.at || membership.lastStampAt || membership.joinedAt || null,
+        events,
+      });
+    }
+
+    shops.sort(
+      (a, b) => new Date(b.lastActivityAt || 0).getTime() - new Date(a.lastActivityAt || 0).getTime()
+    );
+
+    return {
+      shops,
+      summary: {
+        shopCount: shops.length,
+        stampCount: shops.reduce((sum, s) => sum + s.stampCount, 0),
+        redeemCount: shops.reduce((sum, s) => sum + s.redeemCount, 0),
+      },
+    };
+  }
+
   async addStamp(userId, slug, { offerKey, offerTitle, billDocument, billDocumentName } = {}) {
     const tenant = await this.resolveActiveTenant(slug);
     if (readStampMode(tenant) !== LOYALTY_STAMP_MODES.BILL) {

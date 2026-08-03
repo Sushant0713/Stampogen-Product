@@ -663,6 +663,92 @@ const sendAdminClientCredentialsEmail = async ({
   return sendMail({ to, subject, html, text });
 };
 
+const formatTrialEndDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+/**
+ * Confirm free trial start for a shop owner (public signup or SA grant).
+ */
+const sendFreeTrialStartedEmail = async ({
+  to,
+  name,
+  shopName,
+  planName,
+  trialDays,
+  endsAt,
+  loginUrl,
+} = {}) => {
+  const displayName = name || 'there';
+  const days = Math.max(1, Number(trialDays) || 14);
+  const endLabel = formatTrialEndDate(endsAt);
+  const planLabel = planName || 'Stampogen';
+  const shopLabel = shopName || 'your shop';
+  const login = loginUrl || `${config.frontendUrl}/`;
+
+  const subject = `Your Stampogen free trial has started — ${days} day${days === 1 ? '' : 's'}`;
+  const text = [
+    `Hi ${displayName},`,
+    '',
+    `Your free trial for ${shopLabel} is active.`,
+    '',
+    `Plan: ${planLabel}`,
+    `Trial length: ${days} day${days === 1 ? '' : 's'}`,
+    endLabel ? `Ends on: ${endLabel}` : '',
+    '',
+    `Sign in anytime: ${login}`,
+    '',
+    'You can upgrade to a paid plan from My plan before the trial ends.',
+    '',
+    '— Stampogen',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #101828;">
+      <div style="background: #021A54; color: #fff; padding: 20px 24px;">
+        <h1 style="margin: 0; font-size: 20px;">Stampogen</h1>
+      </div>
+      <div style="padding: 24px; border: 1px solid #E4E7EC; border-top: 0;">
+        <p style="margin: 0 0 12px;">Hi ${displayName},</p>
+        <p style="margin: 0 0 16px;">
+          Your free trial for <strong>${shopLabel}</strong> is active. You can start setting up
+          stamps, offers, and customers right away.
+        </p>
+        <div style="background: #F8FAFC; border: 1px solid #E4E7EC; border-radius: 10px; padding: 14px 16px; margin: 0 0 16px;">
+          <p style="margin: 0 0 8px; font-size: 13px;"><strong>Plan:</strong> ${planLabel}</p>
+          <p style="margin: 0 0 8px; font-size: 13px;"><strong>Trial:</strong> ${days} day${
+            days === 1 ? '' : 's'
+          }</p>
+          ${
+            endLabel
+              ? `<p style="margin: 0; font-size: 13px;"><strong>Ends on:</strong> ${endLabel}</p>`
+              : ''
+          }
+        </div>
+        <p style="margin: 0 0 18px;">
+          <a href="${login}" style="display: inline-block; background: #021A54; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-size: 14px; font-weight: 700;">
+            Open shop dashboard
+          </a>
+        </p>
+        <p style="margin: 0; font-size: 13px; color: #667085;">
+          Upgrade anytime from <strong>My plan</strong> before the trial ends to keep full access.
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendMail({ to, subject, html, text });
+};
+
 module.exports = {
   sendMail,
   sendOtpEmail,
@@ -674,6 +760,7 @@ module.exports = {
   sendAffiliateRedeemPaidEmail,
   sendAffiliateRedeemRejectedEmail,
   sendAdminClientCredentialsEmail,
+  sendFreeTrialStartedEmail,
   buildSuperAdminInterviewEmail,
   formatInterviewAt,
 };

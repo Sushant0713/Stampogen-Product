@@ -14,6 +14,7 @@ const { evaluateDiscount } = require('@helpers/discount.helper');
 const { formatPrice } = require('@helpers/plan.helper');
 const { scheduleOrApplyPurchase, markSubscriptionPaid, applyTrialPlan } = require('@helpers/billing.helper');
 const { resolveTaxMode, calcLineTax } = require('@helpers/gstTax.helper');
+const { sendFreeTrialStartedEmail } = require('@services/email.service');
 
 function getRazorpayClient() {
   if (!config.razorpay.keyId || !config.razorpay.keySecret) {
@@ -713,13 +714,33 @@ class PaymentService {
       status: TENANT_STATUS.ACTIVE,
     });
 
+    const endsAt = updated.currentPlan?.endsAt || updated.trial?.endsAt || null;
+    try {
+      const owner = user;
+      const ownerName =
+        [owner.firstName, owner.lastName].filter(Boolean).join(' ').trim() ||
+        pending.firstName ||
+        '';
+      await sendFreeTrialStartedEmail({
+        to: email,
+        name: ownerName,
+        shopName: updated.name || tenant.name || pending.tenantName || '',
+        planName: plan.name,
+        trialDays: publicTrial.trialDays,
+        endsAt,
+        loginUrl: `${config.frontendUrl}/`,
+      });
+    } catch (error) {
+      console.error('[trial] Failed to email free-trial confirmation:', error.message || error);
+    }
+
     return {
       signupCompleted: true,
       trialStarted: true,
       trialDays: publicTrial.trialDays,
       planCode: plan.code,
       planName: plan.name,
-      endsAt: updated.currentPlan?.endsAt || updated.trial?.endsAt || null,
+      endsAt,
       reservedDiscountCode: reservedCode || '',
     };
   }

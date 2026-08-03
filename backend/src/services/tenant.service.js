@@ -14,7 +14,7 @@ const EmailOtpRepository = require('@repositories/emailOtp.repository');
 const PlatformInvoiceService = require('@services/platformInvoice.service');
 const PaymentRepository = require('@repositories/payment.repository');
 const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
-const { sendAdminClientCredentialsEmail } = require('@services/email.service');
+const { sendAdminClientCredentialsEmail, sendFreeTrialStartedEmail } = require('@services/email.service');
 const {
   PLAN_RATES,
   buildSegment,
@@ -650,6 +650,25 @@ class TenantService {
       trial: updated.trial,
       status: updated.status,
     });
+
+    try {
+      const owner = saved.owner || tenant.owner || null;
+      const to = String(owner?.email || '').trim().toLowerCase();
+      if (to) {
+        const ownerName = [owner.firstName, owner.lastName].filter(Boolean).join(' ').trim();
+        await sendFreeTrialStartedEmail({
+          to,
+          name: ownerName,
+          shopName: saved.name || tenant.name || '',
+          planName: plan.name,
+          trialDays,
+          endsAt: updated.currentPlan?.endsAt || updated.trial?.endsAt || null,
+          loginUrl: `${config.frontendUrl}/`,
+        });
+      }
+    } catch (error) {
+      console.error('[trial] Failed to email SA-granted free-trial confirmation:', error.message || error);
+    }
 
     return {
       ...(saved.toObject ? saved.toObject() : saved),

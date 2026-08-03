@@ -6,6 +6,7 @@ export const loyaltyService = {
   listCards: () => api.get('/loyalty/cards'),
   getCard: (slug) => api.get(`/loyalty/cards/${encodeURIComponent(slug)}`),
   listRewards: () => api.get('/loyalty/rewards'),
+  listHistory: () => api.get('/loyalty/history'),
   addStamp: (slug, payload = {}) =>
     api.post(`/loyalty/cards/${encodeURIComponent(slug)}/stamps`, payload, { timeout: 60000 }),
   requestStamp: (slug, payload = {}) =>

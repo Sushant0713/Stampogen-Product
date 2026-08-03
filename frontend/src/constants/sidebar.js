@@ -15,6 +15,7 @@ import {
   QrCode,
   ScanLine,
   BookOpen,
+  Store,
 } from 'lucide-react';
 import { ROLES } from '@/constants';
 
@@ -83,15 +84,19 @@ export const SIDEBAR_CONFIG = {
     basePath: '/admin',
     items: withBasePath('/admin', [
       { label: 'Home', href: 'dashboard', icon: Home, tourId: 'admin-home' },
-      { label: 'Offers', href: 'offers', icon: Gift, tourId: 'admin-offers' },
+      { label: 'Offers', href: 'offers', icon: Gift, tourId: 'admin-offers', hqOnly: true },
       { label: 'Rewards', href: 'rewards', icon: Trophy, tourId: 'admin-rewards' },
       { label: 'Customers', href: 'customers', icon: Users, tourId: 'admin-customers' },
+      { label: 'Outlets', href: 'outlets', icon: Store, hqOnly: true },
       {
         label: 'Plans',
         icon: Package,
+        hqOnly: true,
         children: [
           { label: 'My plan', href: 'plans/my' },
           { label: 'Browse plans', href: 'plans/browse' },
+          { label: 'My outlet seats', href: 'plans/outlet/my' },
+          { label: 'Browse outlet plans', href: 'plans/outlet/browse' },
         ],
       },
       { label: 'Profile', href: 'profile', icon: UserCircle, tourId: 'admin-profile' },
@@ -106,3 +111,14 @@ export const SIDEBAR_CONFIG = {
     ]),
   },
 };
+
+/** Filter admin nav for outlet logins (no Offers / Plans / Outlets). */
+export function getSidebarItemsForUser(role, user) {
+  const config = SIDEBAR_CONFIG[role];
+  if (!config) return [];
+  const isOutlet = Boolean(
+    user?.isOutlet || user?.tenant?.isOutlet || user?.tenant?.kind === 'outlet'
+  );
+  if (role !== ROLES.ADMIN || !isOutlet) return config.items;
+  return config.items.filter((item) => !item.hqOnly);
+}

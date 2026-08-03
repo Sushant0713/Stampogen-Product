@@ -216,6 +216,7 @@ async function quotePlan(plan, discountCode = '', customerOpts = {}) {
       priceLabel: formatPrice(plan),
       ctaText: plan.ctaText || 'Get early access',
       description: plan.description || '',
+      forOutlet: Boolean(plan.forOutlet),
     },
     discountCode: appliedCode,
     discountId,
@@ -271,6 +272,19 @@ async function activateTenantPlanFromPayment(payment) {
 
   const tenant = await TenantRepository.findById(tenantId);
   if (!tenant) return null;
+
+  // Outlet seat plans grant a seat on HQ — do not overwrite the shop subscription.
+  const plan =
+    (payment.planCode && (await PlanRepository.findByCode(payment.planCode))) ||
+    (payment.planName && (await PlanRepository.findByName(payment.planName))) ||
+    null;
+  if (plan?.forOutlet) {
+    if (tenant.kind === 'outlet') {
+      throw new AppError('Outlet accounts cannot buy outlet plans', HTTP_STATUS.FORBIDDEN);
+    }
+    const OutletService = require('@services/outlet.service');
+    return OutletService.grantSeatFromPayment(payment, plan);
+  }
 
   const planName = payment.planName;
   // Cycle price = taxable (plan − discount), not GST-inclusive total

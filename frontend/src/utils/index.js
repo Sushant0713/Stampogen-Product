@@ -18,9 +18,9 @@ export function getRoleSlug(user) {
   return user?.role?.slug || user?.role || null;
 }
 
-/** Admin login lives at `/`; other roles use `/{role}/login`. Customers use `/user/login`. */
+/** Admin + Outlet Admin share `/admin/login` (also available at `/`). Customers use `/user/login`. */
 export function getLoginPath(role) {
-  if (role === ROLES.ADMIN) return '/';
+  if (role === ROLES.ADMIN) return '/admin/login';
   if (role === ROLES.USER) return '/user/login';
   return `/${role}/login`;
 }
@@ -99,7 +99,10 @@ export function isAdminUpgradeAllowedPath(pathname = '') {
     path === '/admin/plans/browse' ||
     path === '/admin/plans/my' ||
     path.startsWith('/admin/plans/browse/') ||
-    path.startsWith('/admin/plans/my/')
+    path.startsWith('/admin/plans/my/') ||
+    path.startsWith('/admin/plans/outlet/') ||
+    path === '/admin/outlets' ||
+    path.startsWith('/admin/outlets/')
   );
 }
 

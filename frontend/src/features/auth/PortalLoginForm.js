@@ -26,7 +26,8 @@ const emailOnlySchema = z.object({
 const LOGIN_COPY = {
   [ROLES.ADMIN]: {
     title: 'Admin Login',
-    subtitle: 'Welcome back! Sign in with your email and password.',
+    subtitle:
+      'Shop Admin and Outlet Admin use the same sign-in. Enter your email and password.',
     Icon: () => (
       <span className="relative inline-flex text-[#021A54]">
         <Shield size={26} strokeWidth={1.7} />
@@ -344,15 +345,33 @@ function PortalLoginFormInner({ role }) {
             className="flex h-[48px] w-full items-center justify-center gap-3 rounded-[10px] border border-[#D0D5DD] bg-white text-[15px] font-semibold text-[#344054] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[52px] sm:text-[17px]"
           />
 
-          <div className="mt-5 border-t border-[#EAECF0] pt-4 text-center text-[14px] text-[#667085] sm:mt-7 sm:pt-5 sm:text-[16px]">
-            New to Stampogen?{' '}
-            <Link
-              href={getRegisterPath(role)}
-              className="font-semibold text-[#2E90FA] hover:underline"
-            >
-              Create {ROLE_LABELS[role] || 'Account'}
-            </Link>
-          </div>
+          {role === ROLES.ADMIN ? (
+            <div className="mt-5 border-t border-[#EAECF0] pt-4 text-center text-[14px] text-[#667085] sm:mt-7 sm:pt-5 sm:text-[16px]">
+              <p>
+                New shop?{' '}
+                <Link
+                  href={getRegisterPath(role)}
+                  className="font-semibold text-[#2E90FA] hover:underline"
+                >
+                  Create Admin account
+                </Link>
+              </p>
+              <p className="mt-2 text-[12px] leading-relaxed text-[#98A2B3] sm:text-[13px]">
+                Outlet Admins do not register here — your shop Admin creates your login
+                from Outlets.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 border-t border-[#EAECF0] pt-4 text-center text-[14px] text-[#667085] sm:mt-7 sm:pt-5 sm:text-[16px]">
+              New to Stampogen?{' '}
+              <Link
+                href={getRegisterPath(role)}
+                className="font-semibold text-[#2E90FA] hover:underline"
+              >
+                Create {ROLE_LABELS[role] || 'Account'}
+              </Link>
+            </div>
+          )}
         </>
       )}
     </div>

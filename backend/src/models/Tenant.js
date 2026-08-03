@@ -55,8 +55,43 @@ const loyaltyOfferSchema = new mongoose.Schema(
       default: null,
       min: 1,
     },
+    /**
+     * Which outlets can use this HQ offer.
+     * all = every outlet under this shop; selected = only outletTenantIds.
+     */
+    outletScope: {
+      type: String,
+      enum: ['all', 'selected'],
+      default: 'all',
+    },
+    outletTenantIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Tenant',
+      },
+    ],
   },
   { _id: false }
+);
+
+const outletSeatSchema = new mongoose.Schema(
+  {
+    planCode: { type: String, trim: true, lowercase: true, default: '' },
+    planName: { type: String, trim: true, default: '' },
+    pricePerCycle: { type: Number, default: 0, min: 0 },
+    billing: {
+      type: String,
+      enum: ['Monthly', 'Yearly', 'Custom', null],
+      default: 'Monthly',
+    },
+    purchasedAt: { type: Date, default: Date.now },
+    startsAt: { type: Date, default: Date.now },
+    endsAt: { type: Date, default: null },
+    paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', default: null },
+    /** Null until an outlet is created and bound to this paid seat. */
+    outletTenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', default: null },
+  },
+  { _id: true }
 );
 
 const billingSegmentSchema = new mongoose.Schema(
@@ -118,6 +153,30 @@ const tenantSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    /**
+     * hq = main shop (default). outlet = child location under parentTenant.
+     */
+    kind: {
+      type: String,
+      enum: ['hq', 'outlet'],
+      default: 'hq',
+      index: true,
+    },
+    /** Set when kind=outlet — points at the main admin shop. */
+    parentTenant: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      default: null,
+      index: true,
+    },
+    /**
+     * Paid outlet seats on the HQ tenant (1 purchase = 1 seat).
+     * Unused seats have outletTenantId = null.
+     */
+    outletSeats: {
+      type: [outletSeatSchema],
+      default: [],
     },
     status: {
       type: String,
@@ -257,6 +316,7 @@ const tenantSchema = new mongoose.Schema(
 );
 
 tenantSchema.index({ owner: 1 });
+tenantSchema.index({ parentTenant: 1, kind: 1 });
 tenantSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Tenant', tenantSchema);

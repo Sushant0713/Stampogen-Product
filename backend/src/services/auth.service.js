@@ -124,12 +124,16 @@ function withSubscription(user) {
   if (roleSlug === ROLES.ADMIN) {
     const subscription = getSubscriptionView(plain.tenant);
     plain.subscription = subscription;
+    const isOutlet =
+      plain.tenant?.kind === 'outlet' || Boolean(plain.tenant?.parentTenant);
+    plain.isOutlet = isOutlet;
     if (plain.tenant && typeof plain.tenant === 'object') {
       plain.tenant = {
         ...(typeof plain.tenant.toObject === 'function'
           ? plain.tenant.toObject()
           : plain.tenant),
         subscription,
+        isOutlet,
       };
     }
   }

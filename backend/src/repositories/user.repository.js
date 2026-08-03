@@ -5,7 +5,7 @@ const AUTH_ROLE_POPULATE = { path: 'role', select: 'slug name' };
 const AUTH_TENANT_POPULATE = {
   path: 'tenant',
   select:
-    'name slug status billingProfile currentPlan pendingPlan loyaltyStampMode socialLinks subscriptionSource trial reservedDiscountCode',
+    'name slug status billingProfile currentPlan pendingPlan loyaltyStampMode socialLinks subscriptionSource trial reservedDiscountCode kind parentTenant outletSeats',
 };
 
 function withAuthPopulate(query) {

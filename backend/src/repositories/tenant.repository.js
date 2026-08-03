@@ -10,6 +10,13 @@ class TenantRepository {
     return Tenant.findOne({ slug }).populate('owner');
   }
 
+  async findOutletsByParent(parentTenantId) {
+    if (!parentTenantId) return [];
+    return Tenant.find({ parentTenant: parentTenantId, kind: 'outlet' })
+      .populate('owner', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+  }
+
   async create(data) {
     const created = await Tenant.create(data);
     const populated = await this.findById(created._id);

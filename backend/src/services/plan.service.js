@@ -166,12 +166,15 @@ class PlanService {
     };
   }
 
-  async getPublic() {
+  async getPublic({ forOutlet = false } = {}) {
     // Website visibility alone controls listing. Disabled plans still appear;
     // the pricing CTA shows a toast instead of starting checkout.
+    // Outlet seat plans are excluded from normal pricing unless forOutlet=true.
+    const wantOutlet = Boolean(forOutlet);
     const result = await PlanRepository.findAll(
       {
         visibleWebsite: true,
+        ...(wantOutlet ? { forOutlet: true } : { forOutlet: { $ne: true } }),
       },
       {
         page: 1,
@@ -183,13 +186,14 @@ class PlanService {
 
     const plans = result.plans
       .map(toPublicPlanView)
+      .filter((plan) => Boolean(plan.forOutlet) === wantOutlet)
       .sort((a, b) => {
         if (a.priceCustom && !b.priceCustom) return 1;
         if (!a.priceCustom && b.priceCustom) return -1;
         return a.priceAmount - b.priceAmount;
       });
 
-    return { plans };
+    return { plans, forOutlet: wantOutlet };
   }
 
   async getById(id) {
@@ -239,6 +243,7 @@ class PlanService {
           ? body.featuredOnWebsite
           : Boolean(current.featuredOnWebsite),
       badgeText: body.badgeText !== undefined ? body.badgeText : current.badgeText,
+      forOutlet: body.forOutlet !== undefined ? body.forOutlet : Boolean(current.forOutlet),
     };
 
     if (body.enabled !== undefined && body.status === undefined) {

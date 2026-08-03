@@ -31,6 +31,7 @@ const EMPTY_FORM = {
   ctaText: 'Get early access',
   featuredOnWebsite: false,
   badgeText: 'MOST STAMPED',
+  forOutlet: false,
 };
 
 const fieldClass =
@@ -710,7 +711,7 @@ function PlanForm({ form, setForm, mode, onClose, onSave, availableFeatures = []
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 rounded-xl border border-[#F2F4F7] bg-[#F9FAFB] p-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 rounded-xl border border-[#F2F4F7] bg-[#F9FAFB] p-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <span className="text-sm font-medium text-[#344054]">Website visibility</span>
@@ -744,6 +745,19 @@ function PlanForm({ form, setForm, mode, onClose, onSave, availableFeatures = []
                 checked={form.enabled}
                 label="Plan enabled"
                 onChange={() => update('enabled', !form.enabled)}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-sm font-medium text-[#344054]">Plan for outlet</span>
+                <p className="mt-0.5 text-[11px] text-[#98A2B3]">
+                  1 purchase = 1 outlet seat for main admins
+                </p>
+              </div>
+              <Toggle
+                checked={Boolean(form.forOutlet)}
+                label="Plan for outlet"
+                onChange={() => update('forOutlet', !form.forOutlet)}
               />
             </div>
           </div>
@@ -906,6 +920,7 @@ export function PlanList() {
       ctaText: row.ctaText || 'Get early access',
       featuredOnWebsite: Boolean(row.featuredOnWebsite),
       badgeText: row.badgeText || 'MOST STAMPED',
+      forOutlet: Boolean(row.forOutlet),
     });
     scrollToPanel();
   };
@@ -931,6 +946,7 @@ export function PlanList() {
       ctaText: values.ctaText.trim() || 'Get early access',
       featuredOnWebsite: Boolean(values.featuredOnWebsite),
       badgeText: String(values.badgeText || '').trim() || 'MOST STAMPED',
+      forOutlet: Boolean(values.forOutlet),
     };
 
     try {

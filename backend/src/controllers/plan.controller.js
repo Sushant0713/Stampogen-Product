@@ -35,9 +35,13 @@ class PlanController {
         Pragma: 'no-cache',
         Expires: '0',
       });
-      const result = await PlanService.getPublic();
+      const forOutlet =
+        req.query.forOutlet === '1' ||
+        req.query.forOutlet === 'true' ||
+        req.query.outlet === '1';
+      const result = await PlanService.getPublic({ forOutlet });
       return sendSuccess(res, {
-        message: 'Public plans retrieved',
+        message: forOutlet ? 'Outlet plans retrieved' : 'Public plans retrieved',
         data: result,
       });
     } catch (error) {

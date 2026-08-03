@@ -5,7 +5,7 @@ import { PageLoader } from '@/components/loaders/Spinner';
 import { ROLES } from '@/constants';
 
 export const metadata = {
-  title: 'Admin Login | Stampogen',
+  title: 'Admin / Outlet Login | Stampogen',
 };
 
 export default function AdminLoginPage() {

@@ -51,8 +51,18 @@ export function AdminDashboardLayout({ children }) {
     }
     if (userRole !== ROLES.ADMIN) {
       router.replace(`/${userRole}/dashboard`);
+      return;
     }
-  }, [initialized, loading, user, userRole, router]);
+    const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
+    if (
+      isOutlet &&
+      (pathname.startsWith('/admin/offers') ||
+        pathname.startsWith('/admin/plans') ||
+        pathname.startsWith('/admin/outlets'))
+    ) {
+      router.replace('/admin/dashboard');
+    }
+  }, [initialized, loading, user, userRole, router, pathname]);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {

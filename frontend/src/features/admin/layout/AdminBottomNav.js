@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/utils';
 import { ADMIN_BOTTOM_NAV } from '@/features/admin/adminTheme';
 import { loyaltyService } from '@/services/loyalty.service';
+import { useAuth } from '@/contexts/AuthContext';
 
 function isNavActive(pathname, href) {
   if (href === '/admin/dashboard') {
@@ -16,6 +17,8 @@ function isNavActive(pathname, href) {
 
 export function AdminBottomNav() {
   const pathname = usePathname() || '';
+  const { user } = useAuth();
+  const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
   const [rewardAlerts, setRewardAlerts] = useState(0);
 
   const loadAlerts = useCallback(async () => {
@@ -36,12 +39,16 @@ export function AdminBottomNav() {
     return () => clearInterval(id);
   }, [loadAlerts]);
 
+  const items = isOutlet
+    ? ADMIN_BOTTOM_NAV.filter((item) => item.id !== 'offers')
+    : ADMIN_BOTTOM_NAV;
+
   return (
     <nav
       className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-1 rounded-[26px] border border-[rgba(2,26,84,0.05)] bg-white/85 p-2 shadow-[0_16px_36px_rgba(2,26,84,0.18)] backdrop-blur-xl lg:hidden"
       aria-label="Admin navigation"
     >
-      {ADMIN_BOTTOM_NAV.map((item) => {
+      {items.map((item) => {
         const active = isNavActive(pathname, item.href);
         const showBadge = item.id === 'rewards' && rewardAlerts > 0;
         return (

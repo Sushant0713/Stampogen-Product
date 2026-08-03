@@ -6,8 +6,9 @@ import { usePathname } from 'next/navigation';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/utils';
 import { APP_NAME, ROLES } from '@/constants';
-import { SIDEBAR_CONFIG } from '@/constants/sidebar';
+import { SIDEBAR_CONFIG, getSidebarItemsForUser } from '@/constants/sidebar';
 import { userService } from '@/services/user.service';
+import { useAuth } from '@/contexts/AuthContext';
 
 function formatBadgeCount(count) {
   const n = Number(count) || 0;
@@ -167,7 +168,9 @@ function NavGroup({ item, collapsed, pathname, badges = {} }) {
 
 export function Sidebar({ role, collapsed, onToggle }) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const config = SIDEBAR_CONFIG[role];
+  const items = getSidebarItemsForUser(role, user);
   const [badges, setBadges] = useState({});
 
   const loadBadges = useCallback(async () => {
@@ -204,7 +207,9 @@ export function Sidebar({ role, collapsed, onToggle }) {
         {!collapsed && (
           <div>
             <p className="font-display text-lg font-semibold text-primary">{APP_NAME}</p>
-            <p className="text-xs text-muted-foreground">{config.title}</p>
+            <p className="text-xs text-muted-foreground">
+              {user?.isOutlet || user?.tenant?.kind === 'outlet' ? 'Outlet' : config.title}
+            </p>
           </div>
         )}
         <button
@@ -218,10 +223,8 @@ export function Sidebar({ role, collapsed, onToggle }) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {config.items.map((item) => {
-          const siblingHrefs = config.items
-            .filter((row) => row.href)
-            .map((row) => row.href);
+        {items.map((item) => {
+          const siblingHrefs = items.filter((row) => row.href).map((row) => row.href);
 
           if (item.children?.length) {
             return (

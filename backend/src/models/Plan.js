@@ -102,6 +102,15 @@ const planSchema = new mongoose.Schema(
       default: 'MOST STAMPED',
       maxlength: 40,
     },
+    /**
+     * Outlet seat plan — sold to main admins (1 purchase = 1 outlet).
+     * Hidden from normal shop pricing; shown under Admin → Outlet plans.
+     */
+    forOutlet: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,

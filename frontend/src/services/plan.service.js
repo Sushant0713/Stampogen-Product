@@ -1,15 +1,18 @@
 import api from '@/lib/api';
 
 export const planService = {
-  getPublic: ({ force = false } = {}) =>
+  getPublic: ({ force = false, forOutlet = false } = {}) =>
     api.get('/plans/public', {
+      params: {
+        ...(forOutlet ? { forOutlet: '1' } : {}),
+        ...(force ? { _t: Date.now() } : {}),
+      },
       ...(force
         ? {
             headers: {
               'Cache-Control': 'no-cache',
               Pragma: 'no-cache',
             },
-            params: { _t: Date.now() },
           }
         : {}),
     }),

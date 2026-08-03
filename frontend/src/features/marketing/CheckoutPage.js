@@ -73,7 +73,7 @@ export function CheckoutPage() {
 function CheckoutPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, logout, loading: authLoading, initialized } = useAuth();
+  const { user, logout, refreshUser, loading: authLoading, initialized } = useAuth();
   const planCode = searchParams.get('plan') || '';
   const planId = searchParams.get('planId') || '';
   const urlDiscount = searchParams.get('discount') || '';
@@ -401,6 +401,25 @@ function CheckoutPageInner() {
   const finishSuccess = async ({ trial = false } = {}) => {
     clearRegistrationSession();
     notifyClientsChanged();
+
+    // Logged-in admin buying a seat/plan — keep the session (signup still goes to login).
+    if (isRenewalCheckout && !trial) {
+      const isOutletSeat = Boolean(quote?.plan?.forOutlet);
+      try {
+        await refreshUser?.();
+      } catch {
+        // ignore — seats still load on the outlets page
+      }
+      if (isOutletSeat) {
+        toast.success('Outlet seat added. Create your outlet below.');
+        window.location.assign('/admin/outlets?seat=1');
+        return;
+      }
+      toast.success('Payment successful');
+      window.location.assign('/admin/plans/my?paid=1');
+      return;
+    }
+
     try {
       if (user) await logout();
     } catch {

@@ -247,6 +247,10 @@ function applyCapacityPauses(catalog, enrolledCounts = {}) {
 }
 
 function normalizeCatalogOffer(o) {
+  const outletScope = o.outletScope === 'selected' ? 'selected' : 'all';
+  const outletTenantIds = Array.isArray(o.outletTenantIds)
+    ? o.outletTenantIds.map((id) => String(id)).filter(Boolean)
+    : [];
   return {
     key: o.key,
     title: o.title,
@@ -258,7 +262,16 @@ function normalizeCatalogOffer(o) {
     validUntil: parseOfferDate(o.validUntil),
     minOrderValue: Math.max(0, Number(o.minOrderValue) || 0),
     maxCustomers: normalizeMaxCustomers(o.maxCustomers),
+    outletScope,
+    outletTenantIds,
   };
+}
+
+function offerAppliesToOutlet(offer, outletTenantId) {
+  if (!outletTenantId) return true;
+  if ((offer.outletScope || 'all') !== 'selected') return true;
+  const ids = (offer.outletTenantIds || []).map(String);
+  return ids.includes(String(outletTenantId));
 }
 
 function formatAdminOffer(offer, { redemptions = 0, customerCount = 0 } = {}) {
@@ -605,6 +618,18 @@ class LoyaltyService {
     if (!tenant) throw new AppError('Shop organization not found', HTTP_STATUS.BAD_REQUEST);
     tenant = await this.ensureTenantCatalog(tenant);
 
+    // Outlets inherit HQ offers (filtered by All / specific outlets).
+    if (tenant.kind === 'outlet' && tenant.parentTenant) {
+      const parentId = tenant.parentTenant._id || tenant.parentTenant;
+      const parent = await TenantRepository.findById(parentId);
+      if (parent) {
+        const catalog = readCatalog(parent).filter((offer) =>
+          offerAppliesToOutlet(offer, tenant._id)
+        );
+        return { tenant, catalog, parentTenant: parent };
+      }
+    }
+
     const raw = tenant.loyaltyOffers || [];
     if (raw.some((o) => LEGACY_DEFAULT_OFFER_KEYS.has(o.key))) {
       tenant = await TenantRepository.updateById(tenant._id, {
@@ -682,6 +707,16 @@ class LoyaltyService {
 
     const { catalog } = await this.getCatalogForTenant(tenantId);
     await this.pauseOffersAtCapacity(tenantId, catalog, enrolledCounts);
+  }
+
+  /** Push an HQ offer onto memberships of applicable child outlets. */
+  async pushOfferToOutletMembers(hqTenantId, offer) {
+    if (!isOfferCurrentlyValid(offer) || offer.status === 'paused') return;
+    const outlets = await TenantRepository.findOutletsByParent(hqTenantId);
+    for (const outlet of outlets) {
+      if (!offerAppliesToOutlet(offer, outlet._id)) continue;
+      await this.pushOfferToMembers(outlet._id, offer);
+    }
   }
 
   async getShopPreview(slug) {
@@ -1761,10 +1796,23 @@ class LoyaltyService {
 
   async createAdminOffer(
     adminUser,
-    { title, stampsRequired, color, startDate, validUntil, minOrderValue, maxCustomers } = {}
+    {
+      title,
+      stampsRequired,
+      color,
+      startDate,
+      validUntil,
+      minOrderValue,
+      maxCustomers,
+      outletScope,
+      outletTenantIds,
+    } = {}
   ) {
     const tenantId = await this.getAdminTenantId(adminUser);
     const { tenant, catalog } = await this.getCatalogForTenant(tenantId);
+    if (tenant.kind === 'outlet') {
+      throw new AppError('Outlets cannot create offers. Ask the main shop admin.', HTTP_STATUS.FORBIDDEN);
+    }
 
     const cleanTitle = String(title || '').trim();
     if (!cleanTitle) throw new AppError('Offer title is required', HTTP_STATUS.BAD_REQUEST);
@@ -1779,6 +1827,14 @@ class LoyaltyService {
       key = `${key}_${n}`;
     }
 
+    const scope = outletScope === 'selected' ? 'selected' : 'all';
+    const selectedIds = Array.isArray(outletTenantIds)
+      ? outletTenantIds.map((id) => String(id)).filter(Boolean)
+      : [];
+    if (scope === 'selected' && !selectedIds.length) {
+      throw new AppError('Select at least one outlet for this offer', HTTP_STATUS.BAD_REQUEST);
+    }
+
     const offer = normalizeCatalogOffer({
       key,
       title: cleanTitle.slice(0, 200),
@@ -1790,11 +1846,14 @@ class LoyaltyService {
       validUntil: schedule.validUntil,
       minOrderValue: Math.max(0, Number(minOrderValue) || 0),
       maxCustomers: normalizeMaxCustomers(maxCustomers),
+      outletScope: scope,
+      outletTenantIds: selectedIds,
     });
 
     const loyaltyOffers = [...catalog, offer];
     await TenantRepository.updateById(tenant._id, { loyaltyOffers });
     await this.pushOfferToMembers(tenant._id, offer);
+    await this.pushOfferToOutletMembers(tenant._id, offer);
 
     const rows = await LoyaltyMembershipRepository.findByTenant(tenant._id);
     const customerCounts = buildEnrolledCounts(rows);
@@ -1810,10 +1869,13 @@ class LoyaltyService {
   async updateAdminOffer(
     adminUser,
     offerKey,
-    { title, stampsRequired, status, color, startDate, validUntil, minOrderValue, maxCustomers } = {}
+    { title, stampsRequired, status, color, startDate, validUntil, minOrderValue, maxCustomers, outletScope, outletTenantIds } = {}
   ) {
     const tenantId = await this.getAdminTenantId(adminUser);
     const { tenant, catalog } = await this.getCatalogForTenant(tenantId);
+    if (tenant.kind === 'outlet') {
+      throw new AppError('Outlets cannot edit offers. Ask the main shop admin.', HTTP_STATUS.FORBIDDEN);
+    }
     const idx = catalog.findIndex((o) => o.key === offerKey);
     if (idx < 0) throw new AppError('Offer not found', HTTP_STATUS.NOT_FOUND);
 
@@ -1846,6 +1908,23 @@ class LoyaltyService {
     }
     if (maxCustomers !== undefined) {
       next.maxCustomers = normalizeMaxCustomers(maxCustomers);
+    }
+    if (outletScope !== undefined || outletTenantIds !== undefined) {
+      const scope =
+        outletScope !== undefined
+          ? outletScope === 'selected'
+            ? 'selected'
+            : 'all'
+          : next.outletScope || 'all';
+      const selectedIds =
+        outletTenantIds !== undefined
+          ? (Array.isArray(outletTenantIds) ? outletTenantIds : []).map(String).filter(Boolean)
+          : next.outletTenantIds || [];
+      if (scope === 'selected' && !selectedIds.length) {
+        throw new AppError('Select at least one outlet for this offer', HTTP_STATUS.BAD_REQUEST);
+      }
+      next.outletScope = scope;
+      next.outletTenantIds = scope === 'selected' ? selectedIds : [];
     }
 
     const rowsBefore = await LoyaltyMembershipRepository.findByTenant(tenant._id);

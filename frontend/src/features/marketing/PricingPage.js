@@ -350,7 +350,7 @@ function PlanCard({ plan }) {
               {plan.mrp}
             </p>
           ) : null}
-          <p className={`flex items-baseline gap-1 ${plan.mrp ? 'mt-1.5' : ''}`}>
+          <p className={`flex flex-wrap items-baseline gap-x-1.5 gap-y-1 ${plan.mrp ? 'mt-1.5' : ''}`}>
             <span
               className="font-[family-name:var(--font-outfit)] text-[42px] font-bold leading-none tracking-tight"
               style={{ color: COLORS.ink }}
@@ -359,6 +359,9 @@ function PlanCard({ plan }) {
             </span>
             <span className="text-[16px] font-medium" style={{ color: COLORS.muted }}>
               {plan.period}
+            </span>
+            <span className="text-[14px] font-medium" style={{ color: COLORS.muted }}>
+              + 18% GST
             </span>
           </p>
         </div>

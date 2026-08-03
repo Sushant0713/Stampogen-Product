@@ -24,6 +24,7 @@ const createPlanValidator = [
     .trim()
     .isLength({ max: 40 })
     .withMessage('Badge text must be at most 40 characters'),
+  body('forOutlet').optional().isBoolean().withMessage('forOutlet must be a boolean'),
 ];
 
 const updatePlanValidator = [
@@ -56,6 +57,7 @@ const updatePlanValidator = [
     .trim()
     .isLength({ max: 40 })
     .withMessage('Badge text must be at most 40 characters'),
+  body('forOutlet').optional().isBoolean().withMessage('forOutlet must be a boolean'),
 ];
 
 const planIdValidator = [param('id').isMongoId().withMessage('Invalid plan ID')];

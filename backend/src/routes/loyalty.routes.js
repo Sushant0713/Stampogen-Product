@@ -111,6 +111,9 @@ router.post(
     .toDate(),
   body('minOrderValue').optional().isFloat({ min: 0 }),
   body('maxCustomers').optional({ nullable: true, checkFalsy: true }),
+  body('outletScope').optional().isIn(['all', 'selected']),
+  body('outletTenantIds').optional().isArray(),
+  body('outletTenantIds.*').optional().isMongoId(),
   validate,
   LoyaltyController.adminCreateOffer
 );
@@ -133,6 +136,9 @@ router.patch(
     .toDate(),
   body('minOrderValue').optional().isFloat({ min: 0 }),
   body('maxCustomers').optional({ nullable: true, checkFalsy: true }),
+  body('outletScope').optional().isIn(['all', 'selected']),
+  body('outletTenantIds').optional().isArray(),
+  body('outletTenantIds.*').optional().isMongoId(),
   validate,
   LoyaltyController.adminUpdateOffer
 );

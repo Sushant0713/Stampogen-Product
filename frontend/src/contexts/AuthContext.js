@@ -16,10 +16,14 @@ function sameUser(a, b) {
     a.email === b.email &&
     a.isActive === b.isActive &&
     a.isEmailVerified === b.isEmailVerified &&
+    a.phone === b.phone &&
     getRoleSlug(a) === getRoleSlug(b) &&
     String(a.tenant?._id || a.tenant || '') === String(b.tenant?._id || b.tenant || '') &&
     String(a.tenant?.status || '') === String(b.tenant?.status || '') &&
-    String(a.tenant?.loyaltyStampMode || '') === String(b.tenant?.loyaltyStampMode || '')
+    String(a.tenant?.loyaltyStampMode || '') === String(b.tenant?.loyaltyStampMode || '') &&
+    String(a.tenant?.billingProfile?.street || '') ===
+      String(b.tenant?.billingProfile?.street || '') &&
+    String(a.tenant?.billingProfile?.phone || '') === String(b.tenant?.billingProfile?.phone || '')
   );
 }
 

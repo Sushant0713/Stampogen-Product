@@ -56,9 +56,7 @@ export function AdminDashboardLayout({ children }) {
     const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
     if (
       isOutlet &&
-      (pathname.startsWith('/admin/offers') ||
-        pathname.startsWith('/admin/plans') ||
-        pathname.startsWith('/admin/outlets'))
+      (pathname.startsWith('/admin/plans') || pathname.startsWith('/admin/outlets'))
     ) {
       router.replace('/admin/dashboard');
     }

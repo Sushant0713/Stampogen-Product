@@ -385,8 +385,10 @@ function buildDefaultOffers(opts = {}) {
   return buildOffersFromCatalog(defaultCatalogOffers(), opts);
 }
 
-function ensureOffers(membership) {
-  const catalog = readCatalog(membership.tenant);
+function ensureOffers(membership, catalogOverride = null) {
+  const catalog = Array.isArray(catalogOverride)
+    ? catalogOverride
+    : readCatalog(membership.tenant);
   const catalogKeys = new Set(catalog.map((c) => c.key));
 
   if (Array.isArray(membership.offers) && membership.offers.length > 0) {
@@ -412,7 +414,7 @@ function ensureOffers(membership) {
 }
 
 function mergeOffersWithCatalog(membership, catalog, { enrolledCounts = {} } = {}) {
-  const existing = ensureOffers(membership);
+  const existing = ensureOffers(membership, catalog);
   const byKey = new Map(existing.map((o) => [o.key, { ...o }]));
   let changed = false;
 
@@ -659,6 +661,11 @@ class LoyaltyService {
   async pauseOffersAtCapacity(tenantId, catalog, enrolledCounts) {
     const { catalog: next, pausedKeys } = applyCapacityPauses(catalog, enrolledCounts);
     if (!pausedKeys.length) return catalog;
+    const tenant = await TenantRepository.findById(tenantId);
+    // Outlets inherit HQ offers — never write a local loyaltyOffers copy onto the outlet.
+    if (tenant?.kind === 'outlet') {
+      return next;
+    }
     await TenantRepository.updateById(tenantId, { loyaltyOffers: next });
     return next;
   }
@@ -839,12 +846,14 @@ class LoyaltyService {
     if (Array.isArray(membership.offers) && membership.offers.length > 0) {
       return membership;
     }
-    const catalog = readCatalog(membership.tenant);
-    const offers = ensureOffers(membership);
+    const tenantId = membership.tenant?._id || membership.tenant;
+    const { catalog } = await this.getCatalogForTenant(
+      membership.tenant || tenantId
+    );
+    const offers = ensureOffers(membership, catalog);
     if (offers.length) {
       return LoyaltyMembershipRepository.updateById(membership._id, { offers });
     }
-    const tenantId = membership.tenant?._id || membership.tenant;
     const rows = tenantId ? await LoyaltyMembershipRepository.findByTenant(tenantId) : [];
     const enrolledCounts = buildEnrolledCounts(rows);
     const nextOffers = buildOffersFromCatalog(catalog, { enrolledCounts });
@@ -1069,7 +1078,8 @@ class LoyaltyService {
       throw new AppError('Join this shop before collecting stamps', HTTP_STATUS.NOT_FOUND);
     }
     this.assertMembershipActive(membership);
-    membership = await this.persistOffersIfNeeded(membership);
+    const { catalog } = await this.getCatalogForTenant(tenant);
+    membership = await this.syncMembershipCatalog(membership, catalog);
 
     const bill = String(billDocument || '').trim();
     if (!bill.startsWith('data:image/') || bill.length < 32) {
@@ -1079,14 +1089,14 @@ class LoyaltyService {
       throw new AppError('Bill file is too large (max 5MB)', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const offers = ensureOffers(membership);
+    const offers = ensureOffers(membership, catalog);
     const key = resolveOfferKey({ offerKey, offerTitle, offers });
     const offerIndex = offers.findIndex((o) => o.key === key);
     if (offerIndex < 0) {
       throw new AppError('Offer not found', HTTP_STATUS.NOT_FOUND);
     }
 
-    const catalogOffer = readCatalog(tenant).find((o) => o.key === key);
+    const catalogOffer = catalog.find((o) => o.key === key);
     if (!catalogOffer || catalogOffer.status === 'paused' || !isOfferCurrentlyValid(catalogOffer)) {
       throw new AppError('This offer is not available right now', HTTP_STATUS.BAD_REQUEST);
     }
@@ -1187,19 +1197,16 @@ class LoyaltyService {
       throw new AppError('Join this shop before requesting a stamp', HTTP_STATUS.NOT_FOUND);
     }
     this.assertMembershipActive(membership);
-    membership = await this.syncMembershipCatalog(
-      membership,
-      readCatalog(await TenantRepository.findById(tenant._id))
-    );
+    const { catalog } = await this.getCatalogForTenant(tenant);
+    membership = await this.syncMembershipCatalog(membership, catalog);
 
-    const offers = ensureOffers(membership);
+    const offers = ensureOffers(membership, catalog);
     const key = resolveOfferKey({ offerKey, offerTitle, offers });
     const offerIndex = offers.findIndex((o) => o.key === key);
     if (offerIndex < 0) {
       throw new AppError('Offer not found', HTTP_STATUS.NOT_FOUND);
     }
 
-    const { catalog } = await this.getCatalogForTenant(tenant);
     const catalogOffer = catalog.find((o) => o.key === key);
     if (!catalogOffer || catalogOffer.status === 'paused' || !isOfferCurrentlyValid(catalogOffer)) {
       throw new AppError('This offer is not available right now', HTTP_STATUS.BAD_REQUEST);
@@ -1475,12 +1482,36 @@ class LoyaltyService {
     const tenantId = await this.getAdminTenantId(adminUser);
     const tenant = await TenantRepository.findById(tenantId);
     if (!tenant) throw new AppError('Shop not found', HTTP_STATUS.NOT_FOUND);
-    const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
+    const { normalizeBillingProfile, hasBillingProfile } = require('@helpers/billingProfile.helper');
+
+    let billing = normalizeBillingProfile(tenant.billingProfile || {});
+
+    // Outlets often have no billing of their own — fall back to HQ registration details.
+    if (!hasBillingProfile(billing) && (tenant.kind === 'outlet' || tenant.parentTenant)) {
+      const parentId = tenant.parentTenant?._id || tenant.parentTenant;
+      if (parentId) {
+        const parent = await TenantRepository.findById(parentId);
+        if (parent) {
+          billing = normalizeBillingProfile(parent.billingProfile || {});
+          if (!billing.phone) {
+            const parentOwner = parent.owner;
+            billing.phone = String(
+              (parentOwner && typeof parentOwner === 'object' ? parentOwner.phone : '') || ''
+            ).trim();
+          }
+        }
+      }
+    }
+
+    if (!billing.phone) {
+      billing.phone = String(adminUser.phone || '').trim();
+    }
+
     return {
       loyaltyStampMode: readStampMode(tenant),
       shopName: tenant.name,
       socialLinks: readSocialLinks(tenant),
-      billingProfile: normalizeBillingProfile(tenant.billingProfile || {}),
+      billingProfile: billing,
     };
   }
 

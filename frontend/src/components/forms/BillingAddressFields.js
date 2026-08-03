@@ -83,6 +83,22 @@ export function BillingAddressFields({
     setPinQuery(pin || '');
   }, [pin]);
 
+  // Registration saves state name without isoCode — resolve so city dropdown works and state shows selected.
+  useEffect(() => {
+    if (!csc || !state || stateCode) return;
+    const matched = stateOptions.find(
+      (opt) => normalizeStateName(opt.name) === normalizeStateName(state)
+    );
+    if (!matched) return;
+    onChange({
+      street,
+      state: matched.name,
+      stateCode: matched.value,
+      city,
+      pin,
+    });
+  }, [csc, state, stateCode, stateOptions, onChange, street, city, pin]);
+
   const patch = useCallback(
     (next) => {
       onChange({
@@ -160,7 +176,8 @@ export function BillingAddressFields({
         }
         setPinResults(unique);
 
-        if (isPin && unique[0]) {
+        // Only auto-fill empty city/state — never overwrite registration prefill on open.
+        if (isPin && unique[0] && (!city || !state || !stateCode)) {
           const office = unique[0];
           const pinCode = String(office.Pincode || q).trim();
           const district = String(office.District || '').trim();
@@ -170,13 +187,12 @@ export function BillingAddressFields({
           );
           patch({
             pin: pinCode,
-            city: district,
-            state: matchedState?.name || stateName,
-            stateCode: matchedState?.value || '',
+            city: city || district,
+            state: state || matchedState?.name || stateName,
+            stateCode: stateCode || matchedState?.value || '',
           });
           setPinQuery(pinCode);
           setPinHint(`Found ${unique.length} area${unique.length > 1 ? 's' : ''} for PIN ${pinCode}`);
-          setPinOpen(true);
         }
       } catch (error) {
         if (error?.name === 'AbortError') return;
@@ -221,7 +237,7 @@ export function BillingAddressFields({
         <SearchableSelect
           id={`${idPrefix}state`}
           label="State"
-          value={stateCode}
+          value={stateCode || state}
           options={stateOptions}
           placeholder={cscLoading ? 'Loading states…' : 'Select state'}
           searchPlaceholder="Search state…"

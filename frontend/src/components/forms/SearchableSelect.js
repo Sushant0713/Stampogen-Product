@@ -29,10 +29,14 @@ export function SearchableSelect({
   const [query, setQuery] = useState('');
 
   const selected = useMemo(() => {
-    const found = options.find((opt) => String(opt.value) === String(value));
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    const found =
+      options.find((opt) => String(opt.value) === raw) ||
+      options.find((opt) => String(opt.label).toLowerCase() === raw.toLowerCase()) ||
+      options.find((opt) => String(opt.name || '').toLowerCase() === raw.toLowerCase());
     if (found) return found;
-    if (value) return { value, label: String(value) };
-    return null;
+    return { value: raw, label: raw };
   }, [options, value]);
 
   const filtered = useMemo(() => {

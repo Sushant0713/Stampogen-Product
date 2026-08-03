@@ -144,8 +144,14 @@ async function applyGstToQuote(taxableAmount, customerCtx = {}) {
   };
 }
 
-async function quotePlan(plan, discountCode = '', customerOpts = {}) {
-  const listAmount = roundMoney(Number(plan.priceAmount) || 0);
+async function quotePlan(plan, discountCode = '', customerOpts = {}, { quantity: rawQty = 1 } = {}) {
+  const unitAmount = roundMoney(Number(plan.priceAmount) || 0);
+  // Multi-seat only for outlet plans; renewals stay at 1 via caller.
+  let quantity = 1;
+  if (plan.forOutlet) {
+    quantity = Math.min(50, Math.max(1, Math.floor(Number(rawQty) || 1)));
+  }
+  const listAmount = roundMoney(unitAmount * quantity);
   const code = String(discountCode || '')
     .trim()
     .toUpperCase();
@@ -212,12 +218,14 @@ async function quotePlan(plan, discountCode = '', customerOpts = {}) {
       name: plan.name,
       code: plan.code,
       billing: plan.billing,
-      priceAmount: listAmount,
+      priceAmount: unitAmount,
       priceLabel: formatPrice(plan),
       ctaText: plan.ctaText || 'Get early access',
       description: plan.description || '',
       forOutlet: Boolean(plan.forOutlet),
     },
+    quantity,
+    unitAmount,
     discountCode: appliedCode,
     discountId,
     listAmount,
@@ -380,11 +388,17 @@ function queuePaymentInvoice(paymentDoc) {
 class PaymentService {
   async preview(body = {}) {
     const plan = await resolvePlan(body.planId || body.planCode);
-    return quotePlan(plan, body.discountCode, {
-      customerEmail: body.customerEmail,
-      customerGstin: body.customerGstin,
-      customerState: body.customerState,
-    });
+    const quantity = plan.forOutlet ? body.quantity : 1;
+    return quotePlan(
+      plan,
+      body.discountCode,
+      {
+        customerEmail: body.customerEmail,
+        customerGstin: body.customerGstin,
+        customerState: body.customerState,
+      },
+      { quantity }
+    );
   }
 
   async createOrder(body = {}, actorOrUser = {}) {
@@ -421,6 +435,40 @@ class PaymentService {
 
     const plan = await resolvePlan(body.planId || body.planCode);
 
+    let renewOutletTenantId = null;
+    const renewOutletRaw = String(body.renewOutletTenantId || '').trim();
+    if (renewOutletRaw) {
+      if (!plan.forOutlet) {
+        throw new AppError(
+          'Only outlet plans can renew a specific outlet',
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+      if (pendingRegistration) {
+        throw new AppError(
+          'Outlet renewals require a logged-in shop admin',
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+      const hqTenantId = user?.tenant?._id || user?.tenant;
+      if (!hqTenantId) {
+        throw new AppError('Shop organization not found', HTTP_STATUS.BAD_REQUEST);
+      }
+      const hqTenant = await TenantRepository.findById(hqTenantId);
+      if (!hqTenant || hqTenant.kind === 'outlet') {
+        throw new AppError('Only the main shop admin can renew outlets', HTTP_STATUS.FORBIDDEN);
+      }
+      const outlet = await TenantRepository.findById(renewOutletRaw);
+      if (!outlet || outlet.kind !== 'outlet') {
+        throw new AppError('Outlet not found', HTTP_STATUS.NOT_FOUND);
+      }
+      const parentId = outlet.parentTenant?._id || outlet.parentTenant;
+      if (String(parentId) !== String(hqTenant._id)) {
+        throw new AppError('Outlet does not belong to this shop', HTTP_STATUS.FORBIDDEN);
+      }
+      renewOutletTenantId = outlet._id;
+    }
+
     const customerName = String(body.customerName || '').trim() || fallbackName;
     const customerPhone =
       String(body.customerPhone || '').trim() ||
@@ -429,13 +477,21 @@ class PaymentService {
 
     if (!customerName) throw new AppError('Name is required', HTTP_STATUS.BAD_REQUEST);
 
-    const quote = await quotePlan(plan, body.discountCode, {
-      customerEmail,
-      customerGstin:
-        body.customerGstin || pendingRegistration?.billingProfile?.gstin || undefined,
-      customerState:
-        body.customerState || pendingRegistration?.billingProfile?.state || undefined,
-    });
+    // Renewing one outlet always buys a single seat cycle.
+    const quantity = renewOutletTenantId ? 1 : plan.forOutlet ? body.quantity : 1;
+
+    const quote = await quotePlan(
+      plan,
+      body.discountCode,
+      {
+        customerEmail,
+        customerGstin:
+          body.customerGstin || pendingRegistration?.billingProfile?.gstin || undefined,
+        customerState:
+          body.customerState || pendingRegistration?.billingProfile?.state || undefined,
+      },
+      { quantity }
+    );
 
     const payment = await PaymentRepository.create({
       plan: plan._id,
@@ -460,6 +516,8 @@ class PaymentService {
       status: quote.payableAmount <= 0 ? 'free' : 'created',
       paidAt: quote.payableAmount <= 0 ? new Date() : null,
       pendingRegistration: pendingRegistrationId,
+      renewOutletTenantId,
+      quantity: quote.quantity || 1,
     });
 
     if (quote.payableAmount <= 0) {

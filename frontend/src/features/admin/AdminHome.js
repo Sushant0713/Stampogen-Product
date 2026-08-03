@@ -99,6 +99,7 @@ export function AdminHome() {
   const { logout } = useAuth();
   const { fullName, user } = useUser();
   const sub = user?.subscription || user?.tenant?.subscription || null;
+  const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
   const shopName = user?.tenant?.name || 'your shop';
   const tenantSlug = user?.tenant?.slug || '';
   const joinUrl = useMemo(
@@ -471,23 +472,25 @@ export function AdminHome() {
         )}
       </div>
 
-      {/* Upgrade banner */}
-      <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-br from-[#021A54] via-[#0C3A9C] to-[#3B82F6] p-[22px] shadow-[0_18px_40px_rgba(2,26,84,0.32)]">
-        <div className="pointer-events-none absolute -right-8 -top-8 h-[150px] w-[150px] rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute bottom-[-40px] right-8 h-[90px] w-[90px] rounded-full bg-white/[0.06]" />
-        <p className="relative text-[19px] font-extrabold text-white">Unlock Premium</p>
-        <p className="relative mt-2 max-w-md text-[13px] leading-relaxed text-white/80">
-          {sub?.planName
-            ? `You're on ${sub.planName}. Upgrade for unlimited campaigns, AI insights, and advanced analytics.`
-            : 'Increase retention with unlimited campaigns, AI insights, advanced analytics and marketing automation.'}
-        </p>
-        <Link
-          href="/admin/plans/browse"
-          className="relative mt-3.5 inline-flex items-center gap-1.5 rounded-[14px] bg-white px-5 py-3 text-sm font-bold text-[#021A54] shadow-[0_8px_20px_rgba(0,0,0,0.15)] active:scale-[0.98]"
-        >
-          {sub?.planName ? 'Browse plans' : 'Upgrade now'} →
-        </Link>
-      </div>
+      {/* Upgrade banner — HQ only (outlets don't buy shop plans) */}
+      {!isOutlet ? (
+        <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-br from-[#021A54] via-[#0C3A9C] to-[#3B82F6] p-[22px] shadow-[0_18px_40px_rgba(2,26,84,0.32)]">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-[150px] w-[150px] rounded-full bg-white/10" />
+          <div className="pointer-events-none absolute bottom-[-40px] right-8 h-[90px] w-[90px] rounded-full bg-white/[0.06]" />
+          <p className="relative text-[19px] font-extrabold text-white">Unlock Premium</p>
+          <p className="relative mt-2 max-w-md text-[13px] leading-relaxed text-white/80">
+            {sub?.planName
+              ? `You're on ${sub.planName}. Upgrade for unlimited campaigns, AI insights, and advanced analytics.`
+              : 'Increase retention with unlimited campaigns, AI insights, advanced analytics and marketing automation.'}
+          </p>
+          <Link
+            href="/admin/plans/browse"
+            className="relative mt-3.5 inline-flex items-center gap-1.5 rounded-[14px] bg-white px-5 py-3 text-sm font-bold text-[#021A54] shadow-[0_8px_20px_rgba(0,0,0,0.15)] active:scale-[0.98]"
+          >
+            {sub?.planName ? 'Browse plans' : 'Upgrade now'} →
+          </Link>
+        </div>
+      ) : null}
 
       {/* Activity */}
       <div>

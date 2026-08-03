@@ -84,10 +84,18 @@ export const SIDEBAR_CONFIG = {
     basePath: '/admin',
     items: withBasePath('/admin', [
       { label: 'Home', href: 'dashboard', icon: Home, tourId: 'admin-home' },
-      { label: 'Offers', href: 'offers', icon: Gift, tourId: 'admin-offers', hqOnly: true },
+      { label: 'Offers', href: 'offers', icon: Gift, tourId: 'admin-offers' },
       { label: 'Rewards', href: 'rewards', icon: Trophy, tourId: 'admin-rewards' },
       { label: 'Customers', href: 'customers', icon: Users, tourId: 'admin-customers' },
-      { label: 'Outlets', href: 'outlets', icon: Store, hqOnly: true },
+      {
+        label: 'Outlets',
+        icon: Store,
+        hqOnly: true,
+        children: [
+          { label: 'My outlets', href: 'outlets' },
+          { label: 'Browse outlet plans', href: 'plans/outlet/browse' },
+        ],
+      },
       {
         label: 'Plans',
         icon: Package,
@@ -95,8 +103,6 @@ export const SIDEBAR_CONFIG = {
         children: [
           { label: 'My plan', href: 'plans/my' },
           { label: 'Browse plans', href: 'plans/browse' },
-          { label: 'My outlet seats', href: 'plans/outlet/my' },
-          { label: 'Browse outlet plans', href: 'plans/outlet/browse' },
         ],
       },
       { label: 'Profile', href: 'profile', icon: UserCircle, tourId: 'admin-profile' },
@@ -112,7 +118,7 @@ export const SIDEBAR_CONFIG = {
   },
 };
 
-/** Filter admin nav for outlet logins (no Offers / Plans / Outlets). */
+/** Filter admin nav for outlet logins (no Plans / Outlets). Offers stay visible read-only. */
 export function getSidebarItemsForUser(role, user) {
   const config = SIDEBAR_CONFIG[role];
   if (!config) return [];

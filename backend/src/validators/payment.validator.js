@@ -7,6 +7,7 @@ const previewPaymentValidator = [
   body('customerEmail').optional().trim().isEmail().withMessage('Valid email is required'),
   body('customerGstin').optional().trim().isLength({ max: 20 }),
   body('customerState').optional().trim().isLength({ max: 100 }),
+  body('quantity').optional().isInt({ min: 1, max: 50 }).withMessage('Quantity must be 1–50'),
   body().custom((_, { req }) => {
     if (!req.body.planId && !req.body.planCode) {
       throw new Error('Plan id or code is required');
@@ -25,6 +26,8 @@ const createOrderValidator = [
   body('customerGstin').optional().trim().isLength({ max: 20 }),
   body('customerState').optional().trim().isLength({ max: 100 }),
   body('registrationToken').optional().trim().isLength({ min: 16, max: 128 }),
+  body('renewOutletTenantId').optional({ values: 'falsy' }).isMongoId().withMessage('Invalid outlet id'),
+  body('quantity').optional().isInt({ min: 1, max: 50 }).withMessage('Quantity must be 1–50'),
   body().custom((_, { req }) => {
     if (!req.body.planId && !req.body.planCode) {
       throw new Error('Plan id or code is required');

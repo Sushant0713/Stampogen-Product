@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -32,7 +32,9 @@ export function AdminOutletsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const seatJustPurchased = searchParams.get('seat') === '1';
+  const justRenewed = searchParams.get('renewed') === '1';
   const seatPromptDone = useRef(false);
+  const renewToastDone = useRef(false);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,29 @@ export function AdminOutletsPage() {
   }, [load]);
 
   const unusedSeats = (data?.seats?.items || []).filter((s) => s.active && !s.used);
+  const expiredOutlets = data?.expiredOutlets || (data?.outlets || []).filter((o) => o.expired);
+
+  // Stable Seat 1, 2, 3… by purchase order (oldest first).
+  const seatNumberById = useMemo(() => {
+    const items = [...(data?.seats?.items || [])].sort(
+      (a, b) =>
+        new Date(a.purchasedAt || 0).getTime() - new Date(b.purchasedAt || 0).getTime()
+    );
+    const map = new Map();
+    items.forEach((seat, index) => {
+      map.set(String(seat.id), index + 1);
+    });
+    return map;
+  }, [data?.seats?.items]);
+
+  const numberedUnusedSeats = useMemo(
+    () =>
+      unusedSeats.map((seat) => ({
+        ...seat,
+        seatNumber: seatNumberById.get(String(seat.id)) || 0,
+      })),
+    [unusedSeats, seatNumberById]
+  );
 
   // After checkout: open Add outlet and clear the query so refresh doesn't re-toast.
   useEffect(() => {
@@ -74,6 +99,27 @@ export function AdminOutletsPage() {
     }
     router.replace('/admin/outlets', { scroll: false });
   }, [seatJustPurchased, loading, data, unusedSeats, router]);
+
+  useEffect(() => {
+    if (!justRenewed || renewToastDone.current) return;
+    renewToastDone.current = true;
+    toast.success('Outlet plan updated');
+    router.replace('/admin/outlets', { scroll: false });
+  }, [justRenewed, router]);
+
+  const renewHref = (outlet) => {
+    if (outlet.planCode) {
+      const params = new URLSearchParams({
+        plan: outlet.planCode,
+        renewOutlet: outlet.id,
+      });
+      return `/checkout?${params.toString()}`;
+    }
+    return `/admin/plans/outlet/browse?renewOutlet=${encodeURIComponent(outlet.id)}`;
+  };
+
+  const changeHref = (outlet) =>
+    `/admin/plans/outlet/browse?renewOutlet=${encodeURIComponent(outlet.id)}`;
 
   const handleCreate = async (event) => {
     event.preventDefault();
@@ -110,7 +156,7 @@ export function AdminOutletsPage() {
   return (
     <div className="mx-auto w-full max-w-5xl lg:max-w-none">
       <AdminPageHeader
-        title="Outlets"
+        title="My outlets"
         subtitle="Buy an outlet plan seat, then create a separate login for each outlet."
       />
 
@@ -128,6 +174,41 @@ export function AdminOutletsPage() {
           </div>
         ))}
       </div>
+
+      {expiredOutlets.length > 0 ? (
+        <div className="mb-5 space-y-3">
+          {expiredOutlets.map((outlet) => (
+            <div
+              key={`expired-${outlet.id}`}
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950"
+            >
+              <p className="font-bold">
+                {outlet.name} plan has ended
+                {outlet.planName ? ` (${outlet.planName})` : ''}
+              </p>
+              <p className="mt-1 text-[13px] text-red-900/80">
+                Ended {formatDate(outlet.planEndsAt)}. That outlet login stays locked until you
+                renew or change its plan.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href={renewHref(outlet)}
+                  className="inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-bold text-white"
+                  style={{ backgroundColor: ADMIN_ACCENT }}
+                >
+                  Renew plan
+                </Link>
+                <Link
+                  href={changeHref(outlet)}
+                  className="inline-flex h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 text-sm font-bold text-[#344054]"
+                >
+                  Change plan
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {unusedSeats.length > 0 ? (
         <div
@@ -199,20 +280,32 @@ export function AdminOutletsPage() {
                 className="h-11 w-full rounded-lg border border-[#D0D5DD] px-3"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-semibold text-[#344054]">Use seat</span>
+            <label className="block text-sm sm:col-span-2">
+              <span className="mb-1 block font-semibold text-[#344054]">
+                Which outlet seat to use
+              </span>
               <select
                 value={form.seatId}
                 onChange={(e) => setForm((p) => ({ ...p, seatId: e.target.value }))}
                 className="h-11 w-full rounded-lg border border-[#D0D5DD] px-3"
               >
-                <option value="">First available seat</option>
-                {unusedSeats.map((seat) => (
+                <option value="">
+                  Auto — next free seat
+                  {numberedUnusedSeats[0]?.seatNumber
+                    ? ` (Seat ${numberedUnusedSeats[0].seatNumber})`
+                    : ''}
+                </option>
+                {numberedUnusedSeats.map((seat) => (
                   <option key={seat.id} value={seat.id}>
-                    {seat.planName} · ends {formatDate(seat.endsAt)}
+                    Seat {seat.seatNumber} — {seat.planName || 'Outlet plan'} · ends{' '}
+                    {formatDate(seat.endsAt)}
                   </option>
                 ))}
               </select>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-[#667085]">
+                Each outlet plan purchase gives you 1 seat. Creating this outlet uses one unused
+                seat. “Auto — next free seat” picks the first unused active seat for you.
+              </p>
             </label>
             <label className="block text-sm">
               <span className="mb-1 block font-semibold text-[#344054]">Manager first name</span>
@@ -258,10 +351,34 @@ export function AdminOutletsPage() {
                 <div>
                   <p className="text-sm font-bold text-[#0F172A]">{outlet.name}</p>
                   <p className="text-[12px] text-[#94A3B8]">
-                    {outlet.ownerEmail} · /{outlet.slug} · {outlet.status}
+                    {outlet.ownerEmail} · /{outlet.slug}
+                    {outlet.planName ? ` · ${outlet.planName}` : ''}
+                    {outlet.planEndsAt ? ` · ends ${formatDate(outlet.planEndsAt)}` : ''}
                   </p>
                 </div>
-                <p className="text-[12px] text-[#667085]">Created {formatDate(outlet.createdAt)}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {outlet.expired ? (
+                    <>
+                      <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-800">
+                        Plan ended
+                      </span>
+                      <Link
+                        href={renewHref(outlet)}
+                        className="rounded-lg bg-[#021A54] px-3 py-1.5 text-[12px] font-bold text-white"
+                      >
+                        Renew
+                      </Link>
+                      <Link
+                        href={changeHref(outlet)}
+                        className="rounded-lg border border-[#D0D5DD] bg-white px-3 py-1.5 text-[12px] font-bold text-[#344054]"
+                      >
+                        Change plan
+                      </Link>
+                    </>
+                  ) : (
+                    <p className="text-[12px] text-[#667085]">Created {formatDate(outlet.createdAt)}</p>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -276,10 +393,15 @@ export function AdminOutletsPage() {
           <p className="px-4 py-8 text-center text-sm text-[#667085]">No outlet seats purchased yet.</p>
         ) : (
           <ul className="divide-y divide-[#F8FAFC]">
-            {data.seats.items.map((seat) => (
+            {data.seats.items.map((seat) => {
+              const seatNumber = seatNumberById.get(String(seat.id));
+              return (
               <li key={seat.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
                 <div>
-                  <p className="text-sm font-bold text-[#0F172A]">{seat.planName || 'Outlet plan'}</p>
+                  <p className="text-sm font-bold text-[#0F172A]">
+                    {seatNumber ? `Seat ${seatNumber} — ` : ''}
+                    {seat.planName || 'Outlet plan'}
+                  </p>
                   <p className="text-[12px] text-[#94A3B8]">
                     {seat.billing} · ends {formatDate(seat.endsAt)}
                   </p>
@@ -296,7 +418,8 @@ export function AdminOutletsPage() {
                   {!seat.active ? 'Expired' : seat.used ? 'In use' : 'Unused'}
                 </span>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

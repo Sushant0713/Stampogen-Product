@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { cn } from '@/utils';
-import { ADMIN_BOTTOM_NAV } from '@/features/admin/adminTheme';
 import { loyaltyService } from '@/services/loyalty.service';
-import { useAuth } from '@/contexts/AuthContext';
+import { ADMIN_BOTTOM_NAV } from '@/features/admin/adminTheme';
+import { cn } from '@/utils';
 
 function isNavActive(pathname, href) {
   if (href === '/admin/dashboard') {
@@ -17,8 +16,6 @@ function isNavActive(pathname, href) {
 
 export function AdminBottomNav() {
   const pathname = usePathname() || '';
-  const { user } = useAuth();
-  const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
   const [rewardAlerts, setRewardAlerts] = useState(0);
 
   const loadAlerts = useCallback(async () => {
@@ -39,9 +36,7 @@ export function AdminBottomNav() {
     return () => clearInterval(id);
   }, [loadAlerts]);
 
-  const items = isOutlet
-    ? ADMIN_BOTTOM_NAV.filter((item) => item.id !== 'offers')
-    : ADMIN_BOTTOM_NAV;
+  const items = ADMIN_BOTTOM_NAV;
 
   return (
     <nav

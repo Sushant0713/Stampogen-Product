@@ -7,8 +7,14 @@ const TenantRepository = require('@repositories/tenant.repository');
 const UserRepository = require('@repositories/user.repository');
 const RoleRepository = require('@repositories/role.repository');
 const PlanRepository = require('@repositories/plan.repository');
-const { computePlanEndsAt } = require('@helpers/billing.helper');
+const {
+  computePlanEndsAt,
+  scheduleOrApplyPurchase,
+  markSubscriptionPaid,
+  getSubscriptionView,
+} = require('@helpers/billing.helper');
 const { sendAdminClientCredentialsEmail } = require('@services/email.service');
+const { normalizeBillingProfile } = require('@helpers/billingProfile.helper');
 
 function isSeatActive(seat, asOf = new Date()) {
   if (!seat) return false;
@@ -72,7 +78,8 @@ class OutletService {
   }
 
   /**
-   * After paid checkout of an outlet plan — add one seat on the HQ tenant.
+   * After paid checkout of an outlet plan — add one seat on the HQ tenant,
+   * or renew/change plan for a specific outlet when renewOutletTenantId is set.
    */
   async grantSeatFromPayment(payment, plan) {
     const email = String(payment.customerEmail || '')
@@ -87,14 +94,23 @@ class OutletService {
     const tenant = await TenantRepository.findById(tenantId);
     if (!tenant || tenant.kind === 'outlet') return null;
 
+    const renewOutletId = payment.renewOutletTenantId
+      ? String(payment.renewOutletTenantId)
+      : '';
+    if (renewOutletId) {
+      return this.renewOutletFromPayment(payment, plan, tenant, renewOutletId);
+    }
+
     const purchasedAt = payment.paidAt ? new Date(payment.paidAt) : new Date();
     const billing = payment.billing || plan.billing || 'Monthly';
-    const pricePerCycle =
+    const quantity = Math.min(50, Math.max(1, Math.floor(Number(payment.quantity) || 1)));
+    const taxableTotal =
       payment.taxableAmount != null
         ? Number(payment.taxableAmount)
         : Math.max(0, Number(payment.listAmount || 0) - Number(payment.discountAmount || 0));
+    const pricePerCycle = Math.round((taxableTotal / quantity) * 100) / 100;
 
-    const seat = {
+    const newSeats = Array.from({ length: quantity }, () => ({
       planCode: plan.code || payment.planCode || '',
       planName: plan.name || payment.planName || '',
       pricePerCycle,
@@ -104,10 +120,78 @@ class OutletService {
       endsAt: computePlanEndsAt(purchasedAt, billing),
       paymentId: payment._id || null,
       outletTenantId: null,
+    }));
+
+    const seats = [...(tenant.outletSeats || []), ...newSeats];
+    return TenantRepository.updateById(tenantId, { outletSeats: seats });
+  }
+
+  /**
+   * Renew or change the plan for an existing outlet (extends / replaces seat + outlet currentPlan).
+   */
+  async renewOutletFromPayment(payment, plan, hqTenant, outletTenantId) {
+    const outlet = await TenantRepository.findById(outletTenantId);
+    if (!outlet || outlet.kind !== 'outlet') {
+      throw new AppError('Outlet not found', HTTP_STATUS.NOT_FOUND);
+    }
+    const parentId = outlet.parentTenant?._id || outlet.parentTenant;
+    if (String(parentId) !== String(hqTenant._id)) {
+      throw new AppError('Outlet does not belong to this shop', HTTP_STATUS.FORBIDDEN);
+    }
+
+    const purchasedAt = payment.paidAt ? new Date(payment.paidAt) : new Date();
+    const billing = payment.billing || plan.billing || 'Monthly';
+    const pricePerCycle =
+      payment.taxableAmount != null
+        ? Number(payment.taxableAmount)
+        : Math.max(0, Number(payment.listAmount || 0) - Number(payment.discountAmount || 0));
+
+    const { tenant: scheduled } = scheduleOrApplyPurchase(outlet, {
+      planName: plan.name || payment.planName,
+      pricePerCycle,
+      billing,
+      purchasedAt,
+    });
+    const paid = markSubscriptionPaid(scheduled);
+
+    await TenantRepository.updateById(outlet._id, {
+      currentPlan: paid.currentPlan,
+      pendingPlan: paid.pendingPlan,
+      billingHistory: paid.billingHistory,
+      subscriptionSource: paid.subscriptionSource,
+      trial: paid.trial,
+      status: TENANT_STATUS.ACTIVE,
+    });
+
+    const seatEndsAt =
+      paid.currentPlan?.endsAt || computePlanEndsAt(purchasedAt, billing);
+    const seats = [...(hqTenant.outletSeats || [])];
+    const seatIndex = seats.findIndex(
+      (s) => s.outletTenantId && String(s.outletTenantId) === String(outlet._id)
+    );
+    const seatPatch = {
+      planCode: plan.code || payment.planCode || '',
+      planName: plan.name || payment.planName || '',
+      pricePerCycle,
+      billing,
+      purchasedAt,
+      startsAt: paid.currentPlan?.startedAt || purchasedAt,
+      endsAt: seatEndsAt,
+      paymentId: payment._id || null,
+      outletTenantId: outlet._id,
     };
 
-    const seats = [...(tenant.outletSeats || []), seat];
-    return TenantRepository.updateById(tenantId, { outletSeats: seats });
+    if (seatIndex >= 0) {
+      const prev = seats[seatIndex];
+      seats[seatIndex] = {
+        ...(prev.toObject ? prev.toObject() : prev),
+        ...seatPatch,
+      };
+    } else {
+      seats.push(seatPatch);
+    }
+
+    return TenantRepository.updateById(hqTenant._id, { outletSeats: seats });
   }
 
   async getDashboard(adminUser) {
@@ -116,6 +200,37 @@ class OutletService {
     const activeSeats = seats.filter((s) => s.active);
     const unusedSeats = activeSeats.filter((s) => !s.used);
     const outlets = await TenantRepository.findOutletsByParent(hq._id);
+
+    const outletRows = outlets.map((o) => {
+      const id = String(o._id);
+      const seat = seats.find((s) => s.outletTenantId === id) || null;
+      const sub = getSubscriptionView(o);
+      const endsAt = sub?.endsAt || o.currentPlan?.endsAt || seat?.endsAt || null;
+      const planActive = endsAt ? isSeatActive({ endsAt }) : Boolean(sub?.planName && !['expired', 'trial_expired'].includes(sub?.status));
+      const expired =
+        Boolean(sub?.planName) &&
+        (sub.status === 'expired' ||
+          sub.status === 'trial_expired' ||
+          (sub.daysRemaining != null && sub.daysRemaining < 0) ||
+          (endsAt && !isSeatActive({ endsAt })));
+
+      return {
+        id,
+        name: o.name,
+        slug: o.slug,
+        status: o.status,
+        createdAt: o.createdAt,
+        ownerEmail: o.owner?.email || '',
+        ownerName: [o.owner?.firstName, o.owner?.lastName].filter(Boolean).join(' ').trim(),
+        planName: sub?.planName || seat?.planName || o.currentPlan?.name || '',
+        planCode: seat?.planCode || '',
+        planEndsAt: endsAt,
+        planActive: Boolean(planActive) && !expired,
+        expired: Boolean(expired),
+        seatId: seat?.id || null,
+        daysRemaining: sub?.daysRemaining ?? null,
+      };
+    });
 
     return {
       hq: {
@@ -132,15 +247,8 @@ class OutletService {
           (a, b) => new Date(b.purchasedAt || 0).getTime() - new Date(a.purchasedAt || 0).getTime()
         ),
       },
-      outlets: outlets.map((o) => ({
-        id: String(o._id),
-        name: o.name,
-        slug: o.slug,
-        status: o.status,
-        createdAt: o.createdAt,
-        ownerEmail: o.owner?.email || '',
-        ownerName: [o.owner?.firstName, o.owner?.lastName].filter(Boolean).join(' ').trim(),
-      })),
+      outlets: outletRows,
+      expiredOutlets: outletRows.filter((o) => o.expired),
       canAddOutlet: unusedSeats.length > 0,
     };
   }
@@ -233,6 +341,7 @@ class OutletService {
       loyaltyStampMode: hq.loyaltyStampMode || 'bill',
       category: hq.category || undefined,
       customCategory: hq.customCategory || '',
+      billingProfile: normalizeBillingProfile(hq.billingProfile || {}),
       // Outlet uses HQ subscription gate via parent — give a mirror plan label for UI
       currentPlan: {
         name: seat.planName || 'Outlet',

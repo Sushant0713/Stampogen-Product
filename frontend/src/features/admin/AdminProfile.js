@@ -33,16 +33,42 @@ import {
   unlockStampRequestSound,
 } from '@/utils/stampRequestSound';
 
-const EMPTY_BILLING = {
-  phone: '',
-  street: '',
-  state: '',
-  stateCode: '',
-  city: '',
-  pin: '',
-  gstin: '',
-  pan: '',
-};
+function mapBillingProfile(bp = {}, phoneFallback = '') {
+  const lines = String(bp.address || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  let street = String(bp.street || '').trim();
+  let city = String(bp.city || '').trim();
+  let state = String(bp.state || '').trim();
+  let pin = String(bp.pin || '').trim();
+
+  if (!street && lines[0]) street = lines[0];
+  if ((!city || !state) && lines[1]) {
+    const parts = lines[1].split(',').map((p) => p.trim()).filter(Boolean);
+    if (!city && parts[0]) city = parts[0];
+    if (!state && parts[1]) state = parts[1];
+  }
+  if (!pin) {
+    const pinLine = lines.find((l) => /\bPIN\s*\d{6}\b/i.test(l) || /^\d{6}$/.test(l));
+    if (pinLine) {
+      const m = pinLine.match(/(\d{6})/);
+      if (m) pin = m[1];
+    }
+  }
+
+  return {
+    phone: String(bp.phone || phoneFallback || '').trim(),
+    street,
+    state,
+    stateCode: String(bp.stateCode || '').trim(),
+    city,
+    pin,
+    gstin: String(bp.gstin || '').trim(),
+    pan: String(bp.pan || '').trim(),
+  };
+}
 
 function initials(fullName) {
   const parts = String(fullName || 'A').trim().split(/\s+/).filter(Boolean);
@@ -92,6 +118,8 @@ export function AdminProfile() {
   const router = useRouter();
   const { logout } = useAuth();
   const { fullName, email, user } = useUser();
+  const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
+  const isHqAdmin = !isOutlet;
   const shopName = user?.tenant?.name || 'Your shop';
   const sub = user?.subscription || user?.tenant?.subscription || null;
 
@@ -101,14 +129,33 @@ export function AdminProfile() {
   const [socialLinks, setSocialLinks] = useState(() => emptySocialLinks());
   const [savingSocial, setSavingSocial] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
-  const [billing, setBilling] = useState(EMPTY_BILLING);
-  const [billingOpen, setBillingOpen] = useState(false);
+  const [billing, setBilling] = useState(() =>
+    mapBillingProfile(user?.tenant?.billingProfile, user?.phone)
+  );
+  const [billingOpen, setBillingOpen] = useState(true);
   const [savingBilling, setSavingBilling] = useState(false);
   const [billingErrors, setBillingErrors] = useState({});
+
+  const billingSummary = [
+    billing.street,
+    billing.city,
+    billing.state,
+    billing.pin,
+  ]
+    .map((p) => String(p || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+  const hasBillingOnFile = Boolean(billingSummary || billing.gstin || billing.phone);
 
   useEffect(() => {
     setSoundVolume(getStampRequestSoundVolume());
   }, []);
+
+  // Prefill from auth/me as soon as user is available (including phone when address is empty).
+  useEffect(() => {
+    if (!user) return;
+    setBilling(mapBillingProfile(user?.tenant?.billingProfile, user?.phone));
+  }, [user, user?.tenant?.billingProfile, user?.phone]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -120,35 +167,21 @@ export function AdminProfile() {
       if (settings?.socialLinks) {
         setSocialLinks({ ...emptySocialLinks(), ...settings.socialLinks });
       }
-      if (settings?.billingProfile) {
-        const bp = settings.billingProfile;
-        setBilling({
-          phone: bp.phone || '',
-          street: bp.street || '',
-          state: bp.state || '',
-          stateCode: '',
-          city: bp.city || '',
-          pin: bp.pin || '',
-          gstin: bp.gstin || '',
-          pan: bp.pan || '',
-        });
-        if (!bp.street && !bp.city && !bp.pin) {
-          setBillingOpen(true);
-        }
-      }
+      // Always apply — backend fills phone / HQ fallback for outlets.
+      setBilling(mapBillingProfile(settings?.billingProfile || {}, user?.phone));
     } catch {
       // keep tenant value from user context
     }
-  }, []);
+  }, [user?.phone]);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
-  const handleBillingChange = (next) => {
+  const handleBillingChange = useCallback((next) => {
     setBilling((prev) => ({ ...prev, ...next }));
     setBillingErrors({});
-  };
+  }, []);
 
   const handleSaveBilling = async () => {
     const street = String(billing.street || '').trim();
@@ -182,19 +215,11 @@ export function AdminProfile() {
       };
       const { data } = await loyaltyService.adminUpdateSettings({ billingProfile: payload });
       const saved = data?.data?.settings?.billingProfile || payload;
-      setBilling({
-        phone: saved.phone || '',
-        street: saved.street || '',
-        state: saved.state || '',
-        stateCode: '',
-        city: saved.city || '',
-        pin: saved.pin || '',
-        gstin: saved.gstin || '',
-        pan: saved.pan || '',
-      });
-      toast.success('Billing address saved');
+      setBilling(mapBillingProfile(saved, user?.phone));
+      toast.success('Billing details updated');
+      setBillingOpen(false);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Unable to save billing address'));
+      toast.error(getErrorMessage(error, 'Unable to update billing details'));
     } finally {
       setSavingBilling(false);
     }
@@ -318,13 +343,20 @@ export function AdminProfile() {
           aria-expanded={billingOpen}
         >
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-[#021A54]">Invoice &amp; client details</p>
+            <p className="text-sm font-bold text-[#021A54]">
+              {hasBillingOnFile ? 'Edit invoice & client details' : 'Invoice & client details'}
+            </p>
             <p className="mt-0.5 text-xs text-[#64748B]">
-              {billing.street
-                ? `${billing.street}${billing.city ? ` · ${billing.city}` : ''}`
-                : 'Add your shop address for invoices'}
+              {hasBillingOnFile
+                ? billingSummary ||
+                  [billing.phone, billing.gstin].filter(Boolean).join(' · ') ||
+                  'Details from registration — tap to edit'
+                : 'No billing details on file yet — tap to add'}
             </p>
           </div>
+          <span className="shrink-0 rounded-lg bg-[#EEF2FF] px-2.5 py-1 text-[11px] font-bold text-[#021A54]">
+            {billingOpen ? 'Close' : 'Edit'}
+          </span>
           <ChevronDown
             size={18}
             className={`shrink-0 text-[#94A3B8] transition ${billingOpen ? 'rotate-180' : ''}`}
@@ -333,6 +365,11 @@ export function AdminProfile() {
 
         {billingOpen ? (
           <div className="space-y-3 border-t border-[#F1F5F9] px-4 pb-4 pt-3">
+            <p className="text-[12px] leading-relaxed text-[#667085]">
+              {hasBillingOnFile
+                ? 'Saved invoice details for your shop. Update only if something changed — Super Admin sees the latest values on your client record.'
+                : 'Add your invoice address here. If you entered it at registration and it is missing, save it once and it will stay on your profile.'}
+            </p>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-bold text-[#021A54]">Phone</span>
               <input
@@ -385,7 +422,7 @@ export function AdminProfile() {
               onClick={handleSaveBilling}
               className="mt-2 w-full rounded-2xl bg-[#021A54] py-3 text-sm font-bold text-white hover:bg-[#0B2C6E] disabled:opacity-60"
             >
-              {savingBilling ? 'Saving…' : 'Save billing address'}
+              {savingBilling ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         ) : null}
@@ -493,13 +530,29 @@ export function AdminProfile() {
         </div>
       </div>
 
-      <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">
-        SUBSCRIPTION
-      </p>
-      <div className={adminCardClass('mb-5 overflow-hidden')}>
-        <ProfileRow emoji="📦" label="My plan" href="/admin/plans/my" />
-        <ProfileRow emoji="✨" label="Browse plans" href="/admin/plans/browse" />
-      </div>
+      {isHqAdmin ? (
+        <>
+          <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">
+            OUTLETS
+          </p>
+          <div className={adminCardClass('mb-5 overflow-hidden')}>
+            <ProfileRow emoji="🏪" label="My outlets" href="/admin/outlets" />
+            <ProfileRow
+              emoji="🛒"
+              label="Browse outlet plans"
+              href="/admin/plans/outlet/browse"
+            />
+          </div>
+
+          <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">
+            SUBSCRIPTION
+          </p>
+          <div className={adminCardClass('mb-5 overflow-hidden')}>
+            <ProfileRow emoji="📦" label="My plan" href="/admin/plans/my" />
+            <ProfileRow emoji="✨" label="Browse plans" href="/admin/plans/browse" />
+          </div>
+        </>
+      ) : null}
 
       <p className="mb-2.5 pl-0.5 text-xs font-extrabold tracking-wide text-[#94A3B8]">
         BUSINESS DETAILS

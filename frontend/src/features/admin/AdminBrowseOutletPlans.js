@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 import { planService } from '@/services/plan.service';
@@ -18,6 +19,8 @@ function formatInr(amount) {
 }
 
 export function AdminBrowseOutletPlans() {
+  const searchParams = useSearchParams();
+  const renewOutlet = searchParams.get('renewOutlet') || '';
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,22 +45,33 @@ export function AdminBrowseOutletPlans() {
     };
   }, []);
 
+  const checkoutHref = (plan) => {
+    const code = plan.code || plan.id;
+    const params = new URLSearchParams({ plan: String(code), forOutlet: '1' });
+    if (renewOutlet) params.set('renewOutlet', renewOutlet);
+    return `/checkout?${params.toString()}`;
+  };
+
   return (
     <div className="mx-auto w-full max-w-5xl lg:max-w-none">
       <AdminPageHeader
-        title="Browse outlet plans"
-        subtitle="Each purchase adds 1 outlet seat. Then create an outlet login from Outlets."
+        title={renewOutlet ? 'Change outlet plan' : 'Browse outlet plans'}
+        subtitle={
+          renewOutlet
+            ? 'Pick a plan to renew or change for this outlet. Payment updates that outlet only.'
+            : 'Buy one or more outlet seats in checkout (set quantity there). Then create an outlet login for each seat from Outlets.'
+        }
       />
+
+      {renewOutlet ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Renewing a specific outlet. Prefer the same plan to extend, or pick another to change.
+        </div>
+      ) : null}
 
       <div className="mb-4 flex flex-wrap justify-end gap-3">
         <Link href="/admin/outlets" className="text-sm font-bold text-[#021A54] hover:underline">
-          Outlet dashboard
-        </Link>
-        <Link
-          href="/admin/plans/outlet/my"
-          className="text-sm font-bold text-[#021A54] hover:underline"
-        >
-          My outlet seats
+          My outlets
         </Link>
       </div>
 
@@ -74,9 +88,7 @@ export function AdminBrowseOutletPlans() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => {
             const isCustom = Boolean(plan.priceCustom);
-            const href = isCustom
-              ? 'mailto:hello@stampogen.com'
-              : `/checkout?plan=${encodeURIComponent(plan.code || plan.id)}`;
+            const href = isCustom ? 'mailto:hello@stampogen.com' : checkoutHref(plan);
 
             return (
               <div key={plan.id || plan.code} className={cn(adminCardClass('flex flex-col p-5'))}>
@@ -100,7 +112,11 @@ export function AdminBrowseOutletPlans() {
                   className="mt-5 inline-flex h-11 items-center justify-center rounded-xl text-sm font-bold text-white"
                   style={{ backgroundColor: ADMIN_ACCENT }}
                 >
-                  {isCustom ? plan.ctaText || 'Talk to us' : plan.ctaText || 'Buy outlet seat'}
+                  {isCustom
+                    ? plan.ctaText || 'Talk to us'
+                    : renewOutlet
+                      ? 'Select plan'
+                      : plan.ctaText || 'Buy seats'}
                 </Link>
               </div>
             );

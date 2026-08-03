@@ -78,8 +78,17 @@ function CheckoutPageInner() {
   const planId = searchParams.get('planId') || '';
   const urlDiscount = searchParams.get('discount') || '';
   const skipTrialFromUrl = searchParams.get('pay') === '1';
+  const renewOutletTenantId = searchParams.get('renewOutlet') || '';
+  const forOutletFromUrl =
+    searchParams.get('forOutlet') === '1' || searchParams.get('forOutlet') === 'true';
+  const qtyFromUrl = Math.min(50, Math.max(1, Math.floor(Number(searchParams.get('qty')) || 1)));
 
   const [quote, setQuote] = useState(null);
+  const [seatQuantity, setSeatQuantity] = useState(qtyFromUrl);
+  const [quoting, setQuoting] = useState(false);
+  const seatQuantityRef = useRef(seatQuantity);
+  const lastQuotedQtyRef = useRef(null);
+  seatQuantityRef.current = seatQuantity;
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -225,18 +234,38 @@ function CheckoutPageInner() {
     }));
   }, [user, isSignupCheckout, signupProfile]);
 
+  const canBuyMultipleOutletSeats = Boolean(
+    quote?.plan?.forOutlet && !renewOutletTenantId
+  );
+  const effectiveSeatQty = canBuyMultipleOutletSeats
+    ? Math.min(50, Math.max(1, Math.floor(Number(seatQuantity) || 1)))
+    : 1;
+  const isOutletCheckout = Boolean(
+    renewOutletTenantId || forOutletFromUrl || quote?.plan?.forOutlet
+  );
+  const backHref = isOutletCheckout
+    ? renewOutletTenantId
+      ? `/admin/plans/outlet/browse?renewOutlet=${encodeURIComponent(renewOutletTenantId)}`
+      : '/admin/plans/outlet/browse'
+    : '/pricing';
+  const backLabel = isOutletCheckout ? 'Back to plan' : 'Back to pricing';
+
   const loadQuote = useCallback(
-    async (code = '', { allowFallback = false } = {}) => {
+    async (code = '', { allowFallback = false, silent = false } = {}) => {
       if (!planKey) {
         setLoading(false);
         return;
       }
       try {
-        setLoading(true);
+        if (silent) setQuoting(true);
+        else setLoading(true);
         const billing = isSignupCheckout
           ? signupProfile?.billingProfile || {}
           : (user?.tenant && typeof user.tenant === 'object' ? user.tenant.billingProfile : null) ||
             {};
+        const qty = renewOutletTenantId
+          ? 1
+          : Math.min(50, Math.max(1, Math.floor(Number(seatQuantityRef.current) || 1)));
         const payload = {
           ...(planId ? { planId } : { planCode }),
           ...(code ? { discountCode: code } : {}),
@@ -245,9 +274,11 @@ function CheckoutPageInner() {
             : user?.email || '',
           customerGstin: billing.gstin || '',
           customerState: billing.state || '',
+          quantity: qty,
         };
         const { data } = await paymentService.preview(payload);
         setQuote(data.data.quote);
+        lastQuotedQtyRef.current = data.data.quote?.quantity ?? qty;
         setAppliedCode(data.data.quote.discountCode || '');
         if (data.data.quote.discountCode) {
           setDiscountInput(data.data.quote.discountCode);
@@ -268,6 +299,9 @@ function CheckoutPageInner() {
               : (user?.tenant && typeof user.tenant === 'object'
                   ? user.tenant.billingProfile
                   : null) || {};
+            const qty = renewOutletTenantId
+              ? 1
+              : Math.min(50, Math.max(1, Math.floor(Number(seatQuantityRef.current) || 1)));
             const { data } = await paymentService.preview({
               ...(planId ? { planId } : { planCode }),
               customerEmail: isSignupCheckout
@@ -275,23 +309,52 @@ function CheckoutPageInner() {
                 : user?.email || '',
               customerGstin: billing.gstin || '',
               customerState: billing.state || '',
+              quantity: qty,
             });
             setQuote(data.data.quote);
+            lastQuotedQtyRef.current = data.data.quote?.quantity ?? qty;
             setAppliedCode('');
           } catch (inner) {
-            setQuote(null);
+            if (!silent) setQuote(null);
             toast.error(getErrorMessage(inner, 'Unable to load plan for checkout'));
           }
         } else {
-          setQuote(null);
+          if (!silent) setQuote(null);
           toast.error(getErrorMessage(error, 'Unable to load plan for checkout'));
         }
       } finally {
-        setLoading(false);
+        if (silent) setQuoting(false);
+        else setLoading(false);
       }
     },
-    [planCode, planId, planKey, user, isSignupCheckout, signupProfile]
+    [planCode, planId, planKey, user, isSignupCheckout, signupProfile, renewOutletTenantId]
   );
+
+  // Quietly refresh totals when outlet seat quantity changes (no full-form reload).
+  useEffect(() => {
+    if (!initialized || authLoading || !signupReady || !canCheckout) return;
+    if (trialAvailable || !planKey || renewOutletTenantId) return;
+    if (!quote?.plan?.forOutlet) return;
+    const qty = Math.min(50, Math.max(1, Math.floor(Number(seatQuantity) || 1)));
+    if (lastQuotedQtyRef.current === qty) return;
+    const code = appliedCode || '';
+    const timer = setTimeout(() => {
+      loadQuote(code, { silent: true });
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [
+    seatQuantity,
+    quote?.plan?.forOutlet,
+    renewOutletTenantId,
+    initialized,
+    authLoading,
+    signupReady,
+    canCheckout,
+    trialAvailable,
+    planKey,
+    appliedCode,
+    loadQuote,
+  ]);
 
   useEffect(() => {
     if (!initialized || authLoading || !signupReady) return;
@@ -376,9 +439,11 @@ function CheckoutPageInner() {
           '',
         customerGstin: billing.gstin || '',
         customerState: billing.state || '',
+        quantity: renewOutletTenantId ? 1 : effectiveSeatQty,
       };
       const { data } = await paymentService.preview(payload);
       setQuote(data.data.quote);
+      lastQuotedQtyRef.current = data.data.quote?.quantity ?? payload.quantity;
       setAppliedCode(data.data.quote.discountCode || '');
       setDiscountInput(data.data.quote.discountCode || code);
       toast.success('Discount applied');
@@ -411,7 +476,17 @@ function CheckoutPageInner() {
         // ignore — seats still load on the outlets page
       }
       if (isOutletSeat) {
-        toast.success('Outlet seat added. Create your outlet below.');
+        if (renewOutletTenantId) {
+          toast.success('Outlet plan updated. That outlet is unlocked again.');
+          window.location.assign('/admin/outlets?renewed=1');
+          return;
+        }
+        const n = Math.max(1, Number(quote?.quantity) || effectiveSeatQty || 1);
+        toast.success(
+          n === 1
+            ? 'Outlet seat added. Create your outlet below.'
+            : `${n} outlet seats added. Create outlets from Outlets.`
+        );
         window.location.assign('/admin/outlets?seat=1');
         return;
       }
@@ -491,6 +566,10 @@ function CheckoutPageInner() {
           customerPhone: form.customerPhone.trim(),
           customerGstin: billing.gstin || '',
           customerState: billing.state || '',
+          ...(renewOutletTenantId ? { renewOutletTenantId } : {}),
+          ...(quote?.plan?.forOutlet && !renewOutletTenantId
+            ? { quantity: effectiveSeatQty }
+            : {}),
         })
       );
 
@@ -568,9 +647,9 @@ function CheckoutPageInner() {
         <main className="min-h-screen" style={{ backgroundColor: COLORS.bg }}>
           <header className="border-b px-5 py-4 sm:px-8" style={{ borderColor: COLORS.line }}>
             <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-              <Link href="/pricing" className="inline-flex items-center gap-2 text-sm font-medium text-[#344054]">
+              <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-[#344054]">
                 <ArrowLeft size={16} />
-                Back to pricing
+                {backLabel}
               </Link>
               <Image src="/logo.png" alt="Stampogen" width={140} height={36} className="h-8 w-auto object-contain" />
             </div>
@@ -607,9 +686,9 @@ function CheckoutPageInner() {
       <main className="min-h-screen" style={{ backgroundColor: COLORS.bg }}>
         <header className="border-b px-5 py-4 sm:px-8" style={{ borderColor: COLORS.line }}>
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-            <Link href="/pricing" className="inline-flex items-center gap-2 text-sm font-medium text-[#344054]">
+            <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-[#344054]">
               <ArrowLeft size={16} />
-              Back to pricing
+              {backLabel}
             </Link>
             <Image src="/logo.png" alt="Stampogen" width={140} height={36} className="h-8 w-auto object-contain" />
           </div>
@@ -628,9 +707,9 @@ function CheckoutPageInner() {
     <main className="min-h-screen" style={{ backgroundColor: COLORS.bg }}>
       <header className="border-b px-5 py-4 sm:px-8" style={{ borderColor: COLORS.line }}>
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <Link href="/pricing" className="inline-flex items-center gap-2 text-sm font-medium text-[#344054]">
+          <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-[#344054]">
             <ArrowLeft size={16} />
-            Back to pricing
+            {backLabel}
           </Link>
           <Image src="/logo.png" alt="Stampogen" width={140} height={36} className="h-8 w-auto object-contain" />
         </div>
@@ -710,6 +789,47 @@ function CheckoutPageInner() {
             <p className="mt-8 text-sm text-[#667085]">Unable to load this plan for checkout.</p>
           ) : (
             <form onSubmit={handlePay} className="mt-8 space-y-5">
+              {canBuyMultipleOutletSeats ? (
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                    Number of outlet seats
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      aria-label="Decrease seats"
+                      disabled={effectiveSeatQty <= 1 || loading || paying}
+                      onClick={() => setSeatQuantity((q) => Math.max(1, (Number(q) || 1) - 1))}
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#D0D5DD] text-lg font-bold text-[#344054] disabled:opacity-40"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={effectiveSeatQty}
+                      onChange={(e) => {
+                        const n = Math.min(50, Math.max(1, Math.floor(Number(e.target.value) || 1)));
+                        setSeatQuantity(n);
+                      }}
+                      className={`${fieldClass} w-20 text-center`}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Increase seats"
+                      disabled={effectiveSeatQty >= 50 || loading || paying}
+                      onClick={() => setSeatQuantity((q) => Math.min(50, (Number(q) || 1) + 1))}
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#D0D5DD] text-lg font-bold text-[#344054] disabled:opacity-40"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[12px] text-[#98A2B3]">
+                    Each seat lets you create one outlet login. You can buy up to 50 in one payment.
+                  </p>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label className="mb-1.5 block text-[13px] font-semibold text-[#344054]">Full name</label>
@@ -802,15 +922,17 @@ function CheckoutPageInner() {
 
               <button
                 type="submit"
-                disabled={paying || loading}
+                disabled={paying || loading || quoting}
                 className="inline-flex h-12 w-full items-center justify-center rounded-lg text-[15px] font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ backgroundColor: COLORS.red, boxShadow: '0 4px 0 #7A2A1F' }}
               >
                 {paying
                   ? 'Processing...'
-                  : quote.payableAmount <= 0
-                    ? 'Confirm free checkout'
-                    : `Pay ${formatInr(quote.payableAmount)}`}
+                  : quoting
+                    ? 'Updating total...'
+                    : quote.payableAmount <= 0
+                      ? 'Confirm free checkout'
+                      : `Pay ${formatInr(quote.payableAmount)}`}
               </button>
             </form>
           )}
@@ -820,6 +942,11 @@ function CheckoutPageInner() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#98A2B3]">
             {trialAvailable ? 'Trial summary' : 'Order summary'}
           </p>
+          {renewOutletTenantId && !trialAvailable ? (
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-950">
+              This payment renews or changes the plan for a specific outlet (not a new unused seat).
+            </p>
+          ) : null}
           {trialAvailable ? (
             <div className="mt-4 space-y-4">
               <div>
@@ -840,19 +967,39 @@ function CheckoutPageInner() {
               </p>
             </div>
           ) : quote ? (
-            <div className="mt-4 space-y-4">
+            <div className={`mt-4 space-y-4 transition-opacity ${quoting ? 'opacity-60' : ''}`}>
+              {quoting ? (
+                <p className="inline-flex items-center gap-2 text-[12px] font-medium text-[#667085]">
+                  <Loader2 className="animate-spin" size={14} />
+                  Updating total…
+                </p>
+              ) : null}
               <div>
                 <h2 className="text-xl font-bold text-[#101828]">{quote.plan.name}</h2>
                 <p className="mt-1 text-sm text-[#667085]">{quote.plan.billing} billing</p>
+                {quote.plan.forOutlet ? (
+                  <p className="mt-1 text-sm font-semibold text-[#021A54]">
+                    {quote.quantity || 1} outlet seat{(quote.quantity || 1) === 1 ? '' : 's'}
+                  </p>
+                ) : null}
                 {quote.plan.description ? (
                   <p className="mt-3 text-sm leading-relaxed text-[#667085]">{quote.plan.description}</p>
                 ) : null}
               </div>
               <div className="space-y-2 border-t border-[#F2F4F7] pt-4 text-sm">
-                <div className="flex justify-between text-[#344054]">
-                  <span>Plan price</span>
-                  <span className="font-medium">{formatInr(quote.listAmount)}</span>
-                </div>
+                {quote.plan.forOutlet && (quote.quantity || 1) > 1 ? (
+                  <div className="flex justify-between text-[#344054]">
+                    <span>
+                      {formatInr(quote.unitAmount ?? quote.plan.priceAmount)} × {quote.quantity}
+                    </span>
+                    <span className="font-medium">{formatInr(quote.listAmount)}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-[#344054]">
+                    <span>Plan price</span>
+                    <span className="font-medium">{formatInr(quote.listAmount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-[#344054]">
                   <span>Discount</span>
                   <span className="font-medium text-emerald-700">

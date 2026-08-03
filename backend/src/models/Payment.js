@@ -57,6 +57,15 @@ const paymentSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    /** When set, outlet-plan payment renews/changes this outlet instead of adding a new unused seat. */
+    renewOutletTenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      default: null,
+      index: true,
+    },
+    /** Outlet seats purchased in this payment (1 for normal / renew). */
+    quantity: { type: Number, default: 1, min: 1, max: 50 },
   },
   { timestamps: true }
 );

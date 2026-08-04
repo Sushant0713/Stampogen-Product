@@ -574,7 +574,13 @@ export function ClientManagement() {
   };
 
   const handleApplyDiscount = async (formOverride = null) => {
-    const form = formOverride || addForm;
+    const form =
+      formOverride &&
+      typeof formOverride === 'object' &&
+      !formOverride.nativeEvent &&
+      ('discountCode' in formOverride || 'planId' in formOverride)
+        ? formOverride
+        : addForm;
     const code = String(form.discountCode || '')
       .trim()
       .toUpperCase();
@@ -1559,7 +1565,7 @@ export function ClientManagement() {
                 />
                 <button
                   type="button"
-                  onClick={handleApplyDiscount}
+                  onClick={() => handleApplyDiscount()}
                   disabled={addSaving || discountApplying || !addForm.discountCode.trim()}
                   className="h-10 shrink-0 rounded-lg border border-[#021A54] bg-white px-4 text-sm font-bold text-[#021A54] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50"
                 >

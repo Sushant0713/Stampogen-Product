@@ -7,7 +7,15 @@ const previewPaymentValidator = [
   body('customerEmail').optional().trim().isEmail().withMessage('Valid email is required'),
   body('customerGstin').optional().trim().isLength({ max: 20 }),
   body('customerState').optional().trim().isLength({ max: 100 }),
-  body('chargeGst').optional().isBoolean().withMessage('chargeGst must be a boolean').toBoolean(),
+  body('chargeGst')
+    .optional({ values: 'null' })
+    .customSanitizer((value) => {
+      if (value === false || value === 'false' || value === 0 || value === '0') return false;
+      if (value === true || value === 'true' || value === 1 || value === '1') return true;
+      return value;
+    })
+    .isBoolean()
+    .withMessage('chargeGst must be a boolean'),
   body('quantity').optional().isInt({ min: 1, max: 50 }).withMessage('Quantity must be 1–50'),
   body().custom((_, { req }) => {
     if (!req.body.planId && !req.body.planCode) {

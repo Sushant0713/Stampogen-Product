@@ -573,8 +573,9 @@ export function ClientManagement() {
     setAddOpen(true);
   };
 
-  const handleApplyDiscount = async () => {
-    const code = String(addForm.discountCode || '')
+  const handleApplyDiscount = async (formOverride = null) => {
+    const form = formOverride || addForm;
+    const code = String(form.discountCode || '')
       .trim()
       .toUpperCase();
     if (!code) {
@@ -582,17 +583,19 @@ export function ClientManagement() {
       return;
     }
 
+    const chargeGst = form.chargeGst !== false;
+
     try {
       setDiscountApplying(true);
-      const email = addForm.email.trim();
-      if (addForm.planId) {
+      const email = String(form.email || '').trim();
+      if (form.planId) {
         const { data } = await paymentService.preview({
-          planId: addForm.planId,
+          planId: form.planId,
           discountCode: code,
           customerEmail: email || undefined,
-          customerState: addForm.state.trim() || undefined,
-          customerGstin: addForm.chargeGst ? addForm.gstin.trim() || undefined : undefined,
-          chargeGst: addForm.chargeGst,
+          customerState: String(form.state || '').trim() || undefined,
+          customerGstin: chargeGst ? String(form.gstin || '').trim() || undefined : undefined,
+          chargeGst,
         });
         const quote = data?.data?.quote;
         if (!quote?.discountCode) {
@@ -621,6 +624,20 @@ export function ClientManagement() {
       toast.error(getErrorMessage(error, 'Unable to apply discount'));
     } finally {
       setDiscountApplying(false);
+    }
+  };
+
+  const setChargeGst = (nextChargeGst) => {
+    const nextForm = {
+      ...addForm,
+      chargeGst: nextChargeGst,
+      ...(nextChargeGst ? {} : { gstin: '' }),
+    };
+    setAddForm(nextForm);
+    if (discountApplied?.code && nextForm.planId) {
+      handleApplyDiscount(nextForm);
+    } else if (discountApplied) {
+      setDiscountApplied(null);
     }
   };
 
@@ -1488,6 +1505,41 @@ export function ClientManagement() {
             ) : null}
 
             <div>
+              <p className="mb-2 text-[13px] font-semibold text-[#344054]">GST</p>
+              <div className="inline-flex rounded-lg border border-[#D0D5DD] bg-[#F9FAFB] p-1">
+                <button
+                  type="button"
+                  disabled={addSaving || discountApplying}
+                  onClick={() => setChargeGst(true)}
+                  className={`h-9 rounded-md px-4 text-sm font-semibold transition ${
+                    addForm.chargeGst
+                      ? 'bg-[#021A54] text-white shadow-sm'
+                      : 'text-[#667085] hover:text-[#101828]'
+                  }`}
+                >
+                  With GST
+                </button>
+                <button
+                  type="button"
+                  disabled={addSaving || discountApplying}
+                  onClick={() => setChargeGst(false)}
+                  className={`h-9 rounded-md px-4 text-sm font-semibold transition ${
+                    !addForm.chargeGst
+                      ? 'bg-[#021A54] text-white shadow-sm'
+                      : 'text-[#667085] hover:text-[#101828]'
+                  }`}
+                >
+                  Without GST
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11px] text-[#667085]">
+                {addForm.chargeGst
+                  ? 'Plan invoices and renewals include GST.'
+                  : 'Plan invoices and renewals skip GST (tax ₹0).'}
+              </p>
+            </div>
+
+            <div>
               <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
                 Discount code (optional)
               </span>
@@ -1553,47 +1605,6 @@ export function ClientManagement() {
                   }))
                 }
               />
-            </div>
-
-            <div>
-              <p className="mb-2 text-[13px] font-semibold text-[#344054]">GST</p>
-              <div className="inline-flex rounded-lg border border-[#D0D5DD] bg-[#F9FAFB] p-1">
-                <button
-                  type="button"
-                  disabled={addSaving}
-                  onClick={() => setAddForm((f) => ({ ...f, chargeGst: true }))}
-                  className={`h-9 rounded-md px-4 text-sm font-semibold transition ${
-                    addForm.chargeGst
-                      ? 'bg-[#021A54] text-white shadow-sm'
-                      : 'text-[#667085] hover:text-[#101828]'
-                  }`}
-                >
-                  With GST
-                </button>
-                <button
-                  type="button"
-                  disabled={addSaving}
-                  onClick={() =>
-                    setAddForm((f) => ({
-                      ...f,
-                      chargeGst: false,
-                      gstin: '',
-                    }))
-                  }
-                  className={`h-9 rounded-md px-4 text-sm font-semibold transition ${
-                    !addForm.chargeGst
-                      ? 'bg-[#021A54] text-white shadow-sm'
-                      : 'text-[#667085] hover:text-[#101828]'
-                  }`}
-                >
-                  Without GST
-                </button>
-              </div>
-              <p className="mt-1.5 text-[11px] text-[#667085]">
-                {addForm.chargeGst
-                  ? 'Plan invoices and renewals include GST.'
-                  : 'Plan invoices and renewals skip GST (tax ₹0).'}
-              </p>
             </div>
 
             <div className={`grid gap-3 ${addForm.chargeGst ? 'sm:grid-cols-2' : ''}`}>

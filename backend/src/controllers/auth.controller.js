@@ -4,6 +4,19 @@ const { HTTP_STATUS, COOKIE_NAMES } = require('@constants');
 const { setAuthCookies, clearAuthCookies } = require('@helpers/cookie.helper');
 const config = require('@config');
 
+function getPortalLoginPath(role) {
+  const slug = String(role || '').toLowerCase();
+  if (slug === 'admin') return '/';
+  if (slug === 'super-admin') {
+    const authSlug = String(config.superAdminAuthPath || 'x7k2m9qp-ops').replace(
+      /^\/+|\/+$/g,
+      ''
+    );
+    return `/${authSlug}/login`;
+  }
+  return `/${slug}/login`;
+}
+
 class AuthController {
   async register(req, res, next) {
     try {
@@ -245,7 +258,7 @@ class AuthController {
 
       if (result.requiresApproval) {
         const role = result.user?.role?.slug || req.query.state || 'affiliate';
-        const loginPath = role === 'admin' ? '/' : `/${role}/login`;
+        const loginPath = getPortalLoginPath(role);
         return res.redirect(
           `${config.frontendUrl}${loginPath}?error=${encodeURIComponent(result.message)}`
         );
@@ -262,7 +275,7 @@ class AuthController {
       return res.redirect(redirectUrl);
     } catch (error) {
       const role = req.query.state || 'admin';
-      const loginPath = role === 'admin' ? '/' : `/${role}/login`;
+      const loginPath = getPortalLoginPath(role);
       return res.redirect(
         `${config.frontendUrl}${loginPath}?error=${encodeURIComponent(error.message)}`
       );

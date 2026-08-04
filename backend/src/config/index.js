@@ -39,6 +39,13 @@ const config = {
   },
   /** Required on Super Admin login (password + Google). Set in env — never commit the real value. */
   superAdminSecretCode: String(process.env.SUPER_ADMIN_SECRET_CODE || '').trim(),
+  /**
+   * Public URL slug for Super Admin login/register (must match frontend
+   * NEXT_PUBLIC_SUPER_ADMIN_AUTH_PATH). Dashboard stays under /super-admin.
+   */
+  superAdminAuthPath: String(process.env.SUPER_ADMIN_AUTH_PATH || 'x7k2m9qp-ops')
+    .trim()
+    .replace(/^\/+|\/+$/g, '') || 'x7k2m9qp-ops',
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID || '',
     keySecret: process.env.RAZORPAY_KEY_SECRET || '',

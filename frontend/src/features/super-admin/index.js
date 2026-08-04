@@ -8,6 +8,7 @@ export { AffiliateRedeemList } from '@/features/super-admin/AffiliateRedeemList'
 export { SuperAdminRevenue } from '@/features/super-admin/SuperAdminRevenue';
 export { SuperAdminReports } from '@/features/super-admin/SuperAdminReports';
 export { SuperAdminQrPage } from '@/features/super-admin/SuperAdminQrPage';
+export { SuperAdminList } from '@/features/super-admin/SuperAdminList';
 export {
   InvoicePreview,
   TAX_MODES,

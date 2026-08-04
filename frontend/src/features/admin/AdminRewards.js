@@ -5,6 +5,9 @@ import { Check, Search, ZoomIn, ZoomOut, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn, getErrorMessage } from '@/utils';
 import { loyaltyService } from '@/services/loyalty.service';
+import { outletService } from '@/services/outlet.service';
+import { useUser } from '@/contexts/UserContext';
+import { AdminShopScopeSelect } from '@/features/admin/AdminShopScopeSelect';
 
 const POLL_MS = 5000;
 const MIN_ZOOM = 1;
@@ -232,6 +235,8 @@ function BillImageLightbox({ bill, onClose }) {
 }
 
 export function AdminRewards() {
+  const { user } = useUser();
+  const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
   const [stampMode, setStampMode] = useState('bill');
   const [activeFilter, setActiveFilter] = useState('requests');
   const [search, setSearch] = useState('');
@@ -241,11 +246,34 @@ export function AdminRewards() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [busyId, setBusyId] = useState('');
   const [previewBill, setPreviewBill] = useState(null);
+  const [outlets, setOutlets] = useState([]);
+  const [scopeTenantId, setScopeTenantId] = useState('');
   const [counts, setCounts] = useState({
     requests: 0,
     pending: 0,
     redeemed: 0,
   });
+
+  const scopeOpts = useMemo(
+    () => (scopeTenantId ? { outletTenantId: scopeTenantId } : {}),
+    [scopeTenantId]
+  );
+
+  useEffect(() => {
+    if (isOutlet) return undefined;
+    let cancelled = false;
+    outletService
+      .dashboard()
+      .then(({ data }) => {
+        if (!cancelled) setOutlets(data?.data?.outlets || []);
+      })
+      .catch(() => {
+        if (!cancelled) setOutlets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOutlet]);
 
   useEffect(() => {
     loyaltyService
@@ -260,7 +288,7 @@ export function AdminRewards() {
 
   const loadCounts = useCallback(async () => {
     try {
-      const { data } = await loyaltyService.adminStats();
+      const { data } = await loyaltyService.adminStats(scopeOpts);
       const stats = data.data?.stats || {};
       setCounts({
         requests: Number(stats.pendingStampRequests) || 0,
@@ -270,17 +298,17 @@ export function AdminRewards() {
     } catch {
       // Keep previous counts
     }
-  }, []);
+  }, [scopeOpts]);
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
       try {
         if (!silent) setLoading(true);
         if (activeFilter === 'requests') {
-          const { data } = await loyaltyService.adminListStampRequests();
+          const { data } = await loyaltyService.adminListStampRequests(scopeOpts);
           setCustomers(data.data.requests || []);
         } else {
-          const { data } = await loyaltyService.adminListRewards(activeFilter);
+          const { data } = await loyaltyService.adminListRewards(activeFilter, scopeOpts);
           setCustomers(data.data.rewards || []);
         }
         await loadCounts();
@@ -290,7 +318,7 @@ export function AdminRewards() {
         if (!silent) setLoading(false);
       }
     },
-    [activeFilter, loadCounts]
+    [activeFilter, loadCounts, scopeOpts]
   );
 
   useEffect(() => {
@@ -324,11 +352,16 @@ export function AdminRewards() {
     });
   }, [customers, search]);
 
+  const handleScopeChange = (next) => {
+    setScopeTenantId(next);
+    setReview(null);
+  };
+
   const approveRequest = async (id) => {
     const row = customers.find((c) => c.id === id);
     try {
       setBusyId(id);
-      const { data } = await loyaltyService.adminApproveStampRequest(id);
+      const { data } = await loyaltyService.adminApproveStampRequest(id, scopeOpts);
       toast.success(data.message || `Stamp approved for ${row?.name || 'customer'}`);
       await load({ silent: true });
     } catch (error) {
@@ -342,7 +375,7 @@ export function AdminRewards() {
     const row = customers.find((c) => c.id === id);
     try {
       setBusyId(id);
-      await loyaltyService.adminRejectStampRequest(id);
+      await loyaltyService.adminRejectStampRequest(id, scopeOpts);
       toast.success(`Request rejected for ${row?.name || 'customer'}`);
       await load({ silent: true });
     } catch (error) {
@@ -356,7 +389,7 @@ export function AdminRewards() {
     try {
       setReviewLoading(true);
       setBusyId(id);
-      const { data } = await loyaltyService.adminGetReward(id);
+      const { data } = await loyaltyService.adminGetReward(id, scopeOpts);
       setReview(data.data.reward);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to load reward details'));
@@ -370,7 +403,7 @@ export function AdminRewards() {
     if (!review?.id) return;
     try {
       setBusyId(review.id);
-      const { data } = await loyaltyService.adminVerify(review.id);
+      const { data } = await loyaltyService.adminVerify(review.id, scopeOpts);
       setReview(data.data.reward);
       toast.success(stampMode === 'request' ? 'Reward confirmed' : 'Bills verified');
       await load({ silent: true });
@@ -385,7 +418,7 @@ export function AdminRewards() {
     if (!review?.id) return;
     try {
       setBusyId(review.id);
-      await loyaltyService.adminCancel(review.id);
+      await loyaltyService.adminCancel(review.id, scopeOpts);
       toast.success('Request cancelled — stamps reset');
       setReview(null);
       await load({ silent: true });
@@ -406,7 +439,7 @@ export function AdminRewards() {
     }
     try {
       setBusyId(id);
-      await loyaltyService.adminGive(id);
+      await loyaltyService.adminGive(id, scopeOpts);
       toast.success(`Reward given to ${row.name}`);
       if (review?.id === id) setReview(null);
       await load({ silent: true });
@@ -444,6 +477,14 @@ export function AdminRewards() {
           <h1 className="text-2xl font-extrabold text-[#021A54]">Rewards</h1>
           <p className="mt-1.5 text-[13px] font-medium text-[#64748B]">{subtitle}</p>
         </div>
+
+        {!isOutlet ? (
+          <AdminShopScopeSelect
+            outlets={outlets}
+            value={scopeTenantId}
+            onChange={handleScopeChange}
+          />
+        ) : null}
 
         <label className="flex items-center gap-2.5 rounded-[14px] bg-white px-3.5 py-3 shadow-[0_6px_16px_rgba(2,26,84,0.06)]">
           <Search size={16} className="shrink-0 text-[#94A3B8]" aria-hidden />

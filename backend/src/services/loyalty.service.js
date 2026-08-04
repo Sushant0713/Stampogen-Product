@@ -821,8 +821,36 @@ class LoyaltyService {
     return tenantId;
   }
 
-  async getAdminMembership(adminUser, membershipId) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  /**
+   * HQ may pass outletTenantId to act on a child outlet's memberships.
+   * Outlet admins cannot scope to another shop.
+   */
+  async resolveAdminTenantId(adminUser, { outletTenantId } = {}) {
+    const ownTenantId = await this.getAdminTenantId(adminUser);
+    const targetId = String(outletTenantId || '').trim();
+    if (!targetId) return ownTenantId;
+
+    const ownTenant = await TenantRepository.findById(ownTenantId);
+    if (!ownTenant) {
+      throw new AppError('Shop organization not found', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (ownTenant.kind === 'outlet' || ownTenant.parentTenant) {
+      throw new AppError('Outlets cannot view other shops', HTTP_STATUS.FORBIDDEN);
+    }
+
+    const outlet = await TenantRepository.findById(targetId);
+    if (!outlet || outlet.kind !== 'outlet') {
+      throw new AppError('Outlet not found', HTTP_STATUS.NOT_FOUND);
+    }
+    const parentId = outlet.parentTenant?._id || outlet.parentTenant;
+    if (String(parentId) !== String(ownTenantId)) {
+      throw new AppError('Outlet does not belong to this shop', HTTP_STATUS.FORBIDDEN);
+    }
+    return outlet._id;
+  }
+
+  async getAdminMembership(adminUser, membershipId, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const membership = await LoyaltyMembershipRepository.findById(membershipId);
     if (!membership) {
       throw new AppError('Customer not found', HTTP_STATUS.NOT_FOUND);
@@ -1310,8 +1338,8 @@ class LoyaltyService {
     };
   }
 
-  async listAdminStampRequests(adminUser) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async listAdminStampRequests(adminUser, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const rows = await LoyaltyMembershipRepository.findWithPendingStampRequests(tenantId);
     const out = [];
     rows.forEach((membership) => {
@@ -1339,8 +1367,8 @@ class LoyaltyService {
     }));
   }
 
-  async approveStampRequest(adminUser, rawId) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async approveStampRequest(adminUser, rawId, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const { membershipId, requestId } = this.parseStampRequestId(rawId);
     let membership = await LoyaltyMembershipRepository.findById(membershipId);
     if (!membership) throw new AppError('Stamp request not found', HTTP_STATUS.NOT_FOUND);
@@ -1446,8 +1474,8 @@ class LoyaltyService {
     };
   }
 
-  async rejectStampRequest(adminUser, rawId) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async rejectStampRequest(adminUser, rawId, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const { membershipId, requestId } = this.parseStampRequestId(rawId);
     const membership = await LoyaltyMembershipRepository.findById(membershipId);
     if (!membership) throw new AppError('Stamp request not found', HTTP_STATUS.NOT_FOUND);
@@ -1619,8 +1647,8 @@ class LoyaltyService {
     };
   }
 
-  async listAdminCustomers(adminUser) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async listAdminCustomers(adminUser, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const rows = await LoyaltyMembershipRepository.findByTenantForAdmin(tenantId);
     return rows.map((membership) => {
       const user = membership.user || {};
@@ -1643,8 +1671,8 @@ class LoyaltyService {
     });
   }
 
-  async getAdminCustomerDetail(adminUser, membershipId) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async getAdminCustomerDetail(adminUser, membershipId, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const membership = await LoyaltyMembershipRepository.findByIdWithBills(membershipId);
     if (!membership) {
       throw new AppError('Customer not found', HTTP_STATUS.NOT_FOUND);
@@ -1731,12 +1759,12 @@ class LoyaltyService {
     };
   }
 
-  async updateAdminCustomerStatus(adminUser, membershipId, status) {
+  async updateAdminCustomerStatus(adminUser, membershipId, status, { outletTenantId } = {}) {
     const next = status === 'suspended' ? 'inactive' : 'active';
     if (!['active', 'suspended'].includes(status)) {
       throw new AppError('Invalid customer status', HTTP_STATUS.BAD_REQUEST);
     }
-    await this.getAdminMembership(adminUser, membershipId);
+    await this.getAdminMembership(adminUser, membershipId, { outletTenantId });
     const updated = await LoyaltyMembershipRepository.updateById(membershipId, { status: next });
     const user = updated.user || {};
     const offers = ensureOffers(updated);
@@ -1753,14 +1781,14 @@ class LoyaltyService {
     };
   }
 
-  async deleteAdminCustomer(adminUser, membershipId) {
-    await this.getAdminMembership(adminUser, membershipId);
+  async deleteAdminCustomer(adminUser, membershipId, { outletTenantId } = {}) {
+    await this.getAdminMembership(adminUser, membershipId, { outletTenantId });
     await LoyaltyMembershipRepository.deleteById(membershipId);
     return { deleted: true };
   }
 
-  async getAdminDashboardStats(adminUser) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async getAdminDashboardStats(adminUser, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     return this.getTenantDashboardStats(tenantId);
   }
 
@@ -2040,8 +2068,8 @@ class LoyaltyService {
     });
   }
 
-  async listAdminRewards(adminUser, { filter = 'pending' } = {}) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async listAdminRewards(adminUser, { filter = 'pending', outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const { catalog } = await this.getCatalogForTenant(tenantId);
     const catalogKeys = new Set(catalog.map((o) => o.key));
     const statuses =
@@ -2073,8 +2101,8 @@ class LoyaltyService {
     return { membershipId, offerKey: offerKey || 'free_reward' };
   }
 
-  async getAdminRewardDetail(adminUser, rewardId) {
-    const tenantId = await this.getAdminTenantId(adminUser);
+  async getAdminRewardDetail(adminUser, rewardId, { outletTenantId } = {}) {
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const { membershipId, offerKey } = this.parseRewardId(rewardId);
     const membership = await LoyaltyMembershipRepository.findByIdWithBills(membershipId);
     if (!membership) {
@@ -2092,8 +2120,8 @@ class LoyaltyService {
     });
   }
 
-  async verifyAdminReward(adminUser, rewardId) {
-    const detail = await this.getAdminRewardDetail(adminUser, rewardId);
+  async verifyAdminReward(adminUser, rewardId, { outletTenantId } = {}) {
+    const detail = await this.getAdminRewardDetail(adminUser, rewardId, { outletTenantId });
     if (detail.redeemed) {
       throw new AppError('Reward already given', HTTP_STATUS.BAD_REQUEST);
     }
@@ -2114,11 +2142,11 @@ class LoyaltyService {
       rewardStatus: offers[0]?.rewardStatus || 'collecting',
       verifiedAt: new Date(),
     });
-    return this.getAdminRewardDetail(adminUser, rewardId);
+    return this.getAdminRewardDetail(adminUser, rewardId, { outletTenantId });
   }
 
-  async cancelAdminReward(adminUser, rewardId) {
-    await this.getAdminRewardDetail(adminUser, rewardId);
+  async cancelAdminReward(adminUser, rewardId, { outletTenantId } = {}) {
+    await this.getAdminRewardDetail(adminUser, rewardId, { outletTenantId });
     const { membershipId, offerKey } = this.parseRewardId(rewardId);
     let membership = await LoyaltyMembershipRepository.findByIdWithBills(membershipId);
     membership = await this.persistOffersIfNeeded(membership);
@@ -2162,13 +2190,13 @@ class LoyaltyService {
     );
   }
 
-  async giveAdminReward(adminUser, rewardId) {
-    const detail = await this.getAdminRewardDetail(adminUser, rewardId);
+  async giveAdminReward(adminUser, rewardId, { outletTenantId } = {}) {
+    const detail = await this.getAdminRewardDetail(adminUser, rewardId, { outletTenantId });
     if (detail.redeemed) {
       throw new AppError('Reward already given', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const tenantId = await this.getAdminTenantId(adminUser);
+    const tenantId = await this.resolveAdminTenantId(adminUser, { outletTenantId });
     const tenant = await TenantRepository.findById(tenantId);
     const isRequestMode = readStampMode(tenant) === LOYALTY_STAMP_MODES.REQUEST;
     const canGive =

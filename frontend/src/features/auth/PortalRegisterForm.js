@@ -19,7 +19,7 @@ import {
   getRequiredVerificationKind,
   getVerificationDocLabel,
 } from '@/constants/affiliateTypes';
-import { getErrorMessage, getLoginPath } from '@/utils';
+import { getErrorMessage, getLoginPath, getVerifyEmailPath } from '@/utils';
 import {
   resolvePostSignupPaymentPath,
   saveRegistrationSession,
@@ -522,7 +522,7 @@ function PortalRegisterFormInner({ role }) {
             'Application submitted. We will review it and contact you about the interview. Login is available only after approval.'
         );
         setGoogleDraft(null);
-        router.push(`/${role}/login`);
+        router.push(getLoginPath(role));
         return;
       }
       if (data.data?.requiresPayment && data.data?.registrationToken) {
@@ -632,7 +632,7 @@ function PortalRegisterFormInner({ role }) {
         const params = new URLSearchParams({ email: values.email });
         if (planCode) params.set('plan', planCode);
         if (discountCode) params.set('discount', discountCode);
-        router.push(`/${role}/verify-email?${params.toString()}`);
+        router.push(getVerifyEmailPath(role, params));
         return;
       }
 

@@ -583,11 +583,12 @@ export function ClientManagement() {
 
     try {
       setDiscountApplying(true);
+      const email = addForm.email.trim();
       if (addForm.planId) {
         const { data } = await paymentService.preview({
           planId: addForm.planId,
           discountCode: code,
-          customerEmail: addForm.email.trim() || undefined,
+          customerEmail: email || undefined,
           customerState: addForm.state.trim() || undefined,
           customerGstin: addForm.gstin.trim() || undefined,
         });
@@ -602,7 +603,11 @@ export function ClientManagement() {
           payableAmount: Number(quote.payableAmount) || 0,
           listAmount: Number(quote.listAmount) || 0,
         });
-        toast.success(`Discount ${quote.discountCode} applied`);
+        toast.success(
+          email
+            ? `Discount ${quote.discountCode} applied`
+            : `Discount ${quote.discountCode} applied (enter email to confirm first-payment eligibility)`
+        );
       } else {
         // No plan yet — reserve code; backend validates on create
         setAddForm((f) => ({ ...f, discountCode: code }));

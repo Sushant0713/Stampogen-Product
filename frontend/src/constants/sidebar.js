@@ -16,6 +16,7 @@ import {
   ScanLine,
   BookOpen,
   Store,
+  ShieldCheck,
 } from 'lucide-react';
 import { ROLES } from '@/constants';
 
@@ -76,6 +77,7 @@ export const SIDEBAR_CONFIG = {
       },
       { label: 'QR', href: 'settings/qr', icon: QrCode },
       { label: 'QR Reports', href: 'settings/qr/reports', icon: ScanLine },
+      { label: 'Super Admin List', href: 'super-admins', icon: ShieldCheck },
       { label: 'Support Ticket', href: 'support-tickets', icon: LifeBuoy },
     ]),
   },

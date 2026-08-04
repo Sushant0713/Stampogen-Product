@@ -174,22 +174,18 @@ async function quotePlan(plan, discountCode = '', customerOpts = {}, { quantity:
       const email = String(customerOpts.customerEmail || '')
         .trim()
         .toLowerCase();
-      if (!email) {
-        throw new AppError(
-          isOneTimeDiscount
-            ? 'One Time Discount applies only on first payment. Sign in to continue.'
-            : 'Partner discount applies only on your first payment. Sign in to continue.',
-          HTTP_STATUS.BAD_REQUEST
-        );
-      }
-      const priorPayments = await PaymentRepository.countSuccessfulByCustomerEmail(email);
-      if (priorPayments > 0) {
-        throw new AppError(
-          isOneTimeDiscount
-            ? 'One Time Discount applies only on a client’s first payment'
-            : 'Partner discount applies only on a client’s first payment',
-          HTTP_STATUS.BAD_REQUEST
-        );
+      // Preview may omit email (e.g. Super Admin Add Client before fields are filled).
+      // First-payment enforcement still runs at checkout when email is known.
+      if (email) {
+        const priorPayments = await PaymentRepository.countSuccessfulByCustomerEmail(email);
+        if (priorPayments > 0) {
+          throw new AppError(
+            isOneTimeDiscount
+              ? 'One Time Discount applies only on a client’s first payment'
+              : 'Partner discount applies only on a client’s first payment',
+            HTTP_STATUS.BAD_REQUEST
+          );
+        }
       }
     }
 

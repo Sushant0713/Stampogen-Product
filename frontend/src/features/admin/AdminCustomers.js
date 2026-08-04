@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, Phone, Search, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AdminPageHeader } from '@/features/admin/AdminPageShell';
+import { AdminShopScopeSelect } from '@/features/admin/AdminShopScopeSelect';
 import { adminCardClass } from '@/features/admin/adminTheme';
 import { loyaltyService } from '@/services/loyalty.service';
+import { outletService } from '@/services/outlet.service';
+import { useUser } from '@/contexts/UserContext';
 import { cn, getErrorMessage } from '@/utils';
 
 function initialsOf(name) {
@@ -57,24 +60,49 @@ function formatScanAt(date) {
 }
 
 export function AdminCustomers() {
+  const { user } = useUser();
+  const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState('');
   const [viewingId, setViewingId] = useState('');
   const [detail, setDetail] = useState(null);
+  const [outlets, setOutlets] = useState([]);
+  const [scopeTenantId, setScopeTenantId] = useState('');
+
+  const scopeOpts = useMemo(
+    () => (scopeTenantId ? { outletTenantId: scopeTenantId } : {}),
+    [scopeTenantId]
+  );
+
+  useEffect(() => {
+    if (isOutlet) return undefined;
+    let cancelled = false;
+    outletService
+      .dashboard()
+      .then(({ data }) => {
+        if (!cancelled) setOutlets(data?.data?.outlets || []);
+      })
+      .catch(() => {
+        if (!cancelled) setOutlets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOutlet]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const { data } = await loyaltyService.adminListCustomers();
+      const { data } = await loyaltyService.adminListCustomers(scopeOpts);
       setCustomers(data.data.customers || []);
     } catch (error) {
       if (!silent) toast.error(getErrorMessage(error, 'Unable to load customers'));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [scopeOpts]);
 
   useEffect(() => {
     load();
@@ -87,10 +115,15 @@ export function AdminCustomers() {
     setViewingId('');
   };
 
+  const handleScopeChange = (next) => {
+    setScopeTenantId(next);
+    closeDetail();
+  };
+
   const openDetail = async (customer) => {
     try {
       setViewingId(customer.id);
-      const { data } = await loyaltyService.adminGetCustomer(customer.id);
+      const { data } = await loyaltyService.adminGetCustomer(customer.id, scopeOpts);
       setDetail(data.data.customer);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to load customer details'));
@@ -102,7 +135,7 @@ export function AdminCustomers() {
     const next = customer.status === 'active' ? 'suspended' : 'active';
     try {
       setBusyId(customer.id);
-      await loyaltyService.adminUpdateCustomer(customer.id, { status: next });
+      await loyaltyService.adminUpdateCustomer(customer.id, { status: next }, scopeOpts);
       toast.success(next === 'suspended' ? `${customer.name} suspended` : `${customer.name} activated`);
       await load({ silent: true });
       if (detail?.id === customer.id) {
@@ -135,7 +168,7 @@ export function AdminCustomers() {
     if (!ok) return;
     try {
       setBusyId(customer.id);
-      await loyaltyService.adminDeleteCustomer(customer.id);
+      await loyaltyService.adminDeleteCustomer(customer.id, scopeOpts);
       toast.success(`${customer.name} removed`);
       if (detail?.id === customer.id) closeDetail();
       await load({ silent: true });
@@ -152,6 +185,15 @@ export function AdminCustomers() {
         title="Customers"
         subtitle="Everyone who has joined your loyalty program."
       />
+
+      {!isOutlet ? (
+        <AdminShopScopeSelect
+          outlets={outlets}
+          value={scopeTenantId}
+          onChange={handleScopeChange}
+          className="mb-4"
+        />
+      ) : null}
 
       <label className="mb-3.5 flex items-center gap-2.5 rounded-[14px] bg-white px-3.5 py-3 shadow-[0_6px_16px_rgba(2,26,84,0.06)]">
         <Search size={16} className="shrink-0 text-[#94A3B8]" aria-hidden />

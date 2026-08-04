@@ -2,6 +2,14 @@ const LoyaltyService = require('@services/loyalty.service');
 const { sendSuccess } = require('@utils/response');
 const { HTTP_STATUS } = require('@constants');
 
+function outletScope(req) {
+  return (
+    req.query?.outletTenantId ||
+    req.body?.outletTenantId ||
+    undefined
+  );
+}
+
 class LoyaltyController {
   async shopPreview(req, res, next) {
     try {
@@ -125,7 +133,10 @@ class LoyaltyController {
   async adminListRewards(req, res, next) {
     try {
       const filter = req.query.filter || 'pending';
-      const rewards = await LoyaltyService.listAdminRewards(req.user, { filter });
+      const rewards = await LoyaltyService.listAdminRewards(req.user, {
+        filter,
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Shop rewards retrieved',
         data: { rewards },
@@ -137,7 +148,9 @@ class LoyaltyController {
 
   async adminListCustomers(req, res, next) {
     try {
-      const customers = await LoyaltyService.listAdminCustomers(req.user);
+      const customers = await LoyaltyService.listAdminCustomers(req.user, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Shop customers retrieved',
         data: { customers },
@@ -149,7 +162,11 @@ class LoyaltyController {
 
   async adminGetCustomer(req, res, next) {
     try {
-      const customer = await LoyaltyService.getAdminCustomerDetail(req.user, req.params.id);
+      const customer = await LoyaltyService.getAdminCustomerDetail(
+        req.user,
+        req.params.id,
+        { outletTenantId: outletScope(req) }
+      );
       return sendSuccess(res, {
         message: 'Customer details retrieved',
         data: { customer },
@@ -164,7 +181,8 @@ class LoyaltyController {
       const customer = await LoyaltyService.updateAdminCustomerStatus(
         req.user,
         req.params.id,
-        req.body.status
+        req.body.status,
+        { outletTenantId: outletScope(req) }
       );
       return sendSuccess(res, {
         message: customer.status === 'suspended' ? 'Customer suspended' : 'Customer activated',
@@ -177,7 +195,9 @@ class LoyaltyController {
 
   async adminDeleteCustomer(req, res, next) {
     try {
-      await LoyaltyService.deleteAdminCustomer(req.user, req.params.id);
+      await LoyaltyService.deleteAdminCustomer(req.user, req.params.id, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Customer removed from your shop',
         data: { deleted: true },
@@ -189,7 +209,9 @@ class LoyaltyController {
 
   async adminDashboardStats(req, res, next) {
     try {
-      const stats = await LoyaltyService.getAdminDashboardStats(req.user);
+      const stats = await LoyaltyService.getAdminDashboardStats(req.user, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Dashboard stats retrieved',
         data: { stats },
@@ -262,7 +284,9 @@ class LoyaltyController {
 
   async adminListStampRequests(req, res, next) {
     try {
-      const requests = await LoyaltyService.listAdminStampRequests(req.user);
+      const requests = await LoyaltyService.listAdminStampRequests(req.user, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Stamp requests retrieved',
         data: { requests },
@@ -286,7 +310,9 @@ class LoyaltyController {
 
   async adminApproveStampRequest(req, res, next) {
     try {
-      const result = await LoyaltyService.approveStampRequest(req.user, req.params.id);
+      const result = await LoyaltyService.approveStampRequest(req.user, req.params.id, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: result.message,
         data: result,
@@ -298,7 +324,9 @@ class LoyaltyController {
 
   async adminRejectStampRequest(req, res, next) {
     try {
-      const result = await LoyaltyService.rejectStampRequest(req.user, req.params.id);
+      const result = await LoyaltyService.rejectStampRequest(req.user, req.params.id, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: result.message,
         data: result,
@@ -310,7 +338,9 @@ class LoyaltyController {
 
   async adminGetReward(req, res, next) {
     try {
-      const reward = await LoyaltyService.getAdminRewardDetail(req.user, req.params.id);
+      const reward = await LoyaltyService.getAdminRewardDetail(req.user, req.params.id, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Reward detail retrieved',
         data: { reward },
@@ -322,7 +352,9 @@ class LoyaltyController {
 
   async adminVerify(req, res, next) {
     try {
-      const reward = await LoyaltyService.verifyAdminReward(req.user, req.params.id);
+      const reward = await LoyaltyService.verifyAdminReward(req.user, req.params.id, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Bills verified',
         data: { reward },
@@ -334,7 +366,9 @@ class LoyaltyController {
 
   async adminCancel(req, res, next) {
     try {
-      const reward = await LoyaltyService.cancelAdminReward(req.user, req.params.id);
+      const reward = await LoyaltyService.cancelAdminReward(req.user, req.params.id, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Reward request cancelled',
         data: { reward },
@@ -346,7 +380,9 @@ class LoyaltyController {
 
   async adminGive(req, res, next) {
     try {
-      const reward = await LoyaltyService.giveAdminReward(req.user, req.params.id);
+      const reward = await LoyaltyService.giveAdminReward(req.user, req.params.id, {
+        outletTenantId: outletScope(req),
+      });
       return sendSuccess(res, {
         message: 'Reward given to customer',
         data: { reward },

@@ -70,6 +70,13 @@ function outletScopeLabel(offer, outletsById) {
   return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
 }
 
+function offerAppliesToOutlet(offer, outletId) {
+  const scope = offer.outletScope || 'all';
+  if (scope !== 'selected') return true;
+  const ids = (offer.outletTenantIds || []).map(String);
+  return ids.includes(String(outletId));
+}
+
 export function AdminOffers() {
   const { user } = useAuth();
   const isOutlet = Boolean(user?.isOutlet || user?.tenant?.kind === 'outlet');
@@ -77,6 +84,7 @@ export function AdminOffers() {
   const [outlets, setOutlets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [outletFilter, setOutletFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingKey, setEditingKey] = useState(null);
@@ -114,10 +122,19 @@ export function AdminOffers() {
     const q = search.trim().toLowerCase();
     return offers.filter((o) => {
       if (filter !== 'all' && o.status !== filter) return false;
+
+      if (!isOutlet && outletFilter !== 'all') {
+        if (outletFilter === 'hq-all') {
+          if ((o.outletScope || 'all') === 'selected') return false;
+        } else if (!offerAppliesToOutlet(o, outletFilter)) {
+          return false;
+        }
+      }
+
       if (!q) return true;
       return String(o.title || '').toLowerCase().includes(q);
     });
-  }, [offers, filter, search]);
+  }, [offers, filter, search, outletFilter, isOutlet]);
 
   const openCreate = () => {
     if (isOutlet) return;
@@ -245,6 +262,28 @@ export function AdminOffers() {
         })}
       </div>
 
+      {!isOutlet && outlets.length > 0 ? (
+        <label className="mb-4 block">
+          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">
+            Outlet filter
+          </span>
+          <select
+            value={outletFilter}
+            onChange={(e) => setOutletFilter(e.target.value)}
+            className="h-10 w-full max-w-xs rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm font-semibold text-[#021A54] outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
+          >
+            <option value="all">All offers</option>
+            <option value="hq-all">Applies to all outlets</option>
+            {outlets.map((outlet) => (
+              <option key={outlet.id} value={outlet.id}>
+                {outlet.name || 'Outlet'}
+                {outlet.expired ? ' · plan ended' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       <div className={cn(adminCardClass('mb-4 flex items-center gap-2 px-3 py-2.5'))}>
         <Search className="h-4 w-4 shrink-0 text-[#94A3B8]" />
         <input
@@ -260,11 +299,13 @@ export function AdminOffers() {
           <p className="py-10 text-center text-sm text-[#64748B]">Loading offers…</p>
         ) : visible.length === 0 ? (
           <div className={adminCardClass('px-4 py-10 text-center')}>
-            <p className="text-sm font-semibold text-[#021A54]">No offers yet</p>
+            <p className="text-sm font-semibold text-[#021A54]">No offers match</p>
             <p className="mt-1 text-xs text-[#64748B]">
               {isOutlet
                 ? 'No offers assigned to this outlet yet. Ask the shop Admin to add one.'
-                : 'Tap + to create a loyalty offer customers can earn stamps toward.'}
+                : filter !== 'all' || outletFilter !== 'all' || search.trim()
+                  ? 'Try another status, outlet filter, or search.'
+                  : 'Tap + to create a loyalty offer customers can earn stamps toward.'}
             </p>
           </div>
         ) : (

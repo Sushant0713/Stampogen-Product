@@ -1,5 +1,16 @@
 import api from '@/lib/api';
 
+function withOutletScope(params = {}, outletTenantId) {
+  const next = { ...params };
+  if (outletTenantId) next.outletTenantId = outletTenantId;
+  return next;
+}
+
+function withOutletBody(payload = {}, outletTenantId) {
+  if (!outletTenantId) return payload;
+  return { ...payload, outletTenantId };
+}
+
 export const loyaltyService = {
   shopPreview: (slug) => api.get(`/loyalty/shops/${encodeURIComponent(slug)}/preview`),
   join: (tenantSlug) => api.post('/loyalty/join', { tenantSlug }),
@@ -12,28 +23,69 @@ export const loyaltyService = {
   requestStamp: (slug, payload = {}) =>
     api.post(`/loyalty/cards/${encodeURIComponent(slug)}/stamp-requests`, payload),
   redeem: (slug) => api.post(`/loyalty/cards/${encodeURIComponent(slug)}/redeem`),
-  adminListRewards: (filter = 'pending') =>
-    api.get('/loyalty/admin/rewards', { params: { filter } }),
-  adminListStampRequests: () => api.get('/loyalty/admin/stamp-requests'),
+  adminListRewards: (filter = 'pending', { outletTenantId } = {}) =>
+    api.get('/loyalty/admin/rewards', {
+      params: withOutletScope({ filter }, outletTenantId),
+    }),
+  adminListStampRequests: ({ outletTenantId } = {}) =>
+    api.get('/loyalty/admin/stamp-requests', {
+      params: withOutletScope({}, outletTenantId),
+    }),
   adminListRecentBillStamps: () => api.get('/loyalty/admin/recent-bill-stamps'),
-  adminApproveStampRequest: (id) =>
-    api.post(`/loyalty/admin/stamp-requests/${encodeURIComponent(id)}/approve`),
-  adminRejectStampRequest: (id) =>
-    api.post(`/loyalty/admin/stamp-requests/${encodeURIComponent(id)}/reject`),
+  adminApproveStampRequest: (id, { outletTenantId } = {}) =>
+    api.post(
+      `/loyalty/admin/stamp-requests/${encodeURIComponent(id)}/approve`,
+      withOutletBody({}, outletTenantId)
+    ),
+  adminRejectStampRequest: (id, { outletTenantId } = {}) =>
+    api.post(
+      `/loyalty/admin/stamp-requests/${encodeURIComponent(id)}/reject`,
+      withOutletBody({}, outletTenantId)
+    ),
   adminGetSettings: () => api.get('/loyalty/admin/settings'),
   adminUpdateSettings: (payload) => api.patch('/loyalty/admin/settings', payload),
-  adminListCustomers: () => api.get('/loyalty/admin/customers'),
-  adminGetCustomer: (id) => api.get(`/loyalty/admin/customers/${encodeURIComponent(id)}`),
-  adminUpdateCustomer: (id, payload) =>
-    api.patch(`/loyalty/admin/customers/${encodeURIComponent(id)}`, payload),
-  adminDeleteCustomer: (id) => api.delete(`/loyalty/admin/customers/${encodeURIComponent(id)}`),
-  adminStats: () => api.get('/loyalty/admin/stats'),
+  adminListCustomers: ({ outletTenantId } = {}) =>
+    api.get('/loyalty/admin/customers', {
+      params: withOutletScope({}, outletTenantId),
+    }),
+  adminGetCustomer: (id, { outletTenantId } = {}) =>
+    api.get(`/loyalty/admin/customers/${encodeURIComponent(id)}`, {
+      params: withOutletScope({}, outletTenantId),
+    }),
+  adminUpdateCustomer: (id, payload, { outletTenantId } = {}) =>
+    api.patch(
+      `/loyalty/admin/customers/${encodeURIComponent(id)}`,
+      withOutletBody(payload, outletTenantId)
+    ),
+  adminDeleteCustomer: (id, { outletTenantId } = {}) =>
+    api.delete(`/loyalty/admin/customers/${encodeURIComponent(id)}`, {
+      params: withOutletScope({}, outletTenantId),
+    }),
+  adminStats: ({ outletTenantId } = {}) =>
+    api.get('/loyalty/admin/stats', {
+      params: withOutletScope({}, outletTenantId),
+    }),
   adminListOffers: () => api.get('/loyalty/admin/offers'),
   adminCreateOffer: (payload) => api.post('/loyalty/admin/offers', payload),
   adminUpdateOffer: (key, payload) =>
     api.patch(`/loyalty/admin/offers/${encodeURIComponent(key)}`, payload),
-  adminGetReward: (id) => api.get(`/loyalty/admin/rewards/${encodeURIComponent(id)}`),
-  adminVerify: (id) => api.post(`/loyalty/admin/rewards/${encodeURIComponent(id)}/verify`),
-  adminCancel: (id) => api.post(`/loyalty/admin/rewards/${encodeURIComponent(id)}/cancel`),
-  adminGive: (id) => api.post(`/loyalty/admin/rewards/${encodeURIComponent(id)}/give`),
+  adminGetReward: (id, { outletTenantId } = {}) =>
+    api.get(`/loyalty/admin/rewards/${encodeURIComponent(id)}`, {
+      params: withOutletScope({}, outletTenantId),
+    }),
+  adminVerify: (id, { outletTenantId } = {}) =>
+    api.post(
+      `/loyalty/admin/rewards/${encodeURIComponent(id)}/verify`,
+      withOutletBody({}, outletTenantId)
+    ),
+  adminCancel: (id, { outletTenantId } = {}) =>
+    api.post(
+      `/loyalty/admin/rewards/${encodeURIComponent(id)}/cancel`,
+      withOutletBody({}, outletTenantId)
+    ),
+  adminGive: (id, { outletTenantId } = {}) =>
+    api.post(
+      `/loyalty/admin/rewards/${encodeURIComponent(id)}/give`,
+      withOutletBody({}, outletTenantId)
+    ),
 };

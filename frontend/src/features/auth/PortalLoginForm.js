@@ -10,7 +10,7 @@ import { ArrowRight, Handshake, Mail, Shield, ShieldCheck, User } from 'lucide-r
 import { z } from 'zod';
 import { authService } from '@/services/auth.service';
 import { useAuth } from '@/contexts/AuthContext';
-import { getErrorMessage, getForgotPasswordPath, getRegisterPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
+import { getErrorMessage, getForgotPasswordPath, getRegisterPath, getVerifyEmailPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { useClientMounted } from '@/hooks/useClientMounted';
 import { GoogleSignInButton } from '@/components/buttons/GoogleSignInButton';
 import { PasswordField } from '@/components/forms/PasswordField';
@@ -186,14 +186,14 @@ function PortalLoginFormInner({ role }) {
         purpose: 'login',
       });
       if (redirectParam) verifyParams.set('redirect', redirectParam);
-      router.push(`/${role}/verify-email?${verifyParams.toString()}`);
+      router.push(getVerifyEmailPath(role, verifyParams));
     } catch (error) {
       const code = error?.response?.data?.code;
       const email = error?.response?.data?.email || values.email;
 
       if (code === 'EMAIL_NOT_VERIFIED') {
         toast('Please verify your email to continue');
-        router.push(`/${role}/verify-email?email=${encodeURIComponent(email)}`);
+        router.push(getVerifyEmailPath(role, { email }));
         return;
       }
 

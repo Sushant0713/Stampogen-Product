@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { authService } from '@/services/auth.service';
 import { useAuth } from '@/contexts/AuthContext';
-import { getErrorMessage, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
+import { getErrorMessage, getLoginPath, navigateAfterAuth, resolvePostAuthPath } from '@/utils';
 import { GoogleIcon } from '@/features/auth/AuthShared';
 import { toastAdminWelcome } from '@/features/auth/adminPlanToast';
 import { ROLES } from '@/constants';
@@ -110,7 +110,7 @@ export function GoogleSignInButton({
                   data.message ||
                     'Application submitted. You can sign in after approval.'
                 );
-                router.push(`/${role}/login`);
+                router.push(getLoginPath(role));
                 return;
               }
 

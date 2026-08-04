@@ -132,7 +132,7 @@ export function AdminProfile() {
   const [billing, setBilling] = useState(() =>
     mapBillingProfile(user?.tenant?.billingProfile, user?.phone)
   );
-  const [billingOpen, setBillingOpen] = useState(true);
+  const [billingOpen, setBillingOpen] = useState(false);
   const [savingBilling, setSavingBilling] = useState(false);
   const [billingErrors, setBillingErrors] = useState({});
 

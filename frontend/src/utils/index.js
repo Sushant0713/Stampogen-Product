@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import { ROLES } from '@/constants';
+import { getSuperAdminAuthBasePath } from '@/lib/superAdminAuthPath';
 
 export function cn(...inputs) {
   return clsx(inputs);
@@ -18,11 +19,16 @@ export function getRoleSlug(user) {
   return user?.role?.slug || user?.role || null;
 }
 
+function getAuthBasePath(role) {
+  if (role === ROLES.SUPER_ADMIN) return getSuperAdminAuthBasePath();
+  return `/${role}`;
+}
+
 /** Admin + Outlet Admin share `/admin/login` (also available at `/`). Customers use `/user/login`. */
 export function getLoginPath(role) {
   if (role === ROLES.ADMIN) return '/admin/login';
   if (role === ROLES.USER) return '/user/login';
-  return `/${role}/login`;
+  return `${getAuthBasePath(role)}/login`;
 }
 
 export function getCustomerAppPath() {
@@ -30,17 +36,29 @@ export function getCustomerAppPath() {
 }
 
 export function getRegisterPath(role) {
-  return `/${role}/register`;
+  return `${getAuthBasePath(role)}/register`;
 }
 
 export function getForgotPasswordPath(role) {
-  return `/${role}/forgot-password`;
+  return `${getAuthBasePath(role)}/forgot-password`;
 }
 
 export function getResetPasswordPath(role, email) {
-  const base = `/${role}/reset-password`;
+  const base = `${getAuthBasePath(role)}/reset-password`;
   if (!email) return base;
   return `${base}?email=${encodeURIComponent(email)}`;
+}
+
+export function getVerifyEmailPath(role, query) {
+  const base = `${getAuthBasePath(role)}/verify-email`;
+  if (!query) return base;
+  if (typeof query === 'string') {
+    const q = query.startsWith('?') ? query : `?${query}`;
+    return `${base}${q}`;
+  }
+  const params = new URLSearchParams(query);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
 }
 
 /** Reject open redirects (protocol-relative / absolute URLs). */

@@ -48,6 +48,7 @@ const EMPTY_ADD_FORM = {
   planId: '',
   password: '',
   discountCode: '',
+  chargeGst: true,
 };
 
 const STATUS_OPTIONS = [
@@ -590,7 +591,8 @@ export function ClientManagement() {
           discountCode: code,
           customerEmail: email || undefined,
           customerState: addForm.state.trim() || undefined,
-          customerGstin: addForm.gstin.trim() || undefined,
+          customerGstin: addForm.chargeGst ? addForm.gstin.trim() || undefined : undefined,
+          chargeGst: addForm.chargeGst,
         });
         const quote = data?.data?.quote;
         if (!quote?.discountCode) {
@@ -687,8 +689,9 @@ export function ClientManagement() {
           state: addForm.state,
           pin: addForm.pin,
         }),
-        gstin: addForm.gstin.trim(),
+        gstin: addForm.chargeGst ? addForm.gstin.trim() : '',
         pan: addForm.pan.trim(),
+        chargeGst: Boolean(addForm.chargeGst),
         ...(addForm.planId ? { planId: addForm.planId } : {}),
         ...(addForm.password.trim() ? { password: addForm.password.trim() } : {}),
         ...(addForm.discountCode.trim()
@@ -1062,6 +1065,12 @@ export function ClientManagement() {
               <DetailRow label="Company" value={viewClient.name} />
               <DetailRow label="Slug" value={viewClient.slug} />
               <DetailRow label="Address" value={formatClientAddress(viewClient)} />
+              <DetailRow
+                label="GST"
+                value={
+                  viewClient.billingProfile?.chargeGst === false ? 'Without GST' : 'With GST'
+                }
+              />
               <DetailRow label="Account" value={accountLabel(viewClient.status)} />
               <DetailRow
                 label="Email sign-up"
@@ -1546,18 +1555,61 @@ export function ClientManagement() {
               />
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
-                  GSTIN (optional)
-                </span>
-                <input
-                  className={inputClass}
-                  value={addForm.gstin}
-                  onChange={(e) => setAddForm((f) => ({ ...f, gstin: e.target.value }))}
+            <div>
+              <p className="mb-2 text-[13px] font-semibold text-[#344054]">GST</p>
+              <div className="inline-flex rounded-lg border border-[#D0D5DD] bg-[#F9FAFB] p-1">
+                <button
+                  type="button"
                   disabled={addSaving}
-                />
-              </label>
+                  onClick={() => setAddForm((f) => ({ ...f, chargeGst: true }))}
+                  className={`h-9 rounded-md px-4 text-sm font-semibold transition ${
+                    addForm.chargeGst
+                      ? 'bg-[#021A54] text-white shadow-sm'
+                      : 'text-[#667085] hover:text-[#101828]'
+                  }`}
+                >
+                  With GST
+                </button>
+                <button
+                  type="button"
+                  disabled={addSaving}
+                  onClick={() =>
+                    setAddForm((f) => ({
+                      ...f,
+                      chargeGst: false,
+                      gstin: '',
+                    }))
+                  }
+                  className={`h-9 rounded-md px-4 text-sm font-semibold transition ${
+                    !addForm.chargeGst
+                      ? 'bg-[#021A54] text-white shadow-sm'
+                      : 'text-[#667085] hover:text-[#101828]'
+                  }`}
+                >
+                  Without GST
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11px] text-[#667085]">
+                {addForm.chargeGst
+                  ? 'Plan invoices and renewals include GST.'
+                  : 'Plan invoices and renewals skip GST (tax ₹0).'}
+              </p>
+            </div>
+
+            <div className={`grid gap-3 ${addForm.chargeGst ? 'sm:grid-cols-2' : ''}`}>
+              {addForm.chargeGst ? (
+                <label className="block">
+                  <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
+                    GSTIN (optional)
+                  </span>
+                  <input
+                    className={inputClass}
+                    value={addForm.gstin}
+                    onChange={(e) => setAddForm((f) => ({ ...f, gstin: e.target.value }))}
+                    disabled={addSaving}
+                  />
+                </label>
+              ) : null}
               <label className="block">
                 <span className="mb-1.5 block text-[13px] font-semibold text-[#344054]">
                   PAN (optional)

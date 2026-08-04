@@ -72,6 +72,7 @@ async function resolveCustomerTaxContext({
   customerEmail = '',
   customerGstin = '',
   customerState = '',
+  chargeGst: chargeGstOpt,
 } = {}) {
   const email = String(customerEmail || '')
     .trim()
@@ -81,6 +82,8 @@ async function resolveCustomerTaxContext({
     .toUpperCase();
   let state = String(customerState || '').trim();
   let address = '';
+  let chargeGst =
+    chargeGstOpt === false || chargeGstOpt === 'false' ? false : chargeGstOpt === true || chargeGstOpt === 'true' ? true : null;
 
   if (email) {
     try {
@@ -89,6 +92,9 @@ async function resolveCustomerTaxContext({
       if (tenantId) {
         const tenant = await TenantRepository.findById(tenantId);
         const billing = tenant?.billingProfile || {};
+        if (chargeGst === null && typeof billing.chargeGst === 'boolean') {
+          chargeGst = billing.chargeGst;
+        }
         if (!gstin && billing.gstin) gstin = String(billing.gstin).trim().toUpperCase();
         if (!state && billing.state) state = String(billing.state).trim();
         address = [
@@ -107,10 +113,25 @@ async function resolveCustomerTaxContext({
     }
   }
 
-  return { gstin, state, address, email };
+  if (chargeGst === null) chargeGst = true;
+  if (!chargeGst) gstin = '';
+
+  return { gstin, state, address, email, chargeGst };
 }
 
 async function applyGstToQuote(taxableAmount, customerCtx = {}) {
+  if (customerCtx.chargeGst === false) {
+    const base = Math.max(0, Number(taxableAmount) || 0);
+    return {
+      taxMode: 'none',
+      taxLabel: 'No GST',
+      taxAmount: 0,
+      taxRates: { gst: 0, cgst: 0, sgst: 0, igst: 0 },
+      taxBreakdown: { gst: 0, cgst: 0, sgst: 0, igst: 0 },
+      payableAmount: base,
+    };
+  }
+
   const settings = await InvoiceSettingsService.get();
   const defaults = settings.defaults || {};
   const company = settings.company || {};
@@ -392,6 +413,7 @@ class PaymentService {
         customerEmail: body.customerEmail,
         customerGstin: body.customerGstin,
         customerState: body.customerState,
+        chargeGst: body.chargeGst,
       },
       { quantity }
     );
@@ -485,6 +507,9 @@ class PaymentService {
           body.customerGstin || pendingRegistration?.billingProfile?.gstin || undefined,
         customerState:
           body.customerState || pendingRegistration?.billingProfile?.state || undefined,
+        chargeGst:
+          pendingRegistration?.billingProfile?.chargeGst ??
+          user?.tenant?.billingProfile?.chargeGst,
       },
       { quantity }
     );

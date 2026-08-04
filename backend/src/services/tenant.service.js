@@ -281,6 +281,7 @@ class TenantService {
       pin: data.pin,
       gstin: data.gstin,
       pan: data.pan,
+      chargeGst: data.chargeGst,
     });
 
     if (!billingProfile.street && !billingProfile.address) {

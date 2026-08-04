@@ -193,6 +193,8 @@ const tenantSchema = new mongoose.Schema(
       address: { type: String, trim: true, default: '' },
       gstin: { type: String, trim: true, uppercase: true, default: '' },
       pan: { type: String, trim: true, uppercase: true, default: '' },
+      /** When false, platform invoices and payment quotes skip GST for this client. */
+      chargeGst: { type: Boolean, default: true },
     },
     currentPlan: {
       name: { type: String, default: null },

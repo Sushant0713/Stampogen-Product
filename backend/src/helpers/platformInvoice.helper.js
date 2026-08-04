@@ -180,19 +180,27 @@ function buildPlanChangeInvoice({
 
   const customer = resolveCustomer({ tenant, payment, customerOverride });
 
+  const chargeGst =
+    tenant?.billingProfile?.chargeGst === false ||
+    customerOverride?.chargeGst === false
+      ? false
+      : true;
+
   // Always resolve from places of supply first (GSTIN / state).
   // Do not prefer a stale payment.taxMode or settings default of sgst_cgst
   // when the client is in a different state — that must be IGST.
-  const resolvedTaxMode = resolveTaxMode({
-    companyGstin: settings.company?.gstin,
-    customerGstin: customer.gstin,
-    companyState: settings.company?.address || settings.company?.state,
-    customerState: customer.state || customer.addressForTax || customer.address,
-  });
+  const resolvedTaxMode = chargeGst
+    ? resolveTaxMode({
+        companyGstin: settings.company?.gstin,
+        customerGstin: customer.gstin,
+        companyState: settings.company?.address || settings.company?.state,
+        customerState: customer.state || customer.addressForTax || customer.address,
+      })
+    : null;
   // Never fall back to invoice-settings defaults.taxMode — that value is driven by the
   // sample customer GSTIN (often same-state → sgst_cgst) and would wrongly force CGST+SGST
   // on interstate clients. Prefer place-of-supply; else IGST.
-  const taxMode = resolvedTaxMode || 'igst';
+  const taxMode = chargeGst ? resolvedTaxMode || 'igst' : 'none';
 
   const listAmount = Number(
     payment?.listAmount != null ? payment.listAmount : pricePerCycle
@@ -206,55 +214,64 @@ function buildPlanChangeInvoice({
   );
 
   let tax;
-  const paymentMode = String(payment?.taxMode || '').trim();
-  const canReusePaymentTax =
-    payment &&
-    payment.taxAmount != null &&
-    payment.payableAmount != null &&
-    Number(payment.payableAmount) >= 0 &&
-    paymentMode === taxMode;
-
-  if (canReusePaymentTax) {
-    const breakdown = {
-      gst: Number(payment.gstAmount) || 0,
-      cgst: Number(payment.cgstAmount) || 0,
-      sgst: Number(payment.sgstAmount) || 0,
-      igst: Number(payment.igstAmount) || 0,
-    };
-    // If stored mode disagrees with amounts (e.g. IGST total parked only in taxAmount),
-    // normalize breakdown to the resolved/display mode.
-    if (taxMode === 'igst' && !(Number(breakdown.igst) > 0) && Number(payment.taxAmount) > 0) {
-      breakdown.igst = Number(payment.taxAmount) || 0;
-      breakdown.cgst = 0;
-      breakdown.sgst = 0;
-      breakdown.gst = 0;
-    }
-    if (
-      taxMode === 'sgst_cgst' &&
-      !(Number(breakdown.cgst) > 0 || Number(breakdown.sgst) > 0) &&
-      Number(payment.taxAmount) > 0
-    ) {
-      const half = Math.round((Number(payment.taxAmount) / 2) * 100) / 100;
-      breakdown.cgst = half;
-      breakdown.sgst = Number(payment.taxAmount) - half;
-      breakdown.igst = 0;
-      breakdown.gst = 0;
-    }
+  if (!chargeGst) {
     tax = {
-      taxLabel: payment.taxLabel || `Tax (${taxMode})`,
-      taxAmt: Number(payment.taxAmount) || 0,
-      total: Number(payment.payableAmount) || taxable,
-      breakdown,
+      taxLabel: 'No GST',
+      taxAmt: 0,
+      total: taxable,
+      breakdown: { gst: 0, cgst: 0, sgst: 0, igst: 0 },
     };
   } else {
-    tax = calcLineTax({
-      taxable,
-      taxMode,
-      gstRate: defaults.gstRate,
-      igstRate: defaults.igstRate,
-      sgstRate: defaults.sgstRate,
-      cgstRate: defaults.cgstRate,
-    });
+    const paymentMode = String(payment?.taxMode || '').trim();
+    const canReusePaymentTax =
+      payment &&
+      payment.taxAmount != null &&
+      payment.payableAmount != null &&
+      Number(payment.payableAmount) >= 0 &&
+      paymentMode === taxMode;
+
+    if (canReusePaymentTax) {
+      const breakdown = {
+        gst: Number(payment.gstAmount) || 0,
+        cgst: Number(payment.cgstAmount) || 0,
+        sgst: Number(payment.sgstAmount) || 0,
+        igst: Number(payment.igstAmount) || 0,
+      };
+      // If stored mode disagrees with amounts (e.g. IGST total parked only in taxAmount),
+      // normalize breakdown to the resolved/display mode.
+      if (taxMode === 'igst' && !(Number(breakdown.igst) > 0) && Number(payment.taxAmount) > 0) {
+        breakdown.igst = Number(payment.taxAmount) || 0;
+        breakdown.cgst = 0;
+        breakdown.sgst = 0;
+        breakdown.gst = 0;
+      }
+      if (
+        taxMode === 'sgst_cgst' &&
+        !(Number(breakdown.cgst) > 0 || Number(breakdown.sgst) > 0) &&
+        Number(payment.taxAmount) > 0
+      ) {
+        const half = Math.round((Number(payment.taxAmount) / 2) * 100) / 100;
+        breakdown.cgst = half;
+        breakdown.sgst = Number(payment.taxAmount) - half;
+        breakdown.igst = 0;
+        breakdown.gst = 0;
+      }
+      tax = {
+        taxLabel: payment.taxLabel || `Tax (${taxMode})`,
+        taxAmt: Number(payment.taxAmount) || 0,
+        total: Number(payment.payableAmount) || taxable,
+        breakdown,
+      };
+    } else {
+      tax = calcLineTax({
+        taxable,
+        taxMode,
+        gstRate: defaults.gstRate,
+        igstRate: defaults.igstRate,
+        sgstRate: defaults.sgstRate,
+        cgstRate: defaults.cgstRate,
+      });
+    }
   }
 
   const billingLabel = payment?.billing ? ` · ${payment.billing}` : '';

@@ -28,7 +28,16 @@ function normalizeBillingProfile(input = {}) {
     pin,
     address: input.address || input.billingAddress,
   });
-  const gstin = clean(input.gstin).toUpperCase();
+  const chargeGstExplicit = input.chargeGst;
+  const chargeGst =
+    chargeGstExplicit === false || chargeGstExplicit === 'false'
+      ? false
+      : chargeGstExplicit === true || chargeGstExplicit === 'true'
+        ? true
+        : typeof chargeGstExplicit === 'boolean'
+          ? chargeGstExplicit
+          : true;
+  const gstin = chargeGst ? clean(input.gstin).toUpperCase() : '';
   const pan = clean(input.pan).toUpperCase();
 
   return {
@@ -40,6 +49,7 @@ function normalizeBillingProfile(input = {}) {
     address,
     gstin,
     pan,
+    chargeGst,
   };
 }
 

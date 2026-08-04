@@ -51,6 +51,11 @@ const createTenantValidator = [
   body('address').optional({ values: 'falsy' }).trim().isLength({ max: 500 }),
   body('gstin').optional({ values: 'falsy' }).trim().isLength({ max: 20 }),
   body('pan').optional({ values: 'falsy' }).trim().isLength({ max: 20 }),
+  body('chargeGst')
+    .optional()
+    .isBoolean()
+    .withMessage('chargeGst must be a boolean')
+    .toBoolean(),
   body('planId').optional({ values: 'falsy' }).isMongoId().withMessage('Invalid plan ID'),
   body('planCode').optional({ values: 'falsy' }).trim().isLength({ max: 80 }),
   body('planName').optional({ values: 'falsy' }).trim().isLength({ max: 120 }),

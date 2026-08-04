@@ -447,14 +447,16 @@ async function buildInvoicePdfBuffer(invoice, settingsView = null) {
 
       // ===== ITEMS TABLE =====
       const taxCols =
-        taxMode === 'gst'
-          ? [{ label: 'GST', amount: breakdown.gst || totals.tax || 0, pct: defaults.gstRate || 18 }]
-          : taxMode === 'sgst_cgst'
-            ? [
-                { label: 'SGST', amount: breakdown.sgst || 0, pct: defaults.sgstRate || 9 },
-                { label: 'CGST', amount: breakdown.cgst || 0, pct: defaults.cgstRate || 9 },
-              ]
-            : [{ label: 'IGST', amount: breakdown.igst || totals.tax || 0, pct: defaults.igstRate || 18 }];
+        taxMode === 'none'
+          ? [{ label: 'Tax', amount: 0, pct: 0 }]
+          : taxMode === 'gst'
+            ? [{ label: 'GST', amount: breakdown.gst || totals.tax || 0, pct: defaults.gstRate || 18 }]
+            : taxMode === 'sgst_cgst'
+              ? [
+                  { label: 'SGST', amount: breakdown.sgst || 0, pct: defaults.sgstRate || 9 },
+                  { label: 'CGST', amount: breakdown.cgst || 0, pct: defaults.cgstRate || 9 },
+                ]
+              : [{ label: 'IGST', amount: breakdown.igst || totals.tax || 0, pct: defaults.igstRate || 18 }];
 
       const colDefs = [
         { label: '#', w: 0.05, align: 'left' },

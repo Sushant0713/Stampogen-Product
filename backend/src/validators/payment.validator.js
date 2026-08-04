@@ -7,6 +7,7 @@ const previewPaymentValidator = [
   body('customerEmail').optional().trim().isEmail().withMessage('Valid email is required'),
   body('customerGstin').optional().trim().isLength({ max: 20 }),
   body('customerState').optional().trim().isLength({ max: 100 }),
+  body('chargeGst').optional().isBoolean().withMessage('chargeGst must be a boolean').toBoolean(),
   body('quantity').optional().isInt({ min: 1, max: 50 }).withMessage('Quantity must be 1–50'),
   body().custom((_, { req }) => {
     if (!req.body.planId && !req.body.planCode) {
